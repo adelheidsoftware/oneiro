@@ -1,0 +1,10 @@
+local Board = require("src/core/board")
+local Game = require("src/core/game")
+
+local board = Board.new()
+assert(board:marked() == 0)
+board:mark(2)
+assert(board:marked() == 1)
+assert(board.cells[3]:label() == "[2]")
+assert(Board.Cell.new(7):label() == " 7 ")
+assert(Game.opening() == " 0 /1/ 5 ")

@@ -1,0 +1,187 @@
+plugin/Clash.java:3: warning: Clash has no Javadoc, but every Lua file starts with a comment that says what it does; add a Javadoc comment to the class.
+public class Clash {
+^
+
+plugin/Clash.java:7: error: The field count and the method count() would share one slot in the Lua table; rename one.
+	public int count() {
+	^
+
+plugin/Clash.java:8: warning: This comment could not be placed in the Lua and was left out; move it onto its own line above a statement.
+		return count /* in Lua, the field */;
+		             ^
+
+plugin/Gaps.java:36: error: In Lua, the private members and nested classes of the classes in a file are locals of one scope, so two of them cannot both be named helper; rename one.
+		private static int helper() {
+		^
+
+plugin/Gaps.java:47: error: Lua has no fall-through; repeat the shared code or move it into a method.
+			case 1:
+			^
+
+plugin/Gaps.java:63: error: Lua has no switch to leave early, and a break there would leave the enclosing loop instead; use if/else inside the case.
+					break;
+					^
+
+plugin/Gaps.java:74: error: In Lua a switch is a statement; assign the switch to a local, or return it, instead of using it inside an expression.
+		return 1 + switch (value) {
+		           ^
+
+plugin/Gaps.java:81: error: Lua has no runtime type information to match getClass().
+		return value.getClass().getSimpleName();
+		       ^
+
+plugin/Gaps.java:85: error: Lua has no regular expressions, so split takes only a separator that stands for itself, such as a comma or an escaped bar; for a pattern, use LuaString.gmatch.
+		return text.split("\\s+").length;
+		       ^
+
+plugin/Gaps.java:89: error: Java evaluates both sides of & and |, but Lua's and/or skip the right side when the left decides; evaluate the right side into a local first.
+		return ready & values.isEmpty();
+		       ^
+
+plugin/Gaps.java:93: error: In Lua this conditional would need its true branch never to be false or nil; assign the conditional to a local first.
+		return (flag ? name : "none").length();
+		        ^
+
+plugin/Gaps.java:97: error: In Lua set is a statement, not a value; call it on its own line.
+		int old = values.set(0, 1);
+		          ^
+
+plugin/Gaps.java:103: error: Lua compares table keys by identity, so value-equal keys would not match; key the map by a string or number.
+		map.put(new Point(1, 2), 3);
+		        ^
+
+plugin/Gaps.java:108: error: Lua tables cannot hold nil, so a list, map or set cannot store null.
+		names.add(null);
+		          ^
+
+plugin/Gaps.java:113: error: Lua's break and continue only reach the innermost loop; move the loops into a method and return from it.
+		rows:
+		^
+
+plugin/Gaps.java:126: error: Area is implemented by a class, so its values are Lua objects with methods, which a function cannot stand in for; implement it with a class here too.
+		return () -> 2.0;
+		       ^
+
+plugin/Gaps.java:130: error: The client's formatStr drops trailing zeros for %g, which Java keeps; use %f or %e.
+		return String.format("%g", value);
+		       ^
+
+plugin/Gaps.java:134: error: The client's formatStr adds no digit grouping, so %,d cannot print as Java prints it.
+		return String.format("%,d", value);
+		       ^
+
+plugin/Gaps.java:138: error: A record is a plain Lua table, compared by identity and without methods; use its components instead.
+		return point.hashCode();
+		       ^
+
+plugin/Gaps.java:142: error: The client has no os library to read the calendar from, so %t has nothing to format; format the parts yourself with %d.
+		return String.format("%tF", millis);
+		       ^
+
+plugin/Gaps.java:146: error: Java's %b of anything but a boolean prints whether it is null; pass that test, such as value != null, instead.
+		return String.format("%b", name);
+		                           ^
+
+plugin/Gaps.java:150: error: A Lua string has no stream of its characters; loop over text.toCharArray(), which walks the text itself.
+		text.chars();
+		^
+
+plugin/Gaps.java:154: error: A Lua string holds bytes, not code points; (int) text.charAt(i) is the byte's number, which is the code point for ASCII text.
+		return text.codePointAt(0);
+		       ^
+
+plugin/Gaps.java:158: error: Lua would evaluate this index twice; store it in a local first.
+		return text.charAt(text.indexOf(" ") + 1);
+		                   ^
+
+plugin/Gaps.java:163: error: Each char would reach this loop as a one-character string, not as its number; loop with a char variable and convert it with (int) where the number is needed.
+		for (int code : letters) {
+		     ^
+
+plugin/Gaps.java:170: error: A Lua string holds bytes, and 'é' takes several, so Lua has no one number for it; compare it as a char, or use its number, 233, as an int.
+		return 'é' - 'a';
+		       ^
+
+plugin/Gaps.java:174: error: In Lua an Optional is its value or nil, with no box around it to map; test it with isPresent() and work on the value.
+		return name.map(String::length).orElse(0);
+		       ^
+
+plugin/Gaps.java:178: error: Oneiro makes one loop of a stream: a list, set, array, map view, Stream.of or IntStream.range, then filter and map, then forEach, toList, collect to a list, set or joined string, count, sum, min, max, findFirst, anyMatch, allMatch or noneMatch; write a for loop for distinct.
+		return names.stream().distinct().toList();
+		       ^
+
+plugin/Gaps.java:182: error: In Lua a stream is a loop, which runs as statements; make the stream the whole value of a local, an assignment or a return, or a forEach statement of its own.
+		return 1 + names.stream().count();
+		           ^
+
+plugin/Gaps.java:186: error: A stream's loop sees one element at a time, so it sorts only what it collects; sort just before toList(), or sort the list afterwards.
+		return names.stream().sorted().filter(name -> !name.isEmpty()).toList();
+		       ^
+
+plugin/Gaps.java:190: error: Lua's for loop walks tables, not iterator objects; give the class a method that returns its list, and loop over that.
+	public abstract static class Basket implements Iterable<String> {
+	                                               ^
+
+plugin/Gaps.java:203: error: No class of the plugin's implements Step, so its values are Lua functions, which carry no methods; implement it with a class to call describe(), or make describe() a static method.
+		return step.describe();
+		       ^
+
+plugin/Gaps.java:207: error: Lua has none of ArrayList's Java code to inherit; keep one in a field instead of extending it.
+	public static class Names extends ArrayList<String> {
+	                                  ^
+
+plugin/Gaps.java:214: error: In Lua each case's value is assigned or returned at its end, which a yield in the middle cannot reach; move the yield to the end of its case, or of each branch of an if there.
+					yield 2;
+					^
+
+plugin/Misuse.java:16: error: Only a @LuaModule declaration has native methods; they stand for Lua functions that exist already.
+	public static native int outside();
+	^
+
+plugin/Misuse.java:19: error: A record is a plain Lua table without a toString(); put its components into the text instead.
+		return "point " + point;
+		                  ^
+
+plugin/Misuse.java:23: error: A @LuaModule declaration has no Java constructor; call the module's own constructor, declared as a static native method with @LuaName("new").
+		return new Store();
+		       ^
+
+plugin/Pair.java:11: error: Lua has one module per file; move Second into a file of its own.
+final class Second {
+^
+
+plugin/Rejected.java:13: error: Lua functions have no parameter types, so two methods cannot share a name; rename one (for example sumAll, sumOne), or make the shorter ones a default chain (see docs/java-subset.md).
+	public static int sum(int a, int b, int c) {
+	^
+
+plugin/Rejected.java:18: error: Plugins run on one thread, and Lua has no threads to synchronise; remove the synchronized block.
+		synchronized (Rejected.class) {
+		^
+
+plugin/Rejected.java:23: error: Java assertions are off by default, but Lua's assert always runs; write if (!condition) throw new IllegalStateException("...") instead.
+		assert ready : "not ready";
+		^
+
+plugin/Rejected.java:27: error: Lua has no increment or decrement expressions; put i++ on its own line.
+		int next = value++;
+		           ^
+
+plugin/Rejected.java:32: error: A new reference array is full of null, and Lua arrays cannot hold nil; use a List and add elements.
+		String[] names = new String[count];
+		                 ^
+
+plugin/Rejected.java:36: error: Lua names are ASCII letters, digits and underscores only; rename größe.
+	public static int größe() {
+	^
+
+plugin/Rejected.java:41: error: Lua's break and continue only reach the innermost loop; move the loops into a method and return from it.
+		outer:
+		^
+
+plugin/Store.java:9: error: A @LuaModule declaration's fields take their values from the Lua module; remove the initializer.
+	public static int LIMIT = 3;
+	^
+
+plugin/Store.java:11: error: Every method of a @LuaModule declaration is native: it stands for a function the Lua module defines.
+	public static int count() {
+	^

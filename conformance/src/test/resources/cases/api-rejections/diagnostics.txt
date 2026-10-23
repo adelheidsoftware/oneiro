@@ -1,0 +1,63 @@
+plugin/Copies.java:13: error: npc.coordGrid hands out a copy of the client's value, so changing coordGrid.x here changes nothing in the client; change a local copy instead: CoordGrid coordGrid = npc.coordGrid; coordGrid.x = ...;
+		npc.coordGrid.x = 5;
+		^
+
+plugin/Keys.java:17: error: The client hands out a new NPCType object each time one is read, and Lua compares table keys by identity, so the map or set would not find it again; key it by a number or string the value carries, such as its id or uid.
+		return counts.getOrDefault(npc.config, 0);
+		                           ^
+
+plugin/Keys.java:21: error: The client hands out a new InvType object each time one is read, and Lua compares table keys by identity, so the map or set would not find it again; key it by a number or string the value carries, such as its id or uid.
+		inventories.add(config.Inv.RS3_INV);
+		                ^
+
+plugin/Keys.java:25: error: The client hands out a new InvType object each time one is read, and Lua compares table keys by identity, so the map or set would not find it again; key it by a number or string the value carries, such as its id or uid.
+		return Map.of(config.Inv.RS3_INV, "backpack");
+		              ^
+
+plugin/Misuse.java:18: error: Chat.AddMessage needs the chatAccess permission, which the manifest does not declare; add it to the build, oneiro { plugin { permissions { optional(chatAccess) } } }, and check CurrentPlugin.HasPermission(PluginPermissions.chatAccess) before using it.
+		Chat.AddMessage("hello");
+		^
+
+plugin/Misuse.java:22: error: ExecuteConsoleCommand is for development only and must never ship; move the code that uses it into the dev source set (src/dev/java), whose Lua stays out of the zip.
+		ExecuteConsoleCommand("!tele 3200 3200");
+		^
+
+plugin/Misuse.java:30: error: Lua errors carry a value, not a class, so one catch takes every error; catch RuntimeException once, and tell the errors apart inside it.
+		} catch (RuntimeException e) {
+		  ^
+
+plugin/Misuse.java:38: error: Lua errors carry a value, not a class, so a catch cannot tell exception classes apart; catch RuntimeException, Exception or Throwable, and tell the errors apart inside it.
+		} catch (IllegalStateException e) {
+		         ^
+
+plugin/Misuse.java:44: error: In Lua the try block is a function that pcall runs, and Lua cannot tell a function that returned nothing from one that ran to its end; make every path through the try block return, or none.
+		try {
+		^
+
+plugin/Misuse.java:59: error: Lua runs the try block as a function, which a break, continue or yield cannot leave; set a flag and act on it after the try.
+					break;
+					^
+
+plugin/Misuse.java:69: error: The values a Lua function returns exist only at its call; read them through ground's components, such as ground.height().
+		return kept(ground);
+		            ^
+
+plugin/Misuse.java:72: error: GroundHeight stands for several Lua values, which only a local can receive, from a call; pass its components one by one instead.
+	private static int kept(World.GroundHeight ground) {
+	                        ^
+
+plugin/Misuse.java:77: error: The values a Lua function returns exist only at its call; initialise stored with the call itself.
+		var stored = new World.GroundHeight(1, true);
+		             ^
+
+plugin/Misuse.java:78: error: Several Lua values are returned as they are made: return new GroundHeight(...), or the call that returns them.
+		return stored;
+		       ^
+
+plugin/Names.java:12: error: The client's PluginPermissions table has no FromID to give a value's name; compare the value with PluginPermissions's constants instead.
+		return permission.name();
+		       ^
+
+plugin/Ticks.java:12: error: The ServerLogic event passes nothing, so its payload has nothing to read; leave tick unused.
+		Event.ServerLogic.Subscribe("ticks.tick", tick -> System.out.println(tick));
+		                                          ^

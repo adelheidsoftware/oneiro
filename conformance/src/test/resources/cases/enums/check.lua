@@ -1,0 +1,13 @@
+local Mode = require("src/mode")
+local Settings = require("src/settings")
+
+assert(Mode.FAST == "FAST", "a constant is the string of its name")
+assert(Settings.describe(Mode.SAFE) == "careful")
+assert(Settings.describe("FAST") == "fast")
+assert(Settings.loudness(Settings.Volume.LOUD) == 1)
+assert(Settings.loudness(Settings.Volume.QUIET) == 2)
+assert(Settings.parse("OFF") == Mode.OFF)
+assert(Settings.parse("SLOW") == nil, "an unknown name gives nil")
+assert(Settings.report(Mode.FAST, Settings.Volume.QUIET) == "mode FAST at QUIET")
+local tally = Settings.tally({ Mode.FAST, Mode.OFF, Mode.FAST })
+assert(tally.FAST == 2 and tally.OFF == 1)

@@ -1,0 +1,3 @@
+plugin/Stray.java:6: error: Stray extends Plugin, so it becomes the main.lua that ships; keep it in src/main/java, and extend DevPlugin in the dev source set instead.
+public final class Stray extends Plugin {
+^

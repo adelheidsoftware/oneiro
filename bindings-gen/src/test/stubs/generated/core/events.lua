@@ -1,0 +1,63 @@
+---@meta
+
+---The kinds of entity a payload names.
+---@enum EntityType
+EntityType = {
+    LOCATION = 0,
+    NPC = 1,
+    PLAYER = 2,
+}
+
+---The client's states.
+---@enum GameState
+GameState = {
+    LOGINSCREEN = 10,
+    LOBBY = 20,
+    GAME = 30,
+}
+
+---Subscribe a callback under a name; unsubscribe it by the name.
+---@class EventSubscription<T, RetT>
+---@field Subscribe fun(name: string, callback: fun(event: T): RetT)
+---@field Unsubscribe fun(name: string)
+
+---Fifty times a second.
+---@class LogicEventPayload
+---@field logicTick Int (Read-only) Logic ticks since the client started.
+
+---An inventory changed.
+---@class InventoryUpdatedEventPayload
+---@field inv InvType (Read-only) The inventory.
+---@field slotsUpdated Int[] (Read-only) The slots that changed, from 1.
+
+---A chat message arrived.
+---@class ChatMessageEventPayload
+---@field chatMessage String The text, which callbacks may change.
+---@field senderNameSimple String The sender's name.
+
+---An entity is about to be drawn.
+---@class EntityDrawEventPayload
+---@field entityType EntityType The kind of entity.
+---@field npcEntity NPCEntity? The NPC, when it is one.
+
+---The client's state changed.
+---@class GameStateChangedEventPayload
+---@field oldState GameState The state before.
+---@field newState GameState The state now.
+
+---The settings layer opened.
+---@class SettingsLayerReadyEventPayload
+---@field component ui.Component The layer to build the settings in.
+
+---@class WorldUpdatedEventPayload
+
+---@class Event
+---@field Logic EventSubscription<LogicEventPayload, nil> Fifty times a second.
+---@field ServerLogic EventSubscription<nil, nil> After each packet from the server.
+---@field InventoryUpdated EventSubscription<InventoryUpdatedEventPayload, nil> An inventory changed.
+---@field ChatMessage EventSubscription<ChatMessageEventPayload, nil> A chat message arrived.
+---@field EntityDraw EventSubscription<EntityDrawEventPayload, boolean> An entity is about to be drawn.
+---@field GameStateChanged EventSubscription<GameStateChangedEventPayload, nil> The client's state changed.
+---@field SettingsLayerReady EventSubscription<SettingsLayerReadyEventPayload, nil> The settings layer opened.
+---@field WorldUpdated EventSubscription<WorldUpdatedEventPayload, nil> The world area changed.
+Event = {}

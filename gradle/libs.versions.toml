@@ -1,0 +1,25 @@
+[versions]
+# Kotlin is used only by the Kotlin front end; everything else is Java 25.
+kotlin = "2.4.21"
+junit = "6.1.3"
+jspecify = "1.0.1"
+errorprone = "2.50.0"
+errorprone-plugin = "5.1.1"
+nullaway = "0.14.2"
+# Lua 5.4.8, the version the RS3 client embeds, as native libraries for Windows, Linux and macOS
+luajava = "4.1.0"
+
+# junit-jupiter and junit-platform-launcher take their versions from junit-bom.
+[libraries]
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
+errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone" }
+nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
+luajava-lua54 = { module = "party.iroiro.luajava:lua54", version.ref = "luajava" }
+luajava-lua54-platform = { module = "party.iroiro.luajava:lua54-platform", version.ref = "luajava" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }

@@ -1,0 +1,13 @@
+# Text files are stored with LF line endings.
+* text=auto
+
+# The wrapper scripts must keep their native line endings on every platform.
+/gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary
+
+# Expected Lua is compared byte for byte with the printer's output, which ends lines with LF.
+*.lua text eol=lf
+
+# Expected diagnostics are compared byte for byte too.
+*.txt text eol=lf

@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+
+# Kotlin compiler daemon
+.kotlin/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# Visual Studio Code
+.vscode/
+
+# macOS
+.DS_Store

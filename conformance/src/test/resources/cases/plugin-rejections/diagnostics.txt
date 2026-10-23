@@ -1,0 +1,87 @@
+plugin/BadConfig.java:11: error: A setting's getter is a default method without parameters whose body only returns the default value, such as default int count() { return 5; }.
+	@ConfigItem(keyName = "computed", name = "Computed")
+	^
+
+plugin/BadConfig.java:17: error: A setting's setter is an abstract void method with one parameter, the new value, such as void setCount(int count); a getter is a default method that returns the default value.
+	@ConfigItem(keyName = "missing", name = "Missing")
+	^
+
+plugin/BadConfig.java:20: error: A setting is a boolean, an int or long, a double, a String or an enum of the plugin's; PersistentDB keeps those with typed accessors.
+	@ConfigItem(keyName = "names", name = "Names")
+	^
+
+plugin/BadConfig.java:25: error: Every method of an interface of settings is a setting's getter or setter, with @ConfigItem(keyName = ..., name = ...).
+	default int unmarked() {
+	^
+
+plugin/BadPlugin.java:12: error: Only one class extends Plugin, because it becomes main.lua; plugin.SecondPlugin does too.
+public final class BadPlugin extends Plugin {
+^
+
+plugin/BadPlugin.java:14: error: A field of settings needs no value: every call through it calls the settings module, so remove the initializer.
+	private BadConfig settings = null;
+	                             ^
+
+plugin/BadPlugin.java:17: error: The client creates the plugin class, and main.lua runs once; put start-up code in startUp() instead of a constructor.
+	public BadPlugin() {
+	^
+
+plugin/BadPlugin.java:23: error: The plugin class becomes main.lua, whose fields and methods are locals with no object to pass around; pass what is needed instead of this.
+		helper.remember(this);
+		                ^
+
+plugin/BadPlugin.java:26: error: A @Subscribe method takes one parameter, the payload of the event it subscribes to, such as InventoryUpdatedEventPayload.
+	@Subscribe
+	^
+
+plugin/BadPlugin.java:31: error: String is not an event's payload; the parameter of a @Subscribe method names the event, such as InventoryUpdatedEventPayload for InventoryUpdated.
+	public void onText(String text) {
+	                   ^
+
+plugin/BadPlugin.java:34: error: EntityDraw's callbacks return a boolean the client acts on; declare onDraw to return boolean.
+	@Subscribe
+	^
+
+plugin/BadPlugin.java:38: error: Logic's callbacks return nothing; declare onLogic void.
+	@Subscribe
+	^
+
+plugin/BadPlugin.java:43: error: The ChatMessage event needs the chatAccess permission, which the manifest does not declare; add it to the build, oneiro { plugin { permissions { optional(chatAccess) } } }.
+	@Subscribe
+	^
+
+plugin/BadPlugin.java:47: error: The SettingsLayerReady event fires only when the manifest sets hasSettingsIcon; set settingsIcon = true in the build's oneiro { plugin { } } block.
+	@Subscribe
+	^
+
+plugin/BadPlugin.java:52: error: The ServerLogic event passes nothing, so its payload has nothing to read; leave tick unused.
+	public void onTick(ServerLogicEventPayload tick) {
+	                   ^
+
+plugin/BadPlugin.java:57: error: startUp() runs once, when the plugin starts; move what it shares into a method of its own and call that.
+		startUp();
+		^
+
+plugin/BadPlugin.java:58: error: A field of settings needs no value: every call through it calls the settings module, so remove the assignment.
+		settings = null;
+		^
+
+plugin/Helper.java:17: error: The client creates the plugin class, once, when the plugin starts; use its members directly instead of creating another.
+		BadPlugin another = new BadPlugin();
+		                    ^
+
+plugin/Helper.java:20: error: Only the plugin class's methods are subscribed with @Subscribe; subscribe this one with Event.<Name>.Subscribe(name, callback), and unsubscribe it when it is done.
+	@Subscribe
+	^
+
+plugin/NotAnInterface.java:6: error: @ConfigGroup marks an interface of settings; make NotAnInterface an interface whose methods carry @ConfigItem.
+@ConfigGroup("wrong")
+^
+
+plugin/SecondPlugin.java:6: error: Only one class extends Plugin, because it becomes main.lua; plugin.BadPlugin does too.
+public final class SecondPlugin extends Plugin {
+^
+
+plugin/StrayCheats.java:6: error: StrayCheats extends DevPlugin, whose code must never ship; move it into the dev source set, src/dev/java.
+public final class StrayCheats extends DevPlugin {
+^

@@ -1,0 +1,11 @@
+local Overloads = require("src/overloads")
+
+local counter = Overloads.new()
+counter:add()
+counter:add(5)
+counter:add(2, true)
+assert(counter:sum() == 4, "1 + 5 - 2")
+assert(Overloads.new(10):sum() == 10)
+assert(Overloads.greet("Ann") == "Hello Ann")
+assert(Overloads.greet("Ann", "Dr") == "Hello Dr Ann")
+assert(Overloads.limited(20) == 13, "10 + 3")
