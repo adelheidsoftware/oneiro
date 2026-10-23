@@ -2,7 +2,8 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
 
 // Root of the Oneiro build: settings every module shares. Each module applies its own `java-library` or `java`
-// plugin; this file adds the Java 25 toolchain, JSpecify, Error Prone with NullAway, and JUnit to all of them.
+// plugin; this file adds the Java 25 toolchain, JSpecify, Error Prone with NullAway, Checkstyle, and JUnit to all of
+// them.
 
 plugins {
 	// Lifecycle tasks (build, check, clean) at the root, so `./gradlew build` works with or without modules
@@ -18,6 +19,7 @@ val nullaway = libs.nullaway
 val junitBom = libs.junit.bom
 val junitJupiter = libs.junit.jupiter
 val junitPlatformLauncher = libs.junit.platform.launcher
+val checkstyleVersion = libs.versions.checkstyle.get()
 
 allprojects {
 	group = "org.adelheid"
@@ -52,6 +54,14 @@ subprojects {
 			option("NullAway:OnlyNullMarked", "true")
 			option("NullAway:JSpecifyMode", "true")
 		}
+	}
+
+	// The layout rules in config/checkstyle; a violation fails the build
+	apply(plugin = "checkstyle")
+	extensions.configure<CheckstyleExtension> {
+		toolVersion = checkstyleVersion
+		configFile = rootProject.file("config/checkstyle/checkstyle.xml")
+		maxWarnings = 0
 	}
 
 	tasks.withType<Test>().configureEach {

@@ -69,7 +69,8 @@ public abstract class WriteManifest extends DefaultTask {
 		Manifest manifest = new Manifest(getPluginId().get(), getPluginName().get(), getVersion().get(),
 				getContactEmail().get(), dependencies(getRequiredDependencies().get()),
 				dependencies(getOptionalDependencies().get()), sorted(getRequiredPermissions().get()),
-				sorted(getOptionalPermissions().get()), getUrls().get(), getSettingsIcon().get(), getRibbonIcon().get());
+				sorted(getOptionalPermissions().get()), getUrls().get(), getSettingsIcon().get(),
+				getRibbonIcon().get());
 		List<String> problems = manifest.problems();
 		if (!problems.isEmpty()) {
 			throw new GradleException("The plugin's manifest has problems:\n  - " + String.join("\n  - ", problems));

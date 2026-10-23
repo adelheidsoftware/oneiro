@@ -1,0 +1,458 @@
+package org.adelheid.oneiro.bindings;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import javax.lang.model.SourceVersion;
+import org.adelheid.oneiro.bindings.JavaBindings.EventInfo;
+import org.adelheid.oneiro.bindings.JavaBindings.Form;
+import org.adelheid.oneiro.bindings.JavaBindings.Inherited;
+import org.adelheid.oneiro.bindings.JavaBindings.JParam;
+import org.adelheid.oneiro.bindings.JavaBindings.JType;
+import org.adelheid.oneiro.bindings.JavaBindings.Node;
+import org.adelheid.oneiro.bindings.JavaBindings.Shape;
+import org.adelheid.oneiro.bindings.JavaBindings.Variant;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * A class's fields and functions as Java fields and methods, each with the annotations that give its Lua shape
+ * and the Javadoc of its description. A function becomes one method for each of its forms: its own, each
+ * {@code ---@overload}, the shorter forms that leave optional parameters out, and one for each member of a union
+ * parameter, up to a limit.
+ */
+final class MemberBindings {
+
+	private final JavaBindings bindings;
+	private final ApiModel model;
+	private final Overrides overrides;
+	private final List<String> warnings;
+	private final TypeMapping typeMapping;
+
+	MemberBindings(JavaBindings bindings) {
+		this.bindings = bindings;
+		this.model = bindings.model;
+		this.overrides = bindings.overrides;
+		this.warnings = bindings.warnings;
+		this.typeMapping = bindings.typeMapping();
+	}
+
+	/**
+	 * Whether reading the field gives a copy of the client's value: a field of a {@code copied} type, such as
+	 * {@code Vector3}, on an object the client hands out, unless the field is {@code not-copied}. A data table the
+	 * plugin builds holds its fields as they are.
+	 */
+	private boolean isCopied(ApiModel.ClassDef owner, ApiModel.FieldDef field) {
+		if (!(field.type().withoutNil() instanceof TypeRef.Named named)
+				|| !overrides.has("copied", model.resolveAlias(named.name()))
+				|| overrides.has("not-copied", owner.name + "." + field.name())) {
+			return false;
+		}
+		Node node = bindings.byLuaName.get(owner.name);
+		return node == null || !bindings.isBuiltByPlugin(node, owner);
+	}
+
+	void eventField(StringBuilder out, ApiModel.FieldDef field, String indent) {
+		EventInfo event = bindings.events.get(field.name());
+		if (event == null) {
+			return;
+		}
+		Node payload = bindings.byLuaName.get(event.payload());
+		String payloadType = payload == null ? "Object" : payload.reference();
+		String type = (event.predicate() ? "EventPredicateSubscription<" : "EventSubscription<") + payloadType + ">";
+		out.append("\n");
+		List<String> doc = new ArrayList<>(JavaText.lines(field.description()));
+		doc.add("<p>Lua: {@code Event." + field.name() + ".Subscribe(name, callback)}");
+		JavaText.javadoc(out, indent, doc);
+		bindings.memberAnnotations(out, "Event." + field.name(), indent);
+		out.append(indent).append("public static final ").append(type).append(" ").append(field.name())
+				.append(" = LuaOnly.value();\n");
+	}
+
+	void field(StringBuilder out, ApiModel.ClassDef owner, ApiModel.FieldDef field, boolean isStatic,
+			String indent, Set<String> signatures) {
+		String target = owner.name + "." + field.name();
+		TypeRef type = field.type();
+		if (field.name().startsWith("[")) {
+			// ---@field [Int] ui.StyleSheet: the table itself is indexed
+			TypeRef keyType = TypeParser.parse(field.name().substring(1, field.name().length() - 1));
+			JType key = typeMapping.javaType(keyType);
+			if (!signatures.add("get(" + key.erased() + ")")) {
+				return;
+			}
+			out.append("\n");
+			JavaText.javadoc(out, indent, List.of("The entry under"
+					+ " the key.", "", "<p>Lua: {@code " + receiver(owner, isStatic) + "[key]}"));
+			out.append(indent).append("@LuaIndex\n");
+			out.append(indent).append("public ").append(isStatic ? "static " : "").append("native ")
+					.append(typeMapping.javaType(type).text()).append(" get(").append(key.text()).append(" key);\n");
+			return;
+		}
+		if (isStatic && type.withoutNil() instanceof TypeRef.Function function) {
+			// A function in a global table's field is a function of the table: utils.CalcTextWidth(fontID, text)
+			ApiModel.FunctionDef asFunction = new ApiModel.FunctionDef(owner.name, field.name(), ApiModel.CallStyle.DOT,
+					function.params().stream().map(TypeRef.Param::name).toList(),
+					function.params().stream()
+							.map(param -> new ApiModel.ParamDef(param.name(), param.type(), "", false))
+							.toList(),
+					function.returns().stream().map(returned -> new ApiModel.ReturnDef(returned, "", "")).toList(),
+					List.of(), false, field.description(), "");
+			method(out, owner, asFunction, Shape.NAMESPACE, indent, signatures, Map.of());
+			return;
+		}
+		JType javaType = nullability(target, type, typeMapping.javaType(type));
+		boolean readOnly = isReadOnly(owner, field);
+		boolean copied = !isStatic && isCopied(owner, field);
+		out.append("\n");
+		List<String> doc = new ArrayList<>(JavaText.lines(field.description()));
+		String luaName = field.name();
+		doc.add("<p>Lua: {@code " + receiver(owner, isStatic) + "." + luaName + "}" + (readOnly ? ", read-only" : "")
+				+ (copied ? ", a copy: change a local copy and assign it back" : ""));
+		JavaText.javadoc(out, indent, doc);
+		bindings.memberAnnotations(out, target, indent);
+		if (copied) {
+			out.append(indent).append("@LuaCopy\n");
+		}
+		String javaName = overrides.value("java-name", target);
+		if (javaName == null) {
+			javaName = JavaText.javaIdentifier(luaName);
+		}
+		if (!javaName.equals(luaName)) {
+			out.append(indent).append("@LuaName(").append(JavaText.javaString(luaName)).append(")\n");
+		}
+		out.append(indent).append("public ").append(isStatic ? "static " : "").append(readOnly ? "final " : "")
+				.append(javaType.text()).append(" ").append(javaName)
+				.append(isStatic && readOnly ? " = LuaOnly.value()" : "").append(";\n");
+	}
+
+	/** The receiver a member's Lua form shows: the table for a static member, a name for the object otherwise. */
+	static String receiver(ApiModel.ClassDef owner, boolean isStatic) {
+		return isStatic
+				? JavaBindings.luaPath(owner.name) : JavaText.lowerFirstWord(JavaText.simpleLuaName(owner.name));
+	}
+
+	/** A type with the nullability the overrides give its member. */
+	private JType nullability(String target, TypeRef type, JType javaType) {
+		if (overrides.corrects("nullable", target, type.isNullable()) && !type.isNullable()) {
+			return javaType.nullable();
+		}
+		if (overrides.corrects("not-nullable", target, !type.isNullable()) && type.isNullable()) {
+			return typeMapping.javaType(type.withoutNil());
+		}
+		return javaType;
+	}
+
+	/**
+	 * Whether a field is read-only: the docs say so, or the overrides do for the field or its whole class, or it is an
+	 * event payload's, whose few writable fields the overrides name.
+	 */
+	private boolean isReadOnly(ApiModel.ClassDef owner, ApiModel.FieldDef field) {
+		String target = owner.name + "." + field.name();
+		if (overrides.has("writable", target)) {
+			return false;
+		}
+		// Both overrides are asked even when the docs say so already, so that one the stubs catch up with is noticed
+		boolean fieldOverride = overrides.corrects("read-only", target, field.readOnly());
+		boolean classOverride = overrides.corrects("read-only", owner.name, field.readOnly());
+		if (field.readOnly() || fieldOverride || classOverride) {
+			return true;
+		}
+		Node node = bindings.byLuaName.get(owner.name);
+		return node != null && node.payloadOf != null;
+	}
+
+	void method(StringBuilder out, ApiModel.ClassDef owner, ApiModel.FunctionDef function, Shape shape,
+			String indent, Set<String> signatures, Map<String, Inherited> inherited) {
+		String target = owner.name + "." + function.name();
+		if (overrides.has("skip", target)) {
+			return;
+		}
+		boolean colon = function.style() == ApiModel.CallStyle.COLON;
+		boolean isStatic = shape == Shape.NAMESPACE || (shape == Shape.INSTANCE && !colon);
+		String javaName = javaMethodName(owner.name, function.name());
+		for (Form untyped : forms(owner.name, function)) {
+			Form form = new Form(bindings.constantTables().hookTyped(untyped.params()), untyped.returned());
+			boolean generic = form.params().stream().anyMatch(param -> param.type().text().equals("C"));
+			String key = javaName + "(" + erased(form.params()) + ")";
+			if (JavaBindings.OBJECT_METHODS.contains(key)) {
+				warnings.add(target + " has the signature of Object's " + key + "; it is left out.");
+				continue;
+			}
+			if (!signatures.add(key) || !overridable(target, form, isStatic, inherited.get(key))) {
+				continue;
+			}
+			out.append("\n");
+			List<String> doc = new ArrayList<>(JavaText.lines(function.description()));
+			doc.add("<p>Lua: {@code " + receiver(owner, isStatic) + (colon ? ":" : ".") + function.name() + "("
+					+ luaArguments(form.params())
+					+ (function.varargs() ? (form.params().isEmpty() ? "..." : ", ...") : "") + ")}");
+			paramDocs(doc, form.params());
+			if (generic) {
+				doc.add("@param <C> the callback the hook takes");
+			}
+			if (!function.returns().isEmpty() && !form.returned().text().equals("void")) {
+				String text = function.returns().getFirst().description();
+				if (!text.isEmpty()) {
+					doc.add("@return " + JavaText.escape(text));
+				}
+			}
+			JavaText.javadoc(out, indent, doc);
+			bindings.memberAnnotations(out, target, indent);
+			if (shape == Shape.NAMESPACE && colon) {
+				out.append(indent).append("@LuaColon\n");
+			}
+			if (!isStatic && !colon) {
+				out.append(indent).append("@LuaDot\n");
+			}
+			if (!javaName.equals(function.name())) {
+				out.append(indent).append("@LuaName(").append(JavaText.javaString(function.name())).append(")\n");
+			}
+			out.append(indent).append("public ").append(isStatic ? "static " : "").append("native ")
+					.append(generic ? "<C> " : "").append(form.returned().text()).append(" ").append(javaName)
+					.append("(").append(parameterList(form.params(), function.varargs())).append(");\n");
+		}
+		List<String> names = overrides.arguments("returns", target);
+		if (function.returns().size() > 1 && names != null && !names.isEmpty() && bindings.writtenRecords.add(target)) {
+			out.append("\n");
+			returnValues(out, owner, function, names, indent);
+		}
+	}
+
+	/**
+	 * Whether a class may declare a method with a signature a superclass declares too: when it returns the same, the
+	 * inherited method serves; when it returns a subclass of what the inherited one returns, as {@code Vector2.Abs()}
+	 * does where {@code Vector.Abs()} returns {@code Vector}, it is a covariant override; otherwise Java would reject
+	 * it, and the inherited one is kept.
+	 */
+	private boolean overridable(String target, Form form, boolean isStatic, @Nullable Inherited inherited) {
+		if (inherited == null) {
+			return true;
+		}
+		String returned = form.returned().erased();
+		if (inherited.isStatic() != isStatic || (!returned.equals(inherited.returned())
+				&& !bindings.isSubclass(returned, inherited.returned()))) {
+			warnings.add(target + "(" + erased(form.params()) + ") does not fit the method it inherits, which returns "
+					+ inherited.returned() + "; the inherited one is kept.");
+			return false;
+		}
+		return !returned.equals(inherited.returned());
+	}
+
+	/** The record a function with several returns gives back, {@code @LuaReturnValues}, nested in its owner. */
+	private void returnValues(StringBuilder out, ApiModel.ClassDef owner, ApiModel.FunctionDef function,
+			List<String> names, String indent) {
+		List<String> doc = new ArrayList<>();
+		doc.add("The values {@code " + JavaBindings.luaPath(owner.name) + "." + function.name()
+				+ "} returns, in order.");
+		List<String> components = new ArrayList<>();
+		for (int index = 0; index < function.returns().size() && index + 1 < names.size(); index++) {
+			ApiModel.ReturnDef returned = function.returns().get(index);
+			String name = names.get(index + 1);
+			doc.add("@param " + name
+					+ (returned.description().isEmpty() ? "" : " " + JavaText.escape(returned.description())));
+			components.add(typeMapping.javaType(returned.type()).text() + " " + name);
+		}
+		JavaText.javadoc(out, indent, doc);
+		out.append(indent).append("@LuaReturnValues\n");
+		out.append(indent).append("public record ").append(names.getFirst()).append("(")
+				.append(String.join(", ", components)).append(") {\n").append(indent).append("}\n");
+	}
+
+	/** What a function returns in Java: nothing, its one value, or the record that names its several values. */
+	private JType returnType(String owner, ApiModel.FunctionDef function) {
+		String target = owner + "." + function.name();
+		List<ApiModel.ReturnDef> returns = function.returns();
+		if (returns.isEmpty()) {
+			return JType.VOID;
+		}
+		if (returns.size() > 1) {
+			List<String> names = overrides.arguments("returns", target);
+			if (names != null && !names.isEmpty()) {
+				Node node = bindings.byLuaName.get(owner);
+				return JType.reference((node == null ? JavaBindings.luaPath(owner) : node.reference()) + "."
+						+ names.getFirst());
+			}
+			warnings.add(target + " returns " + returns.size() + " values, but the overrides name none; only the first"
+					+ " is bound.");
+		}
+		TypeRef type = returns.getFirst().type();
+		if (type instanceof TypeRef.Named named && named.name().equals("nil")) {
+			return JType.VOID;
+		}
+		return nullability(target, type, typeMapping.javaType(type));
+	}
+
+	String javaMethodName(String owner, String luaName) {
+		String renamed = overrides.value("java-name", owner + "." + luaName);
+		if (renamed != null) {
+			return renamed;
+		}
+		return luaName.equals("new") ? "create" : JavaText.javaIdentifier(luaName);
+	}
+
+	/**
+	 * The Java forms of a function: its own and each {@code ---@overload}, each with shorter forms that leave out its
+	 * optional trailing parameters, and one form per member type of a union parameter. Forms Java cannot tell apart
+	 * are written once, the first one kept.
+	 */
+	List<Form> forms(String owner, ApiModel.FunctionDef function) {
+		JType declaredReturn = returnType(owner, function);
+		List<Variant> variants = new ArrayList<>(lockstep(declaredParams(function), function, declaredReturn));
+		for (TypeRef overload : function.overloads()) {
+			if (overload instanceof TypeRef.Function shape) {
+				List<ApiModel.ParamDef> params = new ArrayList<>();
+				for (TypeRef.Param param : shape.params()) {
+					if (!param.name().equals("self") && !param.name().equals("...")) {
+						params.add(new ApiModel.ParamDef(param.name(), param.type(), "", false));
+					}
+				}
+				variants.add(new Variant(params,
+						shape.returns().isEmpty() ? declaredReturn : typeMapping.javaType(shape.returns().getFirst())));
+			}
+		}
+		List<Form> forms = new ArrayList<>();
+		Set<String> seen = new HashSet<>();
+		for (Variant variant : variants) {
+			List<ApiModel.ParamDef> params = variant.params();
+			int required = params.size();
+			while (required > 0 && params.get(required - 1).optional()) {
+				required--;
+			}
+			for (int length = params.size(); length >= required; length--) {
+				for (List<JParam> expanded : expandUnions(params.subList(0, length))) {
+					if (seen.add(erased(expanded))) {
+						forms.add(new Form(expanded, variant.returned()));
+					}
+				}
+			}
+		}
+		return forms;
+	}
+
+	/**
+	 * A parameter list whose union parameters all have the same member types, as one variant per member type, with the
+	 * return of the same union narrowed alike: {@code lerp(start, final, t)}, whose {@code start}, {@code final} and
+	 * return are each {@code Float|Vector2|...}, becomes {@code lerp(Vector2, Vector2, double)} returning
+	 * {@code Vector2}, and so on. Any other list is one variant, and its unions expand independently.
+	 */
+	private List<Variant> lockstep(List<ApiModel.ParamDef> params, ApiModel.FunctionDef function,
+			JType declaredReturn) {
+		List<TypeRef> options = null;
+		for (ApiModel.ParamDef param : params) {
+			if (param.type().withoutNil() instanceof TypeRef.Union union) {
+				if (options == null) {
+					options = union.options();
+				} else if (!shown(options).equals(shown(union.options()))) {
+					return List.of(new Variant(params, declaredReturn));
+				}
+			}
+		}
+		if (options == null) {
+			return List.of(new Variant(params, declaredReturn));
+		}
+		List<String> shared = shown(options);
+		TypeRef returned = function.returns().size() == 1 ? function.returns().getFirst().type() : null;
+		boolean returnFollows = returned != null && returned.withoutNil() instanceof TypeRef.Union union
+				&& shown(union.options()).equals(shared);
+		List<Variant> variants = new ArrayList<>();
+		for (TypeRef option : options) {
+			List<ApiModel.ParamDef> narrowed = new ArrayList<>();
+			for (ApiModel.ParamDef param : params) {
+				boolean follows = param.type().withoutNil() instanceof TypeRef.Union union
+						&& shown(union.options()).equals(shared);
+				TypeRef type = !follows ? param.type()
+						: param.type().isNullable() ? new TypeRef.Optional(option) : option;
+				narrowed.add(new ApiModel.ParamDef(param.name(), type, param.description(), param.optionalName()));
+			}
+			JType variantReturn = declaredReturn;
+			if (returnFollows && returned != null) {
+				variantReturn = returned.isNullable()
+						? typeMapping.javaType(option).nullable() : typeMapping.javaType(option);
+			}
+			variants.add(new Variant(narrowed, variantReturn));
+		}
+		return variants;
+	}
+
+	private static List<String> shown(List<TypeRef> types) {
+		return types.stream().map(TypeRef::show).toList();
+	}
+
+	/** A function's parameters from its {@code ---@param} tags, or untyped ones from its Lua parameter list. */
+	private static List<ApiModel.ParamDef> declaredParams(ApiModel.FunctionDef function) {
+		List<ApiModel.ParamDef> params = new ArrayList<>();
+		if (!function.params().isEmpty()) {
+			function.params().stream().filter(param -> !param.name().equals("...")).forEach(params::add);
+			return params;
+		}
+		for (String name : function.luaParams()) {
+			if (!name.equals("...")) {
+				params.add(new ApiModel.ParamDef(name, TypeRef.Named.of("any"), "", false));
+			}
+		}
+		return params;
+	}
+
+	private List<List<JParam>> expandUnions(List<ApiModel.ParamDef> params) {
+		List<List<JParam>> results = new ArrayList<>();
+		results.add(new ArrayList<>());
+		for (ApiModel.ParamDef param : params) {
+			TypeRef type = param.type().withoutNil();
+			List<TypeRef> options = type instanceof TypeRef.Union union ? union.options() : List.of(type);
+			if (results.size() * options.size() > JavaBindings.MAX_UNION_OVERLOADS) {
+				options = List.of(TypeRef.Named.of("any"));
+			}
+			boolean nullable = param.type().isNullable();
+			List<List<JParam>> next = new ArrayList<>();
+			for (List<JParam> partial : results) {
+				for (TypeRef option : options) {
+					List<JParam> extended = new ArrayList<>(partial);
+					JType javaType = typeMapping.javaType(option);
+					extended.add(new JParam(parameterName(param.name(), partial), nullable
+							? javaType.nullable() : javaType, JavaText.escape(param.description())));
+					next.add(extended);
+				}
+			}
+			results = next;
+		}
+		return results;
+	}
+
+	static String erased(List<JParam> params) {
+		return params.stream().map(param -> param.type().erased()).collect(Collectors.joining(","));
+	}
+
+	static String parameterName(String luaName, List<JParam> before) {
+		String base = luaName.isEmpty() ? "value" : luaName;
+		if (!SourceVersion.isName(base)) {
+			base = SourceVersion.isKeyword(base) ? base + "Value" : "value";
+		}
+		String candidate = base;
+		Set<String> taken = before.stream().map(JParam::name).collect(Collectors.toSet());
+		for (int suffix = 2; taken.contains(candidate) || candidate.equals("args"); suffix++) {
+			candidate = base + suffix;
+		}
+		return candidate;
+	}
+
+	static String parameterList(List<JParam> params, boolean varargs) {
+		List<String> written = new ArrayList<>();
+		params.forEach(param -> written.add(param.type().text() + " " + param.name()));
+		if (varargs) {
+			written.add("Object... args");
+		}
+		return String.join(", ", written);
+	}
+
+	static String luaArguments(List<JParam> params) {
+		return params.stream().map(JParam::name).collect(Collectors.joining(", "));
+	}
+
+	static void paramDocs(List<String> doc, List<JParam> params) {
+		for (JParam param : params) {
+			doc.add("@param " + param.name() + (param.description().isEmpty() ? "" : " " + param.description()));
+		}
+	}
+}

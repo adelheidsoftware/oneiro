@@ -80,7 +80,10 @@ public record Manifest(
 		return all;
 	}
 
-	/** The manifest flags that are set, by their {@code plugin.json} names: {@code hasSettingsIcon}, {@code hasRibbonIcon}. */
+	/**
+	 * The manifest flags that are set, by their {@code plugin.json} names: {@code hasSettingsIcon}, {@code
+	 * hasRibbonIcon}.
+	 */
 	public Set<String> flags() {
 		Set<String> flags = new TreeSet<>();
 		if (settingsIcon) {

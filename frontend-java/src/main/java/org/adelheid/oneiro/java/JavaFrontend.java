@@ -77,7 +77,8 @@ public final class JavaFrontend {
 				compiler.getStandardFileManager(javacDiagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
 			String classpath = options.classpath().stream().map(Path::toString)
 					.collect(Collectors.joining(File.pathSeparator));
-			List<String> javacOptions = List.of("--release", "25", "-proc:none", "-Xlint:none", "-classpath", classpath);
+			List<String> javacOptions = List.of("--release", "25", "-proc:none", "-Xlint:none", "-classpath",
+					classpath);
 			JavacTask task = (JavacTask) compiler.getTask(null, files, javacDiagnostics, javacOptions, null,
 					files.getJavaFileObjectsFromPaths(sources));
 			List<CompilationUnitTree> units = new ArrayList<>();
@@ -224,9 +225,11 @@ public final class JavaFrontend {
 					// Comparator.naturalOrder() and reverseOrder()
 					if (node.getMethodSelect() instanceof MemberSelectTree select) {
 						String method = select.getIdentifier().toString();
-						TypeMirror receiver = trees.getTypeMirror(new TreePath(getCurrentPath(), select.getExpression()));
+						TypeMirror receiver = trees.getTypeMirror(new TreePath(getCurrentPath(),
+								select.getExpression()));
 						boolean natural = (method.equals("sort") && node.getArguments().size() == 1
-								&& node.getArguments().getFirst() instanceof LiteralTree literal && literal.getValue() == null)
+								&& node.getArguments().getFirst() instanceof LiteralTree literal
+								&& literal.getValue() == null)
 								|| (method.equals("sorted") && node.getArguments().isEmpty());
 						if (natural) {
 							note(firstTypeArgument(receiver));
@@ -299,7 +302,7 @@ public final class JavaFrontend {
 	}
 
 	/** Whether an enum declares only constants, each without arguments or a body, and implements nothing. */
-	static boolean isSimpleEnum(ClassTree type, DocTrees trees, TreePath path) {
+	private static boolean isSimpleEnum(ClassTree type, DocTrees trees, TreePath path) {
 		if (!type.getImplementsClause().isEmpty()) {
 			return false;
 		}

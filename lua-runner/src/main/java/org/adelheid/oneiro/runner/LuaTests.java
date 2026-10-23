@@ -64,7 +64,8 @@ public final class LuaTests {
 		List<String> report = new ArrayList<>();
 		int failed = 0;
 		for (String name : names) {
-			LuaRunner.Result result = lua.run(harness, List.of(slashes(plugin), slashes(tests), slashes(standIn), name));
+			LuaRunner.Result result = lua.run(harness,
+					List.of(slashes(plugin), slashes(tests), slashes(standIn), name));
 			if (result.succeeded()) {
 				report.add("PASS " + name);
 			} else {
@@ -81,7 +82,8 @@ public final class LuaTests {
 	 * compiled for an older Java than Oneiro's: an empty {@code installed} means the bundled Lua. The first element is
 	 * {@code passed} or {@code failed}, the rest the report.
 	 */
-	public static List<String> runForBuild(String installed, String plugin, String tests, String work) throws IOException {
+	public static List<String> runForBuild(String installed, String plugin, String tests,
+			String work) throws IOException {
 		Outcome outcome = run(installed.isEmpty() ? null : Path.of(installed), Path.of(plugin), Path.of(tests),
 				Path.of(work));
 		List<String> lines = new ArrayList<>();

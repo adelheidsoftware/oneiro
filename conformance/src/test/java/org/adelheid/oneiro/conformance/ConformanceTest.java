@@ -37,8 +37,8 @@ import org.junit.jupiter.api.TestFactory;
 
 /**
  * Runs every case under {@code src/test/resources/cases}. A case is a folder with the Java sources of a small plugin in
- * {@code input/} (root package {@code plugin}) and any of: {@code expected/}, the Lua Oneiro must write, at the paths it
- * must write it, by hand in the house style; {@code diagnostics.txt}, the errors and warnings it must report; and
+ * {@code input/} (root package {@code plugin}) and any of: {@code expected/}, the Lua Oneiro must write, at the paths
+ * it must write it, by hand in the house style; {@code diagnostics.txt}, the errors and warnings it must report; and
  * {@code check.lua}, assertions run under Lua 5.4 against the generated modules; and {@code lua/}, hand-written Lua the
  * generated modules use, such as a module the Java declares with {@code @LuaModule}. Lua is the bundled Lua 5.4.8
  * unless {@code oneiro.luaExecutable} names an installed one. Every expected file must also be StyLua-formatted.

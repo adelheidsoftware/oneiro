@@ -41,7 +41,7 @@ final class JavaTypes {
 	static final String LUA_DOT = API + "LuaDot";
 	static final String LUA_INDEX = API + "LuaIndex";
 	static final String LUA_COPY = API + "LuaCopy";
-	static final String LUA_OPERATOR = API + "LuaOperator";
+	private static final String LUA_OPERATOR = API + "LuaOperator";
 	static final String LUA_SAME = API + "LuaSame";
 	static final String LUA_DEV_ONLY = API + "LuaDevOnly";
 	static final String LUA_FROM_ID = API + "LuaFromId";
@@ -149,7 +149,9 @@ final class JavaTypes {
 		return isSubtype(type, "java.util.Map");
 	}
 
-	/** A queue or deque, such as {@code ArrayDeque} or {@code LinkedList}: a Lua list with its first element in front. */
+	/**
+	 * A queue or deque, such as {@code ArrayDeque} or {@code LinkedList}: a Lua list with its first element in front.
+	 */
 	boolean isDeque(TypeMirror type) {
 		return isSubtype(type, "java.util.Queue");
 	}
@@ -232,8 +234,8 @@ final class JavaTypes {
 	}
 
 	/**
-	 * Whether the type is an interface of the plugin's whose values are plain Lua functions: it has one abstract method,
-	 * so lambdas implement it, and no class of the plugin's implements it.
+	 * Whether the type is an interface of the plugin's whose values are plain Lua functions: it has one abstract
+	 * method, so lambdas implement it, and no class of the plugin's implements it.
 	 */
 	boolean isFunctionalPluginInterface(TypeElement type) {
 		return type.getKind() == ElementKind.INTERFACE && pluginTypes.contains(type)
@@ -261,22 +263,6 @@ final class JavaTypes {
 	boolean isNullable(TypeMirror type) {
 		return type.getAnnotationMirrors().stream().anyMatch(annotation ->
 				((TypeElement) annotation.getAnnotationType().asElement()).getQualifiedName().contentEquals(NULLABLE));
-	}
-
-	/**
-	 * Whether the interface has exactly one abstract method, so that Java calls it as a lambda and Lua as a plain
-	 * function: {@code predicate.test(x)} is {@code predicate(x)}.
-	 */
-	boolean isFunctionalInterfaceMethod(ExecutableElement method) {
-		TypeElement owner = owner(method);
-		if (owner.getKind() != ElementKind.INTERFACE || !method.getModifiers().contains(Modifier.ABSTRACT)) {
-			return false;
-		}
-		List<? extends Element> abstractMethods = elements.getAllMembers(owner).stream()
-				.filter(member -> member.getKind() == ElementKind.METHOD)
-				.filter(member -> member.getModifiers().contains(Modifier.ABSTRACT))
-				.toList();
-		return abstractMethods.size() == 1;
 	}
 
 	/**
@@ -355,7 +341,8 @@ final class JavaTypes {
 			return declared;
 		}
 		String name = member.getSimpleName().toString();
-		// A constant table's names carry a prefix in Java, so that every one is a Java name; Lua has the name without it
+		// A constant table's names carry a prefix in Java, so that every one is a Java name; Lua has the name without
+		// it
 		if (member.getKind() == ElementKind.FIELD && member.getEnclosingElement() instanceof TypeElement owner
 				&& hasAnnotation(owner, LUA_CONSTANTS) && name.startsWith(LuaConstants.PREFIX)) {
 			return name.substring(LuaConstants.PREFIX.length());
@@ -377,9 +364,9 @@ final class JavaTypes {
 	}
 
 	/**
-	 * Whether a class stands for Lua that the client or another plugin provides, with {@code @LuaGlobal} or
-	 * {@code @LuaType}: the RS3 bindings, and the plugin's generated {@code Resources} and {@code Urls}. Such a class has
-	 * no Lua of its own; code that uses it calls the Lua directly.
+	 * Whether a class stands for Lua that the client or another plugin provides, with {@code @LuaGlobal} or {@code
+	 * @LuaType}: the RS3 bindings, and the plugin's generated {@code Resources} and {@code Urls}. Such a class has no
+	 * Lua of its own; code that uses it calls the Lua directly.
 	 */
 	boolean isApi(TypeElement type) {
 		return hasAnnotation(type, LUA_GLOBAL) || hasAnnotation(type, LUA_TYPE);
@@ -402,8 +389,8 @@ final class JavaTypes {
 	}
 
 	/**
-	 * The event a payload class belongs to, with {@code @LuaEvent}, and whether its callbacks return a boolean; null for
-	 * any other class.
+	 * The event a payload class belongs to, with {@code @LuaEvent}, and whether its callbacks return a boolean; null
+	 * for any other class.
 	 */
 	@Nullable Event event(TypeElement payload) {
 		for (AnnotationMirror mirror : payload.getAnnotationMirrors()) {
@@ -457,7 +444,9 @@ final class JavaTypes {
 		return false;
 	}
 
-	/** Whether a class is the plugin's entry point, the one that extends {@code Plugin} and becomes {@code main.lua}. */
+	/**
+	 * Whether a class is the plugin's entry point, the one that extends {@code Plugin} and becomes {@code main.lua}.
+	 */
 	boolean isPluginEntry(TypeElement type) {
 		return directSuperclass(type, API + "Plugin");
 	}

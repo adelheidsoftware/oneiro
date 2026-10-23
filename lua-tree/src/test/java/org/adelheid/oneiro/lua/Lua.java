@@ -68,7 +68,10 @@ final class Lua {
 		return result;
 	}
 
-	/** Operands joined right to left, as {@code ..} groups: {@code rightChain(CONCAT, a, b, c)} is {@code a .. (b .. c)}. */
+	/**
+	 * Operands joined right to left, as {@code ..} groups: {@code rightChain(CONCAT, a, b, c)} is {@code a .. (b ..
+	 * c)}.
+	 */
 	static Expression rightChain(BinaryOperator operator, Expression... operands) {
 		Expression result = operands[operands.length - 1];
 		for (int index = operands.length - 2; index >= 0; index--) {

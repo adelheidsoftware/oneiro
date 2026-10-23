@@ -14,7 +14,7 @@ import org.jspecify.annotations.Nullable;
  */
 final class DocRenderer {
 
-	static final String INDENT = "    ";
+	private static final String INDENT = "    ";
 
 	private final int width;
 
@@ -52,7 +52,8 @@ final class DocRenderer {
 				}
 				case Doc.HardLine _ -> output.newline(command.indent());
 				case Doc.FlatOrBroken choice -> output.write(command.flat() ? choice.flat() : choice.broken());
-				case Doc.Indent indent -> stack.push(new Command(command.indent() + 1, command.flat(), indent.content()));
+				case Doc.Indent indent ->
+						stack.push(new Command(command.indent() + 1, command.flat(), indent.content()));
 				case Doc.Group group -> {
 					boolean flat = command.flat()
 							|| fits(new Command(command.indent(), true, group.content()), stack, output.column());
@@ -70,7 +71,9 @@ final class DocRenderer {
 		return output.finish();
 	}
 
-	/** Lays out a {@link Doc.Hang}: on one line; else the body alone on the next line; else the body broken in place. */
+	/**
+	 * Lays out a {@link Doc.Hang}: on one line; else the body alone on the next line; else the body broken in place.
+	 */
 	private void hang(Command command, Doc.Hang hang, Deque<Command> stack, Output output) {
 		Doc oneLine = oneLine(hang);
 		if (command.flat() || fits(new Command(command.indent(), true, oneLine), stack, output.column())) {
@@ -127,7 +130,8 @@ final class DocRenderer {
 					return !command.flat();
 				}
 				case Doc.FlatOrBroken choice -> remaining -= width(command.flat() ? choice.flat() : choice.broken());
-				case Doc.Indent indent -> work.push(new Command(command.indent() + 1, command.flat(), indent.content()));
+				case Doc.Indent indent ->
+						work.push(new Command(command.indent() + 1, command.flat(), indent.content()));
 				case Doc.Group group -> work.push(new Command(command.indent(), command.flat(), group.content()));
 				case Doc.Concat concat -> pushParts(work, command, concat.parts());
 				case Doc.Hang hang -> work.push(new Command(command.indent(), command.flat(), oneLine(hang)));
@@ -168,7 +172,8 @@ final class DocRenderer {
 					return true;
 				}
 				case Doc.FlatOrBroken choice -> remaining -= width(command.flat() ? choice.flat() : choice.broken());
-				case Doc.Indent indent -> work.push(new Command(command.indent() + 1, command.flat(), indent.content()));
+				case Doc.Indent indent ->
+						work.push(new Command(command.indent() + 1, command.flat(), indent.content()));
 				case Doc.Group group -> work.push(new Command(command.indent(), !Doc.breaks(group), group.content()));
 				case Doc.Concat concat -> pushParts(work, command, concat.parts());
 				case Doc.Hang hang -> work.push(new Command(command.indent(), !Doc.breaks(hang), oneLine(hang)));

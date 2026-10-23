@@ -46,7 +46,9 @@ final class ApiModel {
 		}
 	}
 
-	/** A {@code ---@field}; {@code readOnly} comes from the "(Read-only)" the docs put at the start of the description. */
+	/**
+	 * A {@code ---@field}; {@code readOnly} comes from the "(Read-only)" the docs put at the start of the description.
+	 */
 	record FieldDef(String name, TypeRef type, String description, boolean readOnly) {
 	}
 
@@ -86,28 +88,38 @@ final class ApiModel {
 		}
 
 		FunctionDef withOwner(String newOwner) {
-			return new FunctionDef(newOwner, name, style, luaParams, params, returns, overloads, varargs, description, file);
+			return new FunctionDef(newOwner, name, style, luaParams, params, returns, overloads, varargs, description,
+					file);
 		}
 
 		FunctionDef withReturns(List<ReturnDef> newReturns) {
-			return new FunctionDef(owner, name, style, luaParams, params, newReturns, overloads, varargs, description, file);
+			return new FunctionDef(owner, name, style, luaParams, params, newReturns, overloads, varargs, description,
+					file);
 		}
 
 		FunctionDef withName(String newName) {
-			return new FunctionDef(owner, newName, style, luaParams, params, returns, overloads, varargs, description, file);
+			return new FunctionDef(owner, newName, style, luaParams, params, returns, overloads, varargs, description,
+					file);
 		}
 
 		FunctionDef withOverloads(List<TypeRef> newOverloads) {
-			return new FunctionDef(owner, name, style, luaParams, params, returns, newOverloads, varargs, description, file);
+			return new FunctionDef(owner, name, style, luaParams, params, returns, newOverloads, varargs, description,
+					file);
 		}
 
 		FunctionDef withParams(List<ParamDef> newParams) {
-			return new FunctionDef(owner, name, style, luaParams, newParams, returns, overloads, varargs, description, file);
+			return new FunctionDef(owner, name, style, luaParams, newParams, returns, overloads, varargs, description,
+					file);
 		}
 	}
 
 	/** One value of a {@code ---@enum} table. {@code literal} is the Lua source, such as {@code 0} or {@code "INT"}. */
 	record EnumValue(String name, String literal, String comment) {
+
+		/** The key as Lua indexes it: {@code NAME}, or the string inside {@code ["..."]}. */
+		String key() {
+			return name.startsWith("[\"") ? name.substring(2, name.length() - 2) : name;
+		}
 	}
 
 	/** A {@code ---@enum}. */
@@ -124,12 +136,12 @@ final class ApiModel {
 
 		/**
 		 * Whether every value is its own name as a string, {@code NONE = "NONE"}: what the stubs write where the docs
-		 * give no values, or give them in a column the stubs' generator does not read. Such a value is not the client's.
+		 * give no values, or give them in a column the stubs' generator does not read. Such a value is not the
+		 * client's.
 		 */
 		boolean placeholderValued() {
-			return !values.isEmpty() && values.stream().allMatch(value -> value.literal()
-					.equals("\"" + (value.name().startsWith("[\"") ? value.name().substring(2, value.name().length() - 2)
-							: value.name()) + "\""));
+			return !values.isEmpty()
+					&& values.stream().allMatch(value -> value.literal().equals("\"" + value.key() + "\""));
 		}
 	}
 

@@ -20,7 +20,8 @@ import org.adelheid.oneiro.api.LuaGlobal;
  * slow. Each chunk holds {@link JavaBindings#CHUNK_SIZE} names, extends the one before, and is package-private, so it
  * stays out of completion while the namespace class, which extends the last, inherits every name. Each chunk carries
  * {@code @LuaGlobal} with its namespace's Lua path, because a name resolves to the chunk that declares it, and
- * {@code @LuaConstants}, because each name is {@link LuaConstants#PREFIX} and its Lua name, which Java can always spell.
+ * {@code @LuaConstants}, because each name is {@link LuaConstants#PREFIX} and its Lua name, which Java can always
+ * spell.
  *
  * <p>The names of {@code id} are {@code int} constants, so they work as {@code case} labels; the names of
  * {@code config} and {@code var} are {@code final} fields of their config type without a value, because they exist
@@ -57,7 +58,8 @@ final class ConstantChunks {
 				builder.with(RuntimeInvisibleAnnotationsAttribute.of(
 						Annotation.of(LUA_GLOBAL, AnnotationElement.ofString("value", namespace.luaPath())),
 						Annotation.of(LUA_CONSTANTS)));
-				builder.withMethod(ConstantDescs.INIT_NAME, ConstantDescs.MTD_void, 0, method -> method.withCode(code -> {
+				builder.withMethod(ConstantDescs.INIT_NAME, ConstantDescs.MTD_void, 0,
+						method -> method.withCode(code -> {
 					code.aload(0);
 					code.invokespecial(parent, ConstantDescs.INIT_NAME, ConstantDescs.MTD_void);
 					code.return_();

@@ -49,8 +49,8 @@ class PackageChecksTest {
 		writePng("resources/huge.png", 2048, 16);
 		assertEquals(List.of(
 				"The plugin has no plugin.json, which the client needs at the top of the folder.",
-				"README.md is not part of a plugin: only main.lua, plugin.json, Lua files under src/ and PNG or Ogg files"
-						+ " under resources/ ship.",
+				"README.md is not part of a plugin: only main.lua, plugin.json, Lua files under src/ and PNG or"
+						+ " Ogg files under resources/ ship.",
 				"resources/huge.png is 2048 by 16 pixels; the client loads images up to 1024 by 1024.",
 				"resources/notes.txt is not a PNG image or an Ogg Vorbis sound, the only resources the client loads.",
 				"main.lua requires \"src/missing\", which is not in the plugin.",

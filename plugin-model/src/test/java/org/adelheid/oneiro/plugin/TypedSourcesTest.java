@@ -69,7 +69,8 @@ class TypedSourcesTest {
 					}
 
 					private static <T> T lua() {
-						throw new UnsupportedOperationException("Resources exist only in Lua; Oneiro compiles what uses them.");
+						throw new UnsupportedOperationException(
+								"Resources exist only in Lua; Oneiro compiles what uses them.");
 					}
 				}
 				""", source);

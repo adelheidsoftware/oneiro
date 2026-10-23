@@ -67,8 +67,8 @@ class FixtureStubsTest {
 				.filter(warning -> warning.startsWith("id.NPC") || warning.startsWith("config.NPC"))
 				.toList();
 		// 2ND_GUARD is a Java name after the prefix, RS3_2ND_GUARD; a hyphen never is
-		String reasons = " leaves out 3 names Java cannot use: 1 not a Java name (such as GUARD-CAPTAIN), 1 repeated (such"
-				+ " as MAN), 1 with an ID that does not fit an int (such as HUGE)";
+		String reasons = " leaves out 3 names Java cannot use: 1 not a Java name (such as GUARD-CAPTAIN), 1 repeated"
+				+ " (such as MAN), 1 with an ID that does not fit an int (such as HUGE)";
 		assertEquals(List.of("id.NPC" + reasons + "; use their numeric IDs instead.",
 				"config.NPC" + reasons + "; look them up with FromID and their numeric IDs instead."), npcs);
 	}
@@ -104,7 +104,8 @@ class FixtureStubsTest {
 		}
 		BindingsGenerator.Result run = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings-caught-up"),
 				overrides);
-		List<String> notes = run.notes().stream().map(note -> note.replaceFirst("^overrides\\.txt:\\d+: ", "")).toList();
+		List<String> notes = run.notes().stream().map(note -> note.replaceFirst("^overrides\\.txt:\\d+: ", ""))
+				.toList();
 		assertTrue(notes.containsAll(List.of(
 				"nullable Player.GetTrackingID is no longer needed: the stubs now say the same.",
 				"read-only PluginResource is no longer needed: the stubs now say the same.",
@@ -141,7 +142,8 @@ class FixtureStubsTest {
 		assertTrue(chat.contains("\tpublic String chatMessage;"), "the overrides make chatMessage writable");
 		assertTrue(chat.contains("\tpublic final String senderNameSimple;"), "payload fields are read-only");
 		assertTrue(source("SettingsLayerReadyEventPayload.java").contains("@LuaManifestFlag(\"hasSettingsIcon\")"));
-		assertTrue(source("Globals.java").contains("\t@LuaDevOnly\n\tpublic static native void ExecuteConsoleCommand("));
+		assertTrue(source("Globals.java").contains("\t@LuaDevOnly\n\tpublic static native void"
+				+ " ExecuteConsoleCommand("));
 		assertTrue(!source("Globals.java").contains("require"), "Oneiro writes require itself");
 		assertTrue(source("CurrentPlugin.java").contains("@LuaGlobal(\"Plugin\")\npublic final class CurrentPlugin {"));
 		assertTrue(source("ModifierKey.java").contains("public static final int SHIFT = 1;"));

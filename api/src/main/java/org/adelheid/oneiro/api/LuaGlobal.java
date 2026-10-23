@@ -9,8 +9,8 @@ import java.lang.annotation.Target;
 /**
  * Declares a class whose static members are the fields of a Lua global table that the client, or another plugin,
  * provides: {@code @LuaGlobal("Player")} makes {@code Player.GetEntity()} the Lua {@code Player.GetEntity()}, and
- * {@code @LuaGlobal("ui.Text")} makes {@code new ui.Text(parent)} the Lua {@code ui.Text.new(parent)}. The class produces
- * no Lua of its own. With {@code ""}, the static members are globals themselves: {@code Globals.log(text)} is
+ * {@code @LuaGlobal("ui.Text")} makes {@code new ui.Text(parent)} the Lua {@code ui.Text.new(parent)}. The class
+ * produces no Lua of its own. With {@code ""}, the static members are globals themselves: {@code Globals.log(text)} is
  * {@code log(text)}.
  *
  * <p>Its static methods are called with a dot, or with a colon when they carry {@link LuaColon}; its constructors are

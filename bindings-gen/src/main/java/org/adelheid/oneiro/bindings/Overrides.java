@@ -32,10 +32,10 @@ final class Overrides {
 	}
 
 	/** The facts the file may state, so that a misspelt one fails loudly instead of being ignored. */
-	static final Set<String> FACTS = Set.of("singleton", "instance", "constructible", "not-constructible", "nullable",
-			"not-nullable", "read-only", "writable", "copied", "not-copied", "java-name", "rename", "values", "type",
-			"field", "function", "param", "superclass", "hook", "operator", "returns", "permission", "manifest-flag",
-			"dev-only", "skip", "element-table", "no-from-id");
+	private static final Set<String> FACTS = Set.of("singleton", "instance", "constructible", "not-constructible",
+			"nullable", "not-nullable", "read-only", "writable", "copied", "not-copied", "java-name", "rename",
+			"values", "type", "field", "function", "param", "superclass", "hook", "operator", "returns", "permission",
+			"manifest-flag", "dev-only", "skip", "element-table", "no-from-id");
 
 	private final List<Entry> entries;
 	private final Set<Entry> used = new HashSet<>();

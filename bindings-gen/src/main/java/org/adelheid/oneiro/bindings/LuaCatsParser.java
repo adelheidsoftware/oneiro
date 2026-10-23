@@ -29,7 +29,8 @@ final class LuaCatsParser {
 	private static final Pattern NAME_THEN_REST = Pattern.compile("^---@(field|param|alias|vararg)\\s+(\\S+)\\s*(.*)$");
 	private static final Pattern TABLE_DECLARATION =
 			Pattern.compile("^(local\\s+)?([A-Za-z_][\\w.]*)\\s*=\\s*\\{\\s*}\\s*$");
-	private static final Pattern TABLE_LITERAL_START = Pattern.compile("^(local\\s+)?([A-Za-z_][\\w.]*)\\s*=\\s*\\{\\s*$");
+	private static final Pattern TABLE_LITERAL_START = Pattern.compile(
+			"^(local\\s+)?([A-Za-z_][\\w.]*)\\s*=\\s*\\{\\s*$");
 	private static final Pattern FUNCTION =
 			Pattern.compile("^function\\s+(?:([A-Za-z_][\\w.]*)([.:]))?([A-Za-z_]\\w*)\\s*\\(([^)]*)\\)\\s*end\\s*$");
 	private static final Pattern ENUM_ENTRY = Pattern.compile(

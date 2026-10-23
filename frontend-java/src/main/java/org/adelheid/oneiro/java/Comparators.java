@@ -115,8 +115,8 @@ final class Comparators {
 			return comparisonBefore(comparison);
 		}
 		// Any other comparator is a function, called on the two, or opened where it is a small one
-		return binary(body.applied(body.expression(comparator), List.of(name(a), name(b))), BinaryOperator.LESS,
-				integer(0));
+		return binary(body.lambdas().applied(body.expression(comparator), List.of(name(a), name(b))),
+				BinaryOperator.LESS, integer(0));
 	}
 
 	/**
@@ -187,7 +187,9 @@ final class Comparators {
 		return null;
 	}
 
-	/** The key a {@code Comparator.comparing} function gives for the value named: the lambda's expression, or a call. */
+	/**
+	 * The key a {@code Comparator.comparing} function gives for the value named: the lambda's expression, or a call.
+	 */
 	private Expression key(ExpressionTree function, String value) {
 		if (BodyLowering.withoutParentheses(function) instanceof LambdaExpressionTree lambda) {
 			if (lambda.getParameters().size() != 1 || !(lambda.getBody() instanceof ExpressionTree key)) {
@@ -198,7 +200,7 @@ final class Comparators {
 			body.alias(lambda.getParameters().getFirst(), value);
 			return body.expression(key);
 		}
-		return body.applied(body.expression(function), List.of(name(value)));
+		return body.lambdas().applied(body.expression(function), List.of(name(value)));
 	}
 
 	private boolean isComparatorFactory(MethodInvocationTree call) {

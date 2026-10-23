@@ -81,7 +81,7 @@ final class CharConversions {
 				}
 				return super.scan(tree, null);
 			}
-		}.scan(unit.unit, null);
+		}.scan(unit.compilationUnit, null);
 		return found;
 	}
 
@@ -130,7 +130,8 @@ final class CharConversions {
 							? null
 							: Wants.NUMBER;
 			case ConstantCaseLabelTree _ -> wants(unit, selectorType(unit, parentPath));
-			case CaseTree caseTree when expression.equals(caseTree.getBody()) -> wants(unit, switchType(unit, parentPath));
+			case CaseTree caseTree when expression.equals(caseTree.getBody()) ->
+					wants(unit, switchType(unit, parentPath));
 			case YieldTree _ -> wants(unit, switchType(unit, parentPath));
 			default -> null;
 		};
@@ -152,7 +153,8 @@ final class CharConversions {
 	 */
 	private static @Nullable Wants operandWants(UnitLowering unit, BinaryTree binary, ExpressionTree operand,
 			TreePath parentPath) {
-		ExpressionTree other = operand.equals(binary.getLeftOperand()) ? binary.getRightOperand() : binary.getLeftOperand();
+		ExpressionTree other = operand.equals(binary.getLeftOperand())
+				? binary.getRightOperand() : binary.getLeftOperand();
 		TypeMirror otherType = typeOf(unit, new TreePath(parentPath, other));
 		return switch (binary.getKind()) {
 			case PLUS -> unit.types.isString(typeOf(unit, parentPath)) ? null : Wants.NUMBER;

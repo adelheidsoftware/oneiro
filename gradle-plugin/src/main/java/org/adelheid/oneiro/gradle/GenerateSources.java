@@ -73,7 +73,8 @@ public abstract class GenerateSources extends DefaultTask {
 					problems);
 			String urls = TypedSources.urls(rootPackage, getUrls().get());
 			if (!problems.isEmpty()) {
-				throw new GradleException("The plugin's resources have problems:\n  - " + String.join("\n  - ", problems));
+				throw new GradleException("The plugin's resources have problems:\n  - "
+						+ String.join("\n  - ", problems));
 			}
 			Path folder = output.resolve(rootPackage.replace('.', '/'));
 			if (resources != null) {
@@ -96,7 +97,8 @@ public abstract class GenerateSources extends DefaultTask {
 		}
 		for (File source : getJavaSources().getFiles()) {
 			String text = Files.readString(source.toPath(), StandardCharsets.UTF_8);
-			String found = text.contains("extends Plugin") && PLUGIN_CLASS.matcher(text).find() ? packageOf(text) : null;
+			String found = text.contains("extends Plugin") && PLUGIN_CLASS.matcher(text).find()
+					? packageOf(text) : null;
 			if (found != null) {
 				return found;
 			}

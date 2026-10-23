@@ -216,7 +216,8 @@ final class StreamLoops {
 		// ---- The source
 
 		private Source source(ExpressionTree source) {
-			if (source instanceof MethodInvocationTree call && call.getMethodSelect() instanceof MemberSelectTree select) {
+			if (source instanceof MethodInvocationTree call
+					&& call.getMethodSelect() instanceof MemberSelectTree select) {
 				String method = select.getIdentifier().toString();
 				ExpressionTree owner = select.getExpression();
 				List<? extends ExpressionTree> arguments = call.getArguments();
@@ -241,7 +242,8 @@ final class StreamLoops {
 
 		private @Nullable Source staticSource(String method, List<? extends ExpressionTree> arguments) {
 			return switch (method) {
-				case "java.util.Arrays.stream" -> arguments.size() == 1 ? listed(body.expression(arguments.getFirst())) : null;
+				case "java.util.Arrays.stream" ->
+						arguments.size() == 1 ? listed(body.expression(arguments.getFirst())) : null;
 				case "Stream.of", "IntStream.of", "LongStream.of", "DoubleStream.of" -> arguments.size() == 1
 						&& unit().type(arguments.getFirst()).getKind() == TypeKind.ARRAY
 						? listed(body.expression(arguments.getFirst()))
@@ -334,14 +336,15 @@ final class StreamLoops {
 			List<? extends ExpressionTree> arguments = stage.getArguments();
 			switch (method(stage)) {
 				case "filter" -> steps.add(new Step.Guard(test(arguments.getFirst())));
-				case "map", "mapToInt", "mapToLong", "mapToDouble", "mapToObj" -> pending = mapped(arguments.getFirst());
+				case "map", "mapToInt", "mapToLong", "mapToDouble", "mapToObj" ->
+						pending = mapped(arguments.getFirst());
 				case "boxed", "asLongStream", "asDoubleStream" -> {
 					// The same numbers in Lua
 				}
 				case "sorted" -> {
 					if (!last || !collectsList(pipeline.terminal())) {
-						throw new Rejection(stage, "A stream's loop sees one element at a time, so it sorts only what it"
-								+ " collects; sort just before toList(), or sort the list afterwards.");
+						throw new Rejection(stage, "A stream's loop sees one element at a time, so it sorts only what"
+								+ " it collects; sort just before toList(), or sort the list afterwards.");
 					}
 					sorted = true;
 					sortedBy = arguments.isEmpty() ? null : arguments.getFirst();
@@ -411,7 +414,7 @@ final class StreamLoops {
 		private Expression applied(ExpressionTree function) {
 			Expression lowered = body.expression(function);
 			Expression argument = current();
-			Expression applied = body.applied(lowered, List.of(argument));
+			Expression applied = body.lambdas().applied(lowered, List.of(argument));
 			if (applied instanceof Expression.Call call && call.function() instanceof Expression.FunctionExpression) {
 				String local = body.invent("action", function);
 				functions.add(new Statement.Local(List.of(local), List.of(lowered)));
@@ -466,9 +469,9 @@ final class StreamLoops {
 
 		private Block forEach(ExpressionTree action) {
 			if (BodyLowering.withoutParentheses(action) instanceof LambdaExpressionTree lambda
-					&& !BodyLowering.returnsEarly(lambda)) {
+					&& !Lambdas.returnsEarly(lambda)) {
 				bindElement(lambda.getParameters().getFirst());
-				BodyLowering.InlinedLambda inlined = body.inline(action, List.of(element));
+				Lambdas.InlinedLambda inlined = body.lambdas().inline(action, List.of(element));
 				if (inlined != null) {
 					return inlined.body();
 				}
@@ -583,7 +586,8 @@ final class StreamLoops {
 
 		private boolean collectsList(MethodInvocationTree terminal) {
 			return method(terminal).equals("toList")
-					|| (method(terminal).equals("collect") && "toList".equals(collector(terminal.getArguments().getFirst())));
+					|| (method(terminal).equals("collect")
+					&& "toList".equals(collector(terminal.getArguments().getFirst())));
 		}
 
 		/**

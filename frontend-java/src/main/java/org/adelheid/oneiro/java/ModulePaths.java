@@ -41,11 +41,12 @@ final class ModulePaths {
 	 * {@code OpeningTable} to {@code opening_table}; an acronym stays one word, so {@code NPCTracker} is
 	 * {@code npc_tracker} and {@code XPDrop} is {@code xp_drop}.
 	 */
-	static String snakeCase(String className) {
+	private static String snakeCase(String className) {
 		String words = className
 				// A lower-case letter or digit followed by a capital starts a word: openingTable -> opening_Table
 				.replaceAll("([a-z0-9])([A-Z])", "$1_$2")
-				// The last capital of an acronym followed by a lower-case letter starts a word: NPCTracker -> NPC_Tracker
+				// The last capital of an acronym followed by a lower-case letter starts a word: NPCTracker ->
+				// NPC_Tracker
 				.replaceAll("([A-Z]+)([A-Z][a-z])", "$1_$2");
 		return words.toLowerCase(Locale.ROOT);
 	}

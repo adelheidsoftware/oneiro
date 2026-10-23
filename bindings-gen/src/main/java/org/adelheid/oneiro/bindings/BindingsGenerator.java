@@ -115,7 +115,8 @@ public final class BindingsGenerator {
 	private static void compile(List<Path> sources, Path classes) throws IOException {
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 		if (compiler == null) {
-			throw new IOException("The bindings are compiled with javac, but this Java runtime has none; run it on a JDK.");
+			throw new IOException("The bindings are compiled with javac, but this Java runtime has none; run it"
+					+ " on a JDK.");
 		}
 		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
 		String classpath = Stream.of(classes, location(LuaGlobal.class), location(NullMarked.class))

@@ -19,6 +19,8 @@ public @interface LuaEvent {
 	/** The event's name, the field of the client's {@code Event} table. */
 	String value();
 
-	/** What a callback returns: {@code void.class}, or {@code boolean.class} for an event such as {@code EntityDraw}. */
+	/**
+	 * What a callback returns: {@code void.class}, or {@code boolean.class} for an event such as {@code EntityDraw}.
+	 */
 	Class<?> returns() default void.class;
 }

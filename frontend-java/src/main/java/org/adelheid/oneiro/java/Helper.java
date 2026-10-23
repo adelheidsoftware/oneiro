@@ -264,7 +264,9 @@ enum Helper {
 
 	private final String luaName;
 	private final String comment;
-	/** For a helper written as Lua: its parameters, comma-separated, and its body, whose lines are printed as they are. */
+	/**
+	 * For a helper written as Lua: its parameters, comma-separated, and its body, whose lines are printed as they are.
+	 */
 	private final String parameters;
 	private final String body;
 
@@ -333,37 +335,43 @@ enum Helper {
 			case FILLED -> function(List.of("n", "value"),
 					local("array", new Expression.Table(List.of())),
 					new Statement.NumericFor("i", integer(1), Expression.name("n"), null,
-							Block.of(new Statement.Assignment(List.of(new Expression.Index(Expression.name("array"), Expression.name("i"))),
+							Block.of(new Statement.Assignment(
+									List.of(new Expression.Index(Expression.name("array"), Expression.name("i"))),
 									List.of(Expression.name("value"))))),
 					returns(Expression.name("array")));
 			case LIST_CONTAINS -> function(List.of("list", "value"),
-					new Statement.GenericFor(List.of("_", "item"), List.of(call(Expression.name("ipairs"), Expression.name("list"))),
-							Block.of(ifThen(binary(Expression.name("item"), BinaryOperator.EQUAL, Expression.name("value")),
+					new Statement.GenericFor(List.of("_", "item"),
+							List.of(call(Expression.name("ipairs"), Expression.name("list"))),
+							Block.of(ifThen(
+									binary(Expression.name("item"), BinaryOperator.EQUAL, Expression.name("value")),
 									returns(new Expression.BooleanLiteral(true))))),
 					returns(new Expression.BooleanLiteral(false)));
 			case LIST_INDEX_OF -> function(List.of("list", "value"),
-					new Statement.GenericFor(List.of("i", "item"), List.of(call(Expression.name("ipairs"), Expression.name("list"))),
-							Block.of(ifThen(binary(Expression.name("item"), BinaryOperator.EQUAL, Expression.name("value")),
+					new Statement.GenericFor(List.of("i", "item"),
+							List.of(call(Expression.name("ipairs"), Expression.name("list"))),
+							Block.of(ifThen(
+									binary(Expression.name("item"), BinaryOperator.EQUAL, Expression.name("value")),
 									returns(binary(Expression.name("i"), BinaryOperator.SUBTRACT, integer(1)))))),
 					returns(integer(-1)));
 			case STRING_INDEX_OF -> function(List.of("s", "text"),
 					local("start", methodCall(Expression.name("s"), "find", Expression.name("text"), integer(1),
 							new Expression.BooleanLiteral(true))),
-					ifThen(binary(Expression.name("start"), BinaryOperator.EQUAL, new Expression.Nil()), returns(integer(-1))),
+					ifThen(binary(Expression.name("start"), BinaryOperator.EQUAL, new Expression.Nil()),
+							returns(integer(-1))),
 					returns(binary(Expression.name("start"), BinaryOperator.SUBTRACT, integer(1))));
 			case ENDS_WITH -> function(List.of("s", "suffix"),
 					returns(binary(
 							binary(Expression.name("suffix"), BinaryOperator.EQUAL, string("")),
 							BinaryOperator.OR,
-							binary(methodCall(Expression.name("s"), "sub",
-											new Expression.Unary(UnaryOperator.NEGATE,
-													new Expression.Unary(UnaryOperator.LENGTH, Expression.name("suffix")))),
+							binary(methodCall(Expression.name("s"), "sub", new Expression.Unary(UnaryOperator.NEGATE,
+											new Expression.Unary(UnaryOperator.LENGTH, Expression.name("suffix")))),
 									BinaryOperator.EQUAL, Expression.name("suffix")))));
 			case TRIM -> function(List.of("s"),
 					returns(methodCall(Expression.name("s"), "match", string("^%s*(.-)%s*$"))));
 			case COUNT -> function(List.of("t"),
 					local("n", integer(0)),
-					new Statement.GenericFor(List.of("_"), List.of(call(Expression.name("pairs"), Expression.name("t"))),
+					new Statement.GenericFor(List.of("_"),
+							List.of(call(Expression.name("pairs"), Expression.name("t"))),
 							Block.of(assign("n", binary(Expression.name("n"), BinaryOperator.ADD, integer(1))))),
 					returns(Expression.name("n")));
 			default -> throw new IllegalStateException("a helper written as Lua has its body already: " + this);

@@ -12,7 +12,9 @@ import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Stream;
 
-/** Writes reproducible jars: entries in sorted order, each with the same fixed time, so equal input gives equal bytes. */
+/**
+ * Writes reproducible jars: entries in sorted order, each with the same fixed time, so equal input gives equal bytes.
+ */
 final class Jars {
 
 	/**

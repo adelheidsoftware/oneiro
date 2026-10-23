@@ -182,13 +182,14 @@ public final class OneiroPlugin implements Plugin<Project> {
 		plugin.getRibbonIcon().convention(false);
 		File windows = new File(WINDOWS_DEV_PLUGINS);
 		if (windows.isDirectory()) {
-			extension.getDevPlugins().convention(project.getLayout().getProjectDirectory().dir(windows.getAbsolutePath()));
+			extension.getDevPlugins().convention(project.getLayout().getProjectDirectory().dir(
+					windows.getAbsolutePath()));
 		}
 	}
 
 	/** {@code oneiroBindings}, with the stubs the build names: a local checkout, or a remote at a resolved commit. */
-	private static TaskProvider<GenerateBindings> bindings(Project project, OneiroExtension extension, Configuration tool,
-			Provider<JavaLauncher> launcher) {
+	private static TaskProvider<GenerateBindings> bindings(Project project, OneiroExtension extension,
+			Configuration tool, Provider<JavaLauncher> launcher) {
 		File cache = new File(project.getGradle().getGradleUserHomeDir(), "caches/oneiro/stubs");
 		boolean refresh = project.getGradle().getStartParameter().getTaskNames().stream()
 				.anyMatch(name -> name.endsWith("oneiroBindings"));
@@ -231,7 +232,8 @@ public final class OneiroPlugin implements Plugin<Project> {
 					task.getDev().set(dev);
 					task.getWarningsAsErrors().set(extension.getWarningsAsErrors());
 					task.getLuaOutput().set(lua.map(folder -> folder.getAsFile().getAbsolutePath()));
-					task.getSettingsFile().set(layout.getBuildDirectory().file("oneiro/compiler/" + name + ".properties"));
+					task.getSettingsFile().set(layout.getBuildDirectory().file("oneiro/compiler/" + name
+							+ ".properties"));
 				});
 		project.getTasks().named(compileTask, JavaCompile.class, compile -> {
 			// The Lua of every file depends on the others, so every build compiles them all

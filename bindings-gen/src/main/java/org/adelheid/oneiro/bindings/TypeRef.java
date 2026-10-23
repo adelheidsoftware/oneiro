@@ -123,15 +123,19 @@ sealed interface TypeRef {
 	/** The type written back in LuaCATS syntax, for messages and Javadoc. */
 	default String show() {
 		return switch (this) {
-			case Named named -> named.args().isEmpty()
-					? named.name()
-					: named.name() + "<" + named.args().stream().map(TypeRef::show).collect(Collectors.joining(", ")) + ">";
+			case Named named ->
+					named.args().isEmpty()
+							? named.name()
+							: named.name() + "<" + named.args().stream().map(TypeRef::show)
+							.collect(Collectors.joining(", ")) + ">";
 			case ArrayOf array -> array.element().show() + "[]";
 			case Optional optional -> optional.inner().show() + "?";
 			case Union union -> union.options().stream().map(TypeRef::show).collect(Collectors.joining("|"));
 			case Function function -> "fun("
 					+ function.params().stream()
-							.map(param -> param.name().isEmpty() ? param.type().show() : param.name() + ": " + param.type().show())
+							.map(param -> param.name().isEmpty()
+									? param.type().show()
+									: param.name() + ": " + param.type().show())
 							.collect(Collectors.joining(", "))
 					+ ")"
 					+ (function.returns().isEmpty()

@@ -48,11 +48,13 @@ class ManifestTest {
 
 	@Test
 	void reportsWhatWouldBeRefused() {
-		List<String> problems = manifest("1.2-beta", "nobody", List.of("httpAccess", "fileAccess"), Map.of()).problems();
+		List<String> problems = manifest("1.2-beta", "nobody", List.of("httpAccess", "fileAccess"), Map.of())
+				.problems();
 		assertEquals(4, problems.size(), problems.toString());
 		assertTrue(problems.get(0).startsWith("The version \"1.2-beta\" must be digits and dots"), problems.get(0));
 		assertTrue(problems.get(1).startsWith("The plugin needs a contact address"), problems.get(1));
-		assertTrue(problems.get(2).startsWith("The permission fileAccess is not one the client knows"), problems.get(2));
+		assertTrue(problems.get(2).startsWith("The permission fileAccess is not one the client knows"),
+				problems.get(2));
 		assertTrue(problems.get(3).startsWith("The httpAccess permission only reaches the manifest's base URLs"),
 				problems.get(3));
 	}

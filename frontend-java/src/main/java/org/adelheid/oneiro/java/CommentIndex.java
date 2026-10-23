@@ -72,7 +72,8 @@ final class CommentIndex {
 			} else if (c == '/' && startsWith(source, index, "/*")) {
 				int close = indexOf(source, "*/", index + 2);
 				int end = close < 0 ? length : close + 2;
-				Kind kind = startsWith(source, index, "/**") && !startsWith(source, index, "/**/") ? Kind.DOC : Kind.BLOCK;
+				Kind kind = startsWith(source, index, "/**") && !startsWith(source, index, "/**/")
+						? Kind.DOC : Kind.BLOCK;
 				found.add(new SourceComment(index, end, kind, source.subSequence(index, end).toString()));
 				index = end;
 			} else {
@@ -83,8 +84,8 @@ final class CommentIndex {
 	}
 
 	/**
-	 * Claims and returns the unclaimed comments inside {@code [from, to)}. Javadoc comments in the range are claimed but
-	 * not returned, because javac's DocTrees delivers them attached to their declaration.
+	 * Claims and returns the unclaimed comments inside {@code [from, to)}. Javadoc comments in the range are claimed
+	 * but not returned, because javac's DocTrees delivers them attached to their declaration.
 	 */
 	List<SourceComment> take(int from, int to) {
 		List<SourceComment> taken = new ArrayList<>();
@@ -109,7 +110,10 @@ final class CommentIndex {
 		return takeTrailing(codeEnd, "");
 	}
 
-	/** {@link #takeTrailing(int)}, with other characters allowed in between too, such as the comma after an enum constant. */
+	/**
+	 * {@link #takeTrailing(int)}, with other characters allowed in between too, such as the comma after an enum
+	 * constant.
+	 */
 	@Nullable SourceComment takeTrailing(int codeEnd, String skipped) {
 		for (int index = 0; index < comments.size(); index++) {
 			SourceComment comment = comments.get(index);

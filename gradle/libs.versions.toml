@@ -6,6 +6,7 @@ jspecify = "1.0.1"
 errorprone = "2.50.0"
 errorprone-plugin = "5.1.1"
 nullaway = "0.14.2"
+checkstyle = "14.3.0"
 # Lua 5.4.8, the version the RS3 client embeds, as native libraries for Windows, Linux and macOS
 luajava = "4.1.0"
 

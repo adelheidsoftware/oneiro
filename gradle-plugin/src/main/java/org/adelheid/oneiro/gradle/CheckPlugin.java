@@ -39,11 +39,11 @@ public abstract class CheckPlugin extends DefaultTask {
 			List<String> problems = PackageChecks.check(getPluginFolder().get().getAsFile().toPath());
 			Path report = getReport().get().getAsFile().toPath();
 			Files.createDirectories(report.getParent());
-			Files.writeString(report, problems.isEmpty() ? "The plugin may ship.\n" : String.join("\n", problems) + "\n",
-					StandardCharsets.UTF_8);
+			Files.writeString(report, problems.isEmpty()
+					? "The plugin may ship.\n" : String.join("\n", problems) + "\n", StandardCharsets.UTF_8);
 			if (!problems.isEmpty()) {
-				throw new GradleException("The plugin folder " + getPluginFolder().get().getAsFile() + " may not ship:\n  - "
-						+ String.join("\n  - ", problems));
+				throw new GradleException("The plugin folder " + getPluginFolder().get().getAsFile()
+						+ " may not ship:\n  - " + String.join("\n  - ", problems));
 			}
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);

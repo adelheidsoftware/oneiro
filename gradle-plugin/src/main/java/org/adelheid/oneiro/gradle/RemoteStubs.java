@@ -41,9 +41,9 @@ final class RemoteStubs {
 		static Repository parse(String url) {
 			Matcher matcher = GITHUB.matcher(url.strip());
 			if (!matcher.matches()) {
-				throw new IllegalArgumentException("Oneiro fetches stubs only from GitHub, https://github.com/<owner>/"
-						+ "<repository>, and " + url + " is not such an address; use local(file(...)) for a checkout from"
-						+ " anywhere else.");
+				throw new IllegalArgumentException("Oneiro fetches stubs only from GitHub,"
+						+ " https://github.com/<owner>/<repository>, and " + url
+						+ " is not such an address; use local(file(...)) for a checkout from anywhere else.");
 			}
 			return new Repository(matcher.group(1), matcher.group(2));
 		}

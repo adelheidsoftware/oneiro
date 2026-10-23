@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class LuaPrinter {
 
-	static final int WIDTH = 120;
+	private static final int WIDTH = 120;
 
 	// The source position of the statement being printed, re-marked on its closing lines (end, else, until)
 	private @Nullable SourcePosition enclosing;
@@ -99,7 +99,8 @@ public final class LuaPrinter {
 			case Statement.Assignment assignment -> assignment(list(assignment.targets()), assignment.values());
 			case Statement.CallStatement call -> expression(call.call());
 			case Statement.If conditional -> ifStatement(conditional);
-			case Statement.While loop -> concat(header("while", loop.condition(), "do"), body(loop.body()), closing("end"));
+			case Statement.While loop ->
+					concat(header("while", loop.condition(), "do"), body(loop.body()), closing("end"));
 			case Statement.Do block -> concat(text("do"), body(block.body()), closing("end"));
 			case Statement.Repeat loop ->
 					concat(text("repeat"), body(loop.body()), closing("until "), expression(loop.condition()));
@@ -205,7 +206,9 @@ public final class LuaPrinter {
 		return new Doc.Indent(block(block, true));
 	}
 
-	/** A line break and the keyword that closes or continues the statement: {@code end}, {@code else}, {@code until}. */
+	/**
+	 * A line break and the keyword that closes or continues the statement: {@code end}, {@code else}, {@code until}.
+	 */
 	private Doc closing(String keyword) {
 		return concat(lineOfStatement(), text(keyword));
 	}
@@ -243,7 +246,8 @@ public final class LuaPrinter {
 			case Expression.StringLiteral literal -> string(literal);
 			case Expression.Vararg _ -> text("...");
 			case Expression.Name name -> text(name.name());
-			case Expression.Index index -> concat(prefix(index.target()), text("["), expression(index.key()), text("]"));
+			case Expression.Index index ->
+					concat(prefix(index.target()), text("["), expression(index.key()), text("]"));
 			case Expression.Field field -> concat(prefix(field.target()), text("." + field.name()));
 			case Expression.Call call -> concat(prefix(call.function()), arguments(call.arguments()));
 			case Expression.MethodCall call ->
@@ -252,7 +256,8 @@ public final class LuaPrinter {
 			case Expression.Binary binary -> group(chain(binary, true));
 			case Expression.Unary unary -> unary(unary);
 			case Expression.Table table -> table(table);
-			case Expression.Parenthesized parenthesized -> concat(text("("), expression(parenthesized.inner()), text(")"));
+			case Expression.Parenthesized parenthesized ->
+					concat(text("("), expression(parenthesized.inner()), text(")"));
 		};
 	}
 

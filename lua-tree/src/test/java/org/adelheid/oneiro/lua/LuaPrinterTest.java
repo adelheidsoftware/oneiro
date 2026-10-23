@@ -79,10 +79,10 @@ class LuaPrinterTest {
 						returns(bool(true)))));
 		Chunk chunk = new Chunk(
 				header(
-						"A row is the five track slots of the Discovery window as the reader sees them: an array of five"
-								+ " sprite IDs, -1",
-						"where a slot is empty. This is the one place that says when a row is complete, which is when a"
-								+ " reading can refer",
+						"A row is the five track slots of the Discovery window as the reader sees them: an array"
+								+ " of five sprite IDs, -1",
+						"where a slot is empty. This is the one place that says when a row is complete, which is"
+								+ " when a reading can refer",
 						"to it, a puzzle identity can be built from it, and every module on it has a target slot."),
 				block(
 						entry(local("Row", table())),
@@ -162,7 +162,8 @@ class LuaPrinterTest {
 						+ " it."),
 				block(
 						entry(local("message", call("formatStr",
-								string("Blueprint {} at level {} with {} readings and {} more words here plus a lot more"),
+								string("Blueprint {} at level {} with {} readings and {} more words"
+										+ " here plus a lot more"),
 								name("name"), name("level"), name("count"), name("other"), name("more")))),
 						entry(local("call", call("someFunction", names("argumentNumberOne", "argumentNumberTwo",
 								"argumentNumberThree", "argumentNumberFour", "argumentNumberFive6")))),

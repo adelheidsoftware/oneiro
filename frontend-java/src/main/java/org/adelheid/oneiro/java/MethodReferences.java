@@ -65,7 +65,8 @@ final class MethodReferences {
 		// Herb::describe names the method of a class; planter::accept, a method of one object
 		boolean unbound = !isStatic && !constructor && isTypeName(qualifier);
 		if (types().isApi(owner)) {
-			return body.api().reference(reference, method, owner, isStatic || unbound ? null : boundReceiver(reference));
+			return body.api().reference(reference, method, owner, isStatic || unbound
+					? null : boundReceiver(reference));
 		}
 		if (types().isPluginType(owner)) {
 			return pluginReference(reference, method, owner, isStatic, constructor, unbound);
@@ -153,8 +154,8 @@ final class MethodReferences {
 						"java.lang.Math.floor", "java.lang.Math.ceil", "java.lang.Integer.max", "java.lang.Integer.min",
 						"java.lang.Long.max", "java.lang.Long.min", "java.lang.Double.max", "java.lang.Double.min" ->
 						field(name("math"), name);
-				case "java.lang.Integer.sum", "java.lang.Long.sum", "java.lang.Double.sum" -> function(List.of("a", "b"),
-						binary(name("a"), BinaryOperator.ADD, name("b")), false);
+				case "java.lang.Integer.sum", "java.lang.Long.sum", "java.lang.Double.sum" ->
+						function(List.of("a", "b"), binary(name("a"), BinaryOperator.ADD, name("b")), false);
 				case "java.lang.Integer.parseInt", "java.lang.Long.parseLong" -> function(List.of("text"),
 						call(name("tonumber"), name("text"), integer(10)), false);
 				case "java.lang.Double.parseDouble" -> name("tonumber");
@@ -197,9 +198,8 @@ final class MethodReferences {
 					if (method.getParameters().size() != 1) {
 						throw unsupported(reference);
 					}
-					yield statementFunction(List.of("value"), new Statement.Assignment(List.of(new Expression.Index(
-							collection, binary(new Expression.Unary(UnaryOperator.LENGTH, collection), BinaryOperator.ADD,
-									integer(1)))), List.of(value)));
+					Expression slot = new Expression.Index(collection, LibraryCalls.nextIndex(collection));
+					yield statementFunction(List.of("value"), new Statement.Assignment(List.of(slot), List.of(value)));
 				}
 				case "contains" -> {
 					unit().use(Helper.LIST_CONTAINS);
@@ -210,8 +210,10 @@ final class MethodReferences {
 		}
 		if (types().isSet(type)) {
 			return switch (name) {
-				case "add" -> statementFunction(List.of("value"), new Statement.Assignment(
-						List.of(new Expression.Index(collection, value)), List.of(new Expression.BooleanLiteral(true))));
+				case "add" ->
+						statementFunction(List.of("value"),
+								new Statement.Assignment(List.of(new Expression.Index(collection, value)),
+								List.of(new Expression.BooleanLiteral(true))));
 				case "contains" -> function(List.of("value"), binary(new Expression.Index(collection, value),
 						BinaryOperator.NOT_EQUAL, new Expression.Nil()), false);
 				default -> throw unsupported(reference);
@@ -232,8 +234,8 @@ final class MethodReferences {
 	private Expression boundReceiver(MemberReferenceTree reference) {
 		ExpressionTree qualifier = reference.getQualifierExpression();
 		if (!(qualifier instanceof IdentifierTree) && !(qualifier instanceof MemberSelectTree)) {
-			throw new Rejection(qualifier, "Java reads this value once, where the reference is, but Lua's function would"
-					+ " read it each time it runs; store it in a local first.");
+			throw new Rejection(qualifier, "Java reads this value once, where the reference is, but Lua's function"
+					+ " would read it each time it runs; store it in a local first.");
 		}
 		return body.expression(qualifier);
 	}

@@ -50,7 +50,7 @@ final class OneBasedLoops {
 				}
 				return super.visitForLoop(node, null);
 			}
-		}.scan(unit.unit, null);
+		}.scan(unit.compilationUnit, null);
 		while (true) {
 			List<Element> unfit = new ArrayList<>();
 			candidates.forEach((variable, loop) -> {
@@ -85,11 +85,13 @@ final class OneBasedLoops {
 		Tree parent = path.getParentPath().getLeaf();
 		return switch (parent) {
 			case ArrayAccessTree access -> access.getIndex().equals(use);
-			case MethodInvocationTree call -> !call.getArguments().isEmpty() && call.getArguments().getFirst().equals(use)
-					&& call.getMethodSelect() instanceof MemberSelectTree select
-					&& isIndexed(unit, select, call.getArguments().size());
+			case MethodInvocationTree call ->
+					!call.getArguments().isEmpty() && call.getArguments().getFirst().equals(use)
+							&& call.getMethodSelect() instanceof MemberSelectTree select
+							&& isIndexed(unit, select, call.getArguments().size());
 			case BinaryTree binary -> {
-				ExpressionTree other = binary.getLeftOperand().equals(use) ? binary.getRightOperand() : binary.getLeftOperand();
+				ExpressionTree other = binary.getLeftOperand().equals(use)
+						? binary.getRightOperand() : binary.getLeftOperand();
 				yield switch (binary.getKind()) {
 					case PLUS -> unit.types.isIntegral(unit.type(binary))
 							&& other instanceof LiteralTree one && Integer.valueOf(1).equals(one.getValue());

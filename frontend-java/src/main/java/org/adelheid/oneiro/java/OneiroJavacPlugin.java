@@ -117,7 +117,8 @@ public final class OneiroJavacPlugin implements Plugin {
 				}
 				return;
 			}
-			PluginFacts facts = new PluginFacts(settings.id(), settings.permissions(), settings.flags(), settings.dev());
+			PluginFacts facts = new PluginFacts(settings.id(), settings.permissions(), settings.flags(),
+					settings.dev());
 			CompileResult result = JavaFrontend.lower(task, units,
 					new JavaFrontend.Options(rootPackage, List.of(), facts));
 			boolean failed = false;

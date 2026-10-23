@@ -116,7 +116,8 @@ final class StringBuilding {
 	}
 
 	private boolean isConcatenation(ExpressionTree tree) {
-		return tree instanceof BinaryTree binary && binary.getKind() == Tree.Kind.PLUS && types().isString(type(binary));
+		return tree instanceof BinaryTree binary && binary.getKind() == Tree.Kind.PLUS
+				&& types().isString(type(binary));
 	}
 
 	/** The value appended by {@code s += value}, as the right operand of {@code ..}: a string. */
@@ -128,7 +129,7 @@ final class StringBuilding {
 	 * A value inside {@code formatStr}: strings, numbers, booleans and nil as they are; a {@code long} through
 	 * {@code tostring}, because the client would round it to a double; plugin objects by their {@code toString()}.
 	 */
-	Expression formatArgument(ExpressionTree value) {
+	private Expression formatArgument(ExpressionTree value) {
 		TypeMirror type = type(value);
 		if (types().isLong(type)) {
 			return call(name("tostring"), body.expression(value));
@@ -236,12 +237,13 @@ final class StringBuilding {
 	}
 
 	/**
-	 * Whether a class of the plugin's has a toString() of its own, or inherits one from a class of the plugin's; the one
-	 * javac gives a record does not count.
+	 * Whether a class of the plugin's has a toString() of its own, or inherits one from a class of the plugin's; the
+	 * one javac gives a record does not count.
 	 */
 	private boolean hasOwnToString(TypeElement plugin) {
 		return body.unit.elements.getAllMembers(plugin).stream()
-				.anyMatch(member -> member.getKind() == ElementKind.METHOD && member.getSimpleName().contentEquals("toString")
+				.anyMatch(member -> member.getKind() == ElementKind.METHOD
+						&& member.getSimpleName().contentEquals("toString")
 						&& types().isPluginType(JavaTypes.owner(member)) && body.unit.declaredInSource(member));
 	}
 
@@ -292,14 +294,16 @@ final class StringBuilding {
 				continue;
 			}
 			String explicit = specifier.group(1);
-			int index = explicit != null ? Integer.parseInt(explicit.substring(0, explicit.length() - 1)) - 1 : ordinary++;
+			int index = explicit != null
+					? Integer.parseInt(explicit.substring(0, explicit.length() - 1)) - 1 : ordinary++;
 			if (index >= values.size()) {
 				throw new Rejection(call, "This format has more specifiers than arguments, so Java would throw"
 						+ " MissingFormatArgumentException.");
 			}
 			Placeholder placeholder = placeholder(call, conversion, nullToEmpty(specifier.group(2)), specifier.group(3),
 					specifier.group(4), values.get(index), numbered);
-			template.append('{').append(numbered ? Integer.toString(index) : "").append(placeholder.options()).append('}');
+			template.append('{').append(numbered ? Integer.toString(index) : "").append(placeholder.options())
+					.append('}');
 			if (!numbered) {
 				formatArguments.add(placeholder.argument());
 			}
@@ -341,7 +345,8 @@ final class StringBuilding {
 					throw new Rejection(value, "%" + conversion + " needs a number, so Java would throw"
 							+ " IllegalFormatConversionException.");
 				}
-				yield new Placeholder(colon(numberOptions(flags, width, precision, conversion)), body.expression(value));
+				yield new Placeholder(colon(numberOptions(flags, width, precision, conversion)),
+						body.expression(value));
 			}
 			case "x", "X", "o" -> {
 				requireIntegral(value, type, conversion);
@@ -369,8 +374,8 @@ final class StringBuilding {
 			}
 			case "b", "B" -> {
 				if (!types().isBoolean(type)) {
-					throw new Rejection(value, "Java's %b of anything but a boolean prints whether it is null; pass that"
-							+ " test, such as value != null, instead.");
+					throw new Rejection(value, "Java's %b of anything but a boolean prints whether it is null; pass"
+							+ " that test, such as value != null, instead.");
 				}
 				if (precision != null || (numbered && conversion.equals("B"))) {
 					throw Rejection.notYet(call, "%" + conversion + " with a precision or a number");

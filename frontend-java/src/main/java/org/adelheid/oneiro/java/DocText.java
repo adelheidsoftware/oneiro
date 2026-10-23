@@ -10,7 +10,10 @@ import com.sun.source.doctree.TextTree;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The text of Javadoc comments as Lua comments carry it: descriptions, and the text of {@code @param} and {@code @return}. */
+/**
+ * The text of Javadoc comments as Lua comments carry it: descriptions, and the text of {@code @param} and {@code
+ * @return}.
+ */
 final class DocText {
 
 	private DocText() {

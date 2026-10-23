@@ -121,8 +121,8 @@ public abstract class GenerateBindings extends DefaultTask {
 
 	private void warnIfUntested(@Nullable String commit, String source) {
 		if (commit != null && !commit.equals(RemoteStubs.TESTED_COMMIT)) {
-			getLogger().warn("The stubs in {} are at commit {}, but this Oneiro was tested against {}; the overrides and"
-					+ " bindings may not match them. Pin the tested commit to be sure.", source, commit,
+			getLogger().warn("The stubs in {} are at commit {}, but this Oneiro was tested against {}; the overrides"
+					+ " and bindings may not match them. Pin the tested commit to be sure.", source, commit,
 					RemoteStubs.TESTED_COMMIT);
 		}
 	}

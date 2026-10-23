@@ -7,9 +7,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a class of the RS3 bindings whose static fields are the names of one of the client's constant tables,
- * {@code id}, {@code config} or {@code var}. Each field's Java name is {@link #PREFIX} followed by its Lua name, so that
- * every name is one Java can spell, those that start with a digit included: {@code id.Obj.RS3_COINS} is
+ * Marks a class of the RS3 bindings whose static fields are the names of one of the client's constant tables, {@code
+ * id}, {@code config} or {@code var}. Each field's Java name is {@link #PREFIX} followed by its Lua name, so that every
+ * name is one Java can spell, those that start with a digit included: {@code id.Obj.RS3_COINS} is
  * {@code id.Obj.COINS} in Lua, and {@code id.Seq.RS3_1ST4H_GUARD_GOBLIN_EAT} is
  * {@code id.Seq["1ST4H_GUARD_GOBLIN_EAT"]}.
  */

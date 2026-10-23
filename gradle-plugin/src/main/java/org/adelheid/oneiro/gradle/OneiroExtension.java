@@ -42,7 +42,9 @@ public abstract class OneiroExtension {
 		this.lua = objects.newInstance(Lua.class);
 	}
 
-	/** The plugin's root package, whose subpackages become folders under {@code src/}; by default the plugin class's. */
+	/**
+	 * The plugin's root package, whose subpackages become folders under {@code src/}; by default the plugin class's.
+	 */
 	public abstract Property<String> getRootPackage();
 
 	/** Whether a warning, such as a comment Oneiro cannot place, fails the build; false by default. */

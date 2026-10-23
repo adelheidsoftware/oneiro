@@ -21,7 +21,7 @@ import java.util.stream.Stream;
 public final class PackageChecks {
 
 	/** The largest image the client loads, in either dimension. */
-	static final int MAX_IMAGE_SIZE = 1024;
+	private static final int MAX_IMAGE_SIZE = 1024;
 
 	private static final Pattern REQUIRE = Pattern.compile("\\brequire\\s*\\(?\\s*\"([^\"]*)\"");
 	private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
@@ -110,7 +110,7 @@ public final class PackageChecks {
 	}
 
 	private static long unsigned(byte[] bytes, int offset) {
-		return ((bytes[offset] & 0xFFL) << 24) | ((bytes[offset + 1] & 0xFFL) << 16) | ((bytes[offset + 2] & 0xFFL) << 8)
-				| (bytes[offset + 3] & 0xFFL);
+		return ((bytes[offset] & 0xFFL) << 24) | ((bytes[offset + 1] & 0xFFL) << 16) | ((bytes[offset
+				+ 2] & 0xFFL) << 8) | (bytes[offset + 3] & 0xFFL);
 	}
 }

@@ -23,15 +23,16 @@ public final class TypedSources {
 
 	private static final Pattern JAVA_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 	private static final Set<String> JAVA_KEYWORDS = Set.of("abstract", "assert", "boolean", "break", "byte", "case",
-			"catch", "char", "class", "const", "continue", "default", "do", "double", "else", "enum", "extends", "final",
-			"finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long",
-			"native", "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp",
-			"super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void", "volatile",
-			"while", "true", "false", "null", "var", "record", "yield", "sealed", "permits", "_");
+			"catch", "char", "class", "const", "continue", "default", "do", "double", "else", "enum", "extends",
+			"final", "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int", "interface",
+			"long", "native", "new", "package", "private", "protected", "public", "return", "short", "static",
+			"strictfp", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void",
+			"volatile", "while", "true", "false", "null", "var", "record", "yield", "sealed", "permits", "_");
 	private static final String LUA_ONLY = """
 
 				private static <T> T lua() {
-					throw new UnsupportedOperationException("%s exist only in Lua; Oneiro compiles what uses them.");
+					throw new UnsupportedOperationException(
+							"%s exist only in Lua; Oneiro compiles what uses them.");
 				}
 			""";
 
@@ -42,7 +43,8 @@ public final class TypedSources {
 	 * The {@code Resources} class for the files under a resources folder, or null when it has none. Files that are not
 	 * PNG images or Ogg sounds, and two files that would share a name, are reported in {@code problems}.
 	 */
-	public static @Nullable String resources(String rootPackage, Path folder, List<String> problems) throws IOException {
+	public static @Nullable String resources(String rootPackage, Path folder,
+			List<String> problems) throws IOException {
 		if (!Files.isDirectory(folder)) {
 			return null;
 		}
@@ -81,7 +83,8 @@ public final class TypedSources {
 				}
 				String lower = fileName.toLowerCase(Locale.ROOT);
 				if (!lower.endsWith(".png") && !lower.endsWith(".ogg")) {
-					problems.add(relative + " is not a PNG image or an Ogg sound, the only resources the client loads.");
+					problems.add(relative
+							+ " is not a PNG image or an Ogg sound, the only resources the client loads.");
 					continue;
 				}
 				String key = fileName.substring(0, fileName.lastIndexOf('.'));

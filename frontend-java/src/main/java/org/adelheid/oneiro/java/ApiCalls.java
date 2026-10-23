@@ -219,7 +219,8 @@ final class ApiCalls {
 
 	/** {@code table.name}, or {@code table["name"]} for a key that is not a Lua name, such as an enum's. */
 	private static Expression member(Expression table, String name) {
-		return LuaNames.isName(name) ? Expression.field(table, name) : new Expression.Index(table, Expression.string(name));
+		return LuaNames.isName(name)
+				? Expression.field(table, name) : new Expression.Index(table, Expression.string(name));
 	}
 
 	/**

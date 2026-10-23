@@ -46,7 +46,8 @@ public abstract class LatestStubsCommit implements ValueSource<String, LatestStu
 		String[] known = read(record);
 		if (parameters.getOffline().get()) {
 			if (known == null) {
-				throw new GradleException("The build is offline and the latest stubs commit of " + parameters.getRemote().get()
+				throw new GradleException("The build is offline and the latest stubs commit of "
+						+ parameters.getRemote().get()
 						+ " has never been fetched; build online once, or pin a commit.");
 			}
 			return known[1];

@@ -1,5 +1,5 @@
-# Text files are stored with LF line endings.
-* text=auto
+# Text files use LF line endings, in the repository and in every checkout.
+* text=auto eol=lf
 
 # The wrapper scripts must keep their native line endings on every platform.
 /gradlew text eol=lf

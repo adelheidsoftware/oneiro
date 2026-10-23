@@ -241,7 +241,8 @@ final class TypeParser {
 
 	private void expect(char symbol) {
 		if (!peekSymbol(symbol)) {
-			throw new ParseException("'" + symbol + "' expected at '" + text.substring(Math.min(pos, text.length())) + "'");
+			throw new ParseException("'" + symbol + "' expected at '" + text.substring(Math.min(pos, text.length()))
+					+ "'");
 		}
 		pos++;
 	}
