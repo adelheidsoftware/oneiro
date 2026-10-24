@@ -16,6 +16,7 @@ import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.TypeKind;
 import org.adelheid.oneiro.lowering.Helper;
 import org.adelheid.oneiro.lowering.IndexArithmetic;
+import org.adelheid.oneiro.lowering.LuaPatterns;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Expression;
 import org.adelheid.oneiro.lua.UnaryOperator;
@@ -110,8 +111,7 @@ final class StringMethods {
 						? Helper.SPLIT.invoke(text, Expression.string(separator))
 						: Helper.SPLIT.invoke(text, Expression.string(separator), body.expression(arguments.get(1)));
 			}
-			case "matches", "replaceAll", "replaceFirst" -> throw new Rejection(call,
-					"Lua has no regular expressions; use LuaString.match, find, gsub or gmatch with a Lua pattern.");
+			case "matches", "replaceAll", "replaceFirst" -> throw new Rejection(call, LuaPatterns.NO_REGEX);
 			case "charAt" -> characterAt(text, arguments.getFirst());
 			case "toCharArray" -> {
 				unit.use(Helper.CHARACTERS);

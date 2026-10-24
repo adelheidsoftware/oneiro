@@ -218,4 +218,8 @@ public final class Gaps {
 			default -> 0;
 		};
 	}
+
+	public static boolean digits(String text) {
+		return text.matches("\\d+");
+	}
 }

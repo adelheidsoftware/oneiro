@@ -134,6 +134,10 @@ plugin/Gaps.java:214: error: In Lua each case's value is assigned or returned at
 					yield 2;
 					^
 
+plugin/Gaps.java:223: error: Lua has no regular expressions; use LuaString.match, find, gsub or gmatch with a Lua pattern.
+		return text.matches("\\d+");
+		       ^
+
 plugin/Misuse.java:16: error: Only a @LuaModule declaration has native methods; they stand for Lua functions that exist already.
 	public static native int outside();
 	^

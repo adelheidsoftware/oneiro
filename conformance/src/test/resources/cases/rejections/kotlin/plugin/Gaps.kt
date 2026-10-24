@@ -138,4 +138,8 @@ object Gaps {
 
 	/** A class that extends a library class. */
 	class Names : ArrayList<String>()
+
+	fun digits(text: String): Boolean {
+		return text.matches(Regex("""\d+"""))
+	}
 }

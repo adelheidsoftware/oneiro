@@ -5,6 +5,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.lowering.ClientLimits
 import org.adelheid.oneiro.lowering.IndexArithmetic
+import org.adelheid.oneiro.lowering.LuaPatterns
 import org.adelheid.oneiro.lowering.TableFolding
 import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
@@ -951,6 +952,12 @@ internal class BodyLowering(
 			// A value of a function type, called: f(x) or f.invoke(x)
 			val function = receiver ?: call.calleeExpression ?: throw Rejection(call, EMPTY)
 			return Expression.Call(expression(function), arguments(resolved, call))
+		}
+		if (api.owner(symbol)?.classId?.asFqNameString() == LuaPatterns.CLASS) {
+			if (symbol.callableId?.callableName?.asString() == "gmatch") {
+				throw Rejection(where, LuaPatterns.GMATCH_OUTSIDE_LOOP)
+			}
+			return LuaPatterns.call(symbol.callableId!!.callableName.asString(), arguments(resolved, call))
 		}
 		if (isLibrary(symbol)) {
 			return library.call(where, symbol, receiver, libraryArguments(resolved, call))

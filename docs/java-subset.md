@@ -222,11 +222,25 @@ end
 | `s.repeat(n)` | `s:rep(n)` | |
 | `String.valueOf(x)`, `Integer.toString(n)`, `Double.toString(d)` | The value as text, by its type | See [Converting values to text](#converting-values-to-text): `tostring(n)` for integers, `formatStr("{}", d)` for doubles. |
 | `Integer.parseInt(s)` | `tonumber(s, 10)` | Invalid input gives `nil` instead of an exception. |
-| `matches`, `replaceAll` and other regular-expression methods | *Never*: "Lua has no regular expressions; use `LuaString.match`, `find`, `gsub` or `gmatch` with a Lua pattern." | `LuaString` documents Lua pattern syntax. |
+| `matches`, `replaceAll` and other regular-expression methods, `Pattern` and `Matcher` | *Never*: "Lua has no regular expressions; use LuaString.match, find, gsub or gmatch with a Lua pattern." | See [Lua patterns](#lua-patterns). |
 | `line.split(",")`, `line.split("\\|", 2)` | `split(line, ",")`, `split(line, "|", 2)` | A helper, with Java's rules: no limit drops trailing empty parts, a negative one keeps them, a positive one makes at most that many parts, and text without the separator is one part. Only a separator that stands for itself; a real pattern is *Never*: "Lua has no regular expressions, so split takes only a separator that stands for itself, such as a comma or an escaped bar; for a pattern, use LuaString.gmatch." |
 | `s.charAt(i)` | `s:sub(i + 1, i + 1)` | `s:sub(i, i)` in a loop that counts from 1. The index appears twice, so one whose Lua calls a function is rejected (`s.length() - 1` is `#s`, no call): "Lua would evaluate this index twice; store it in a local first." |
 | `s.toCharArray()`, `new String(chars)`, `String.valueOf(chars)` | `characters(s)`, `table.concat(chars)` | A helper makes the list of one-character strings. |
 | `s.chars()`, `s.codePointAt(i)` | *Never*: "A Lua string has no stream of its characters; loop over text.toCharArray(), which walks the text itself." and "A Lua string holds bytes, not code points; (int) text.charAt(i) is the byte's number, which is the code point for ASCII text." | |
+
+### Lua patterns
+
+Lua has no regular expressions. It has patterns of its own, which `org.adelheid.oneiro.api.LuaString` offers: each
+of its functions is Lua's string function of the same name, and its Javadoc describes the pattern syntax, in which
+`%d` is a digit and `%.` a literal point.
+
+| Java | Lua | Notes |
+| --- | --- | --- |
+| `LuaString.match(line, "^You catch an? (.+)%.$")` | `line:match("^You catch an? (.+)%.$")` | The first capture, or the whole match when the pattern has none; null when nothing matches. |
+| `LuaString.captures(line, "^Drop: (%d+) x (.+)$")` | `{ line:match("^Drop: (%d+) x (.+)$") }` | Every capture of the first match, in a list; empty when nothing matches. |
+| `LuaString.find(line, "%d")` | `(line:find("%d") or 0) - 1` | Where the first match starts, counted from 0; -1 when nothing matches. |
+| `LuaString.gsub(line, "%d+", "#")` | `(line:gsub("%d+", "#"))` | `%1` to `%9` in the replacement stand for the captures. The parentheses keep only the text, not the count Lua's `gsub` also gives. |
+| `for (String word : LuaString.gmatch(line, "%a+"))` | `for word in line:gmatch("%a+") do` | Each match's first capture, or the whole match. Lua gives the matches through an iterator, so anywhere but a for loop it is *Never*: "LuaString.gmatch gives its matches one at a time to a for loop; loop over it, or read the first match's captures with LuaString.captures." |
 
 ### Building strings
 

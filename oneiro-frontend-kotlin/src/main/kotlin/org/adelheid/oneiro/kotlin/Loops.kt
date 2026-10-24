@@ -3,12 +3,18 @@ package org.adelheid.oneiro.kotlin
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.lowering.IndexArithmetic
+import org.adelheid.oneiro.lowering.LuaPatterns
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.UnaryOperator
+import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
+import org.jetbrains.kotlin.analysis.api.resolution.symbol
+import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtContinueExpression
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
+import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
+import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtExpressionWithLabel
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtFunction
@@ -89,6 +95,10 @@ internal class Loops(private val body: BodyLowering) {
 			val characters = Expression.methodCall(body.expression(collection), "gmatch", Expression.string("."))
 			return Statement.GenericFor(listOf(single(loop, variables)), listOf(characters), loopBody(loop))
 		}
+		gmatch(collection)?.let { (text, pattern) ->
+			val matches = LuaPatterns.matches(body.expression(text), body.expression(pattern))
+			return Statement.GenericFor(listOf(single(loop, variables)), listOf(matches), loopBody(loop))
+		}
 		val view = body.library.mapView(collection)
 		val kind = if (view != null) null else body.library.kind(with(unit.session) { collection.expressionType })
 		val names = when {
@@ -103,6 +113,17 @@ internal class Loops(private val body: BodyLowering) {
 		val walk = if (kind == LibraryCalls.Kind.SEQUENCE) "ipairs" else "pairs"
 		val iterated = body.expression(view?.map ?: collection)
 		return Statement.GenericFor(names, listOf(Expression.call(Expression.name(walk), iterated)), loopBody(loop))
+	}
+
+	/** The text and pattern of `LuaString.gmatch(text, pattern)`, whose iterator a loop walks; null for others. */
+	private fun gmatch(collection: KtExpression): Pair<KtExpression, KtExpression>? = with(unit.session) {
+		val call = (collection as? KtDotQualifiedExpression)?.selectorExpression as? KtCallExpression ?: return null
+		val id = call.resolveToCall()?.successfulFunctionCallOrNull()?.symbol?.callableId ?: return null
+		if (id.classId?.asFqNameString() != LuaPatterns.CLASS || id.callableName.asString() != "gmatch") {
+			return null
+		}
+		val (text, pattern) = call.valueArguments.mapNotNull { it.getArgumentExpression() }
+		text to pattern
 	}
 
 	/** `while (condition) { ... }`. */

@@ -31,6 +31,7 @@ import org.adelheid.oneiro.lowering.ClientLimits;
 import org.adelheid.oneiro.lowering.Helper;
 import org.adelheid.oneiro.lowering.IndexArithmetic;
 import org.adelheid.oneiro.lowering.Inlining;
+import org.adelheid.oneiro.lowering.LuaPatterns;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Expression;
@@ -572,6 +573,9 @@ final class LibraryCalls {
 		boolean isStatic = method.getModifiers().contains(Modifier.STATIC);
 		String owner = JavaTypes.owner(method).getQualifiedName().toString();
 		checkClientHasIt(call, JavaTypes.owner(method), name);
+		if (owner.startsWith("java.util.regex.")) {
+			throw new Rejection(call, LuaPatterns.NO_REGEX);
+		}
 		if (types().isStream(unit().type(call)) && !name.equals("chars") && !name.equals("codePoints")) {
 			throw new Rejection(call, STREAM_IN_STATEMENT);
 		}
@@ -660,6 +664,12 @@ final class LibraryCalls {
 						default -> notYet(call, simpleName(unit().type(call)) + "." + name);
 					};
 			case "java.lang.String" -> stringMethods.stringStatic(call, name, arguments);
+			case LuaPatterns.CLASS -> {
+				if (name.equals("gmatch")) {
+					throw new Rejection(call, LuaPatterns.GMATCH_OUTSIDE_LOOP);
+				}
+				yield LuaPatterns.call(name, arguments.stream().map(body::expression).toList());
+			}
 			case "java.lang.Integer", "java.lang.Long", "java.lang.Short", "java.lang.Byte", "java.lang.Double",
 					"java.lang.Float", "java.lang.Boolean" -> numberMethods.boxedStatic(call, name, owner, arguments);
 			case "java.util.List" -> name.equals("of") ? positional(arguments) : notYet(call, "List." + name);

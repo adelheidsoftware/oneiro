@@ -18,7 +18,7 @@ plugin/Gaps.kt:40: error: Lua has no runtime type information, so a value has no
 		return value::class.simpleName
 		       ^
 
-plugin/Gaps.kt:44: error: Lua has no regular expressions, so split takes only a string separator that stands for itself, such as a comma.
+plugin/Gaps.kt:44: error: Lua has no regular expressions, so split takes only a string separator that stands for itself, such as a comma; for a pattern, use LuaString.gmatch.
 		return text.split(Regex("""\s+""")).size
 		                  ^
 
@@ -93,6 +93,10 @@ plugin/Gaps.kt:136: error: A value of Step is a Lua function, which carries no m
 plugin/Gaps.kt:140: error: Lua has none of ArrayList's code to inherit; keep one in a property instead of extending it.
 	class Names : ArrayList<String>()
 	^
+
+plugin/Gaps.kt:143: error: Lua has no regular expressions; use LuaString.match, find, gsub or gmatch with a Lua pattern.
+		return text.matches(Regex("""\d+"""))
+		       ^
 
 plugin/Misuse.kt:13: error: Only a @LuaModule declaration has external functions; they stand for Lua functions that exist already.
 	external fun outside(): Int

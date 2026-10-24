@@ -24,6 +24,10 @@ All notable changes to Oneiro are listed here. The format follows
   and sets that keep the order Kotlin promises. Its jar bundles the Kotlin Analysis API, so a plugin's build needs
   only Maven Central.
 
+- `LuaString`, Lua's string patterns where Java and Kotlin have regular expressions: `match`, `captures`, `find`,
+  `gsub` and `gmatch`, each Lua's string function of its name, with the pattern syntax in its Javadoc. The errors for
+  regular expressions named it before it existed.
+
 ### Changed
 
 - Threads, executors, futures and timers, and reading the current time, fail with an error that says what to write

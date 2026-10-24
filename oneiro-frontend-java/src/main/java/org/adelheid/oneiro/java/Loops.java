@@ -29,10 +29,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import org.adelheid.oneiro.lowering.IndexArithmetic;
+import org.adelheid.oneiro.lowering.LuaPatterns;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Comment;
 import org.adelheid.oneiro.lua.Expression;
@@ -291,6 +293,17 @@ final class Loops {
 					Expression.string("."));
 			return new Statement.GenericFor(List.of(item), List.of(characters),
 					loopBody(loop.getStatement(), List.of()));
+		}
+		// for (String word : LuaString.gmatch(text, pattern)) walks Lua's iterator of the matches
+		if (BodyLowering.withoutParentheses(iterable) instanceof MethodInvocationTree gmatch
+				&& unit.element(gmatch) instanceof ExecutableElement method
+				&& JavaTypes.owner(method).getQualifiedName().contentEquals(LuaPatterns.CLASS)
+				&& method.getSimpleName().contentEquals("gmatch")) {
+			String item = body.declare(loop.getVariable());
+			List<? extends ExpressionTree> arguments = gmatch.getArguments();
+			Expression matches = LuaPatterns.matches(body.expression(arguments.get(0)),
+					body.expression(arguments.get(1)));
+			return new Statement.GenericFor(List.of(item), List.of(matches), loopBody(loop.getStatement(), List.of()));
 		}
 		if (type.getKind() == TypeKind.ARRAY || types.isList(type) || types.isDeque(type)) {
 			String item = body.declare(loop.getVariable());

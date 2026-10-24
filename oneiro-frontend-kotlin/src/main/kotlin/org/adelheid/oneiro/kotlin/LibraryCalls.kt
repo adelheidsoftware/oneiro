@@ -5,6 +5,7 @@ import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.lowering.Helper
 import org.adelheid.oneiro.lowering.IndexArithmetic
 import org.adelheid.oneiro.lowering.Inlining
+import org.adelheid.oneiro.lowering.LuaPatterns
 import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
@@ -94,6 +95,11 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		Expression {
 		val name = function.callableId?.callableName?.asString().orEmpty()
 		val receiverType = receiver?.let(::type)
+		// split gives its own reason, after the separator it takes
+		if (name != "split" && (isRegex(function.callableId?.classId?.asFqNameString()) || name == "toRegex" ||
+				arguments.any { isRegex(type(it)) })) {
+			throw Rejection(where, LuaPatterns.NO_REGEX)
+		}
 		if (receiver != null && receiverType != null && body.strings.isBuilder(receiverType)) {
 			return builder(where, name, receiver, arguments)
 		}
@@ -366,6 +372,9 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 */
 	fun construct(where: KtExpression, type: ClassId, arguments: LibraryArguments): Expression {
 		val name = type.asFqNameString()
+		if (isRegex(name)) {
+			throw Rejection(where, LuaPatterns.NO_REGEX)
+		}
 		if (name == "kotlin.Array") {
 			return grid(where, arguments)
 		}
@@ -814,6 +823,13 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	}
 
 	private fun type(expression: KtExpression): KaType? = with(unit.session) { expression.expressionType }
+
+	/** Whether a type is a regular expression's, Kotlin's `Regex` or Java's `Pattern` and `Matcher`. */
+	private fun isRegex(type: KaType?): Boolean =
+		isRegex(with(unit.session) { type?.expandedSymbol?.classId?.asFqNameString() })
+
+	private fun isRegex(className: String?): Boolean =
+		className == "kotlin.text.Regex" || className?.startsWith("java.util.regex.") == true
 
 	private fun display(member: KaCallableSymbol): String {
 		val id = member.callableId ?: return "this"

@@ -235,6 +235,9 @@ finds a minimum compares with, as in the Java front end.
 
 ## Strings
 
+Lua has no regular expressions. It has patterns of its own, which `org.adelheid.oneiro.api.LuaString` offers, as for
+Java ([java-subset.md](java-subset.md#lua-patterns)): each of its functions is Lua's string function of the same name.
+
 | Kotlin | Lua | Notes |
 | --- | --- | --- |
 | `text.length`, `text.isEmpty()` | `#text`, `text == ""` | Lua counts bytes, which is the length for ASCII text. |
@@ -244,4 +247,10 @@ finds a minimum compares with, as in the Java front end.
 | `text.uppercase()`, `text.lowercase()`, `text.trim()`, `text.repeat(3)`, `text.reversed()` | `text:upper()`, `text:lower()`, a helper `trim(text)`, `text:rep(3)`, `text:reverse()` | |
 | `a.equals(b, ignoreCase = true)` | `a:lower() == b:lower()` | |
 | `text[i]`, `text.first()`, `text.last()` | `text:sub(i + 1, i + 1)`, `text:sub(1, 1)`, `text:sub(-1)` | |
-| `line.split(",")` | A helper `split(line, ",", -1)` | The parts between the separators, empty ones among them, as Kotlin splits; the separator stands for itself. A `Regex` is *Never*: "Lua has no regular expressions, so split takes only a string separator that stands for itself, such as a comma." |
+| `line.split(",")` | A helper `split(line, ",", -1)` | The parts between the separators, empty ones among them, as Kotlin splits; the separator stands for itself. A `Regex` is *Never*: "Lua has no regular expressions, so split takes only a string separator that stands for itself, such as a comma; for a pattern, use LuaString.gmatch." |
+| `Regex(...)`, `text.toRegex()`, `text.matches(regex)`, `java.util.regex` | *Never*: "Lua has no regular expressions; use LuaString.match, find, gsub or gmatch with a Lua pattern." | |
+| `LuaString.match(line, "^You catch an? (.+)%.$")` | `line:match("^You catch an? (.+)%.$")` | The first capture, or the whole match when the pattern has none; null when nothing matches. |
+| `LuaString.captures(line, "^Drop: (%d+) x (.+)$")` | `{ line:match("^Drop: (%d+) x (.+)$") }` | Every capture of the first match, in a list; empty when nothing matches. |
+| `LuaString.find(line, "%d")` | `(line:find("%d") or 0) - 1` | Where the first match starts, counted from 0; -1 when nothing matches. |
+| `LuaString.gsub(line, "%d+", "#")` | `(line:gsub("%d+", "#"))` | `%1` to `%9` in the replacement stand for the captures. The parentheses keep only the text, not the count Lua's `gsub` also gives. |
+| `for (word in LuaString.gmatch(line, "%a+"))` | `for word in line:gmatch("%a+") do` | Each match's first capture, or the whole match; anywhere but a for loop it is *Never*, as Lua gives the matches through an iterator. |

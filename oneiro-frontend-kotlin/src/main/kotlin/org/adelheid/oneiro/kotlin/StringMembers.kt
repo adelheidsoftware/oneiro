@@ -99,7 +99,7 @@ internal class StringMembers(private val body: BodyLowering) {
 		val regex = with(unit.session) { separator.expressionType?.expandedSymbol?.classId?.asFqNameString() }
 		if (regex == "kotlin.text.Regex") {
 			throw Rejection(separator, "Lua has no regular expressions, so split takes only a string separator that"
-				+ " stands for itself, such as a comma.")
+				+ " stands for itself, such as a comma; for a pattern, use LuaString.gmatch.")
 		}
 		if (literalText(separator) == null) {
 			throw Rejection.notYet(where, "split with a separator that is not a string literal")
