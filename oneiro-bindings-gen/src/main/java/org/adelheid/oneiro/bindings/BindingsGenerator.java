@@ -51,30 +51,48 @@ public final class BindingsGenerator {
 		}
 	}
 
+	/**
+	 * The language of the plugin the bindings are for, which decides how a member that takes a hook types the
+	 * callback: each language types a lambda by the hook in the way it can.
+	 */
+	public enum Language {
+
+		/** One {@code Subscribe(ui.Hook<C, ?> hook, C callback)}, from which javac types a lambda by its hook. */
+		JAVA,
+
+		/**
+		 * One {@code Subscribe} for each callback a hook takes, such as
+		 * {@code Subscribe(ui.Hook<ui.Hook.Pointer, ?> hook, ui.Hook.Pointer callback)}, because Kotlin converts a
+		 * lambda to an interface only when the parameter names it, so that a hook's callback can be a trailing lambda.
+		 */
+		KOTLIN
+	}
+
 	private BindingsGenerator() {
 	}
 
 	/** Generates the bindings into {@code output}, replacing what an earlier run left there. */
-	public static Result generate(Path stubsRoot, Path output) throws IOException {
-		return generate(stubsRoot, output, Overrides.bundled());
+	public static Result generate(Path stubsRoot, Path output, Language language) throws IOException {
+		return generate(stubsRoot, output, Overrides.bundled(), language);
 	}
 
 	/**
-	 * {@link #generate(Path, Path)} for the Gradle plugin's worker, returning the warnings. The Gradle plugin is
-	 * compiled for an older Java than Oneiro, so it calls this reflectively, with plain strings.
+	 * {@link #generate(Path, Path, Language)} for the Gradle plugin's worker, returning the warnings. The Gradle plugin
+	 * is compiled for an older Java than Oneiro, so it calls this reflectively, with plain strings: the language is
+	 * {@code JAVA} or {@code KOTLIN}.
 	 */
-	public static List<String> generateForBuild(String stubsRoot, String output) throws IOException {
-		return generate(Path.of(stubsRoot), Path.of(output)).warnings();
+	public static List<String> generateForBuild(String stubsRoot, String output, String language) throws IOException {
+		return generate(Path.of(stubsRoot), Path.of(output), Language.valueOf(language)).warnings();
 	}
 
-	static Result generate(Path stubsRoot, Path output, Overrides overrides) throws IOException {
+	static Result generate(Path stubsRoot, Path output, Overrides overrides, Language language) throws IOException {
 		Stubs stubs = Stubs.read(stubsRoot);
 		List<String> warnings = new ArrayList<>();
 		for (ApiModel.Unparsed unparsed : stubs.model().unparsed) {
 			warnings.add(unparsed.file() + ":" + unparsed.line() + ": not understood (" + unparsed.pattern() + "): "
 					+ unparsed.text());
 		}
-		JavaBindings bindings = new JavaBindings(stubs, overrides, warnings);
+		JavaBindings bindings = new JavaBindings(stubs, overrides, language, warnings);
 		Map<String, String> sources = bindings.sources();
 		for (Overrides.Entry unused : overrides.unused()) {
 			warnings.add("overrides.txt:" + unused.line() + ": " + unused.fact() + " " + unused.target()

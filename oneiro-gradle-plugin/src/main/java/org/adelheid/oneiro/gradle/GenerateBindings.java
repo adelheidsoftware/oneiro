@@ -51,6 +51,13 @@ public abstract class GenerateBindings extends DefaultTask {
 	@Input
 	public abstract Property<String> getCommit();
 
+	/**
+	 * The plugin's language, {@code JAVA} or {@code KOTLIN}, which decides how a member that takes a hook types its
+	 * callback: Kotlin's bindings take a callback of each kind, so that it can be a trailing lambda.
+	 */
+	@Input
+	public abstract Property<String> getLanguage();
+
 	/** Where fetched stubs are kept, one folder per commit, in Gradle's user home. */
 	@Internal
 	public abstract DirectoryProperty getStubsCache();
@@ -84,6 +91,7 @@ public abstract class GenerateBindings extends DefaultTask {
 		queue.submit(GenerateBindingsAction.class, parameters -> {
 			parameters.getStubs().set(stubs.toFile());
 			parameters.getOutput().set(output);
+			parameters.getLanguage().set(getLanguage());
 		});
 	}
 

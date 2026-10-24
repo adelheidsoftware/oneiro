@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.adelheid.oneiro.api.LuaConstants;
 import org.adelheid.oneiro.bindings.JavaBindings.ConstantNamespace;
@@ -120,9 +121,9 @@ final class ConstantTables {
 
 	/**
 	 * A table of hooks, {@code ui.Hook}, as a class of constants typed by the callback each hook takes, with those
-	 * callbacks as functional interfaces: {@code Subscribe(ui.Hook<C, ?> hook, C callback)} then checks a lambda's
-	 * parameters against its hook. The callbacks return nothing, as most Lua ones do; {@code hook.stoppable()} types
-	 * the same hook for a callback that returns whether the listeners after it run, which Lua's may. A hook without a
+	 * callbacks as functional interfaces, against which a member that takes a hook checks a lambda's parameters (see
+	 * {@link #hookTyped}). The callbacks return nothing, as most Lua ones do; {@code hook.stoppable()} types the same
+	 * hook for a callback that returns whether the listeners after it run, which Lua's may. A hook without a
 	 * {@code hook} line takes a callback of the component alone.
 	 */
 	void writeHooks(StringBuilder out, Node node, ApiModel.EnumDef enumDef, List<HookLine> lines, String indent) {
@@ -143,13 +144,11 @@ final class ConstantTables {
 		Map<String, List<String>> firedBy = new LinkedHashMap<>();
 		for (ApiModel.EnumValue value : enumDef.values()) {
 			String luaKey = value.key();
-			List<HookLine> forms = lines.stream().filter(line -> line.luaName().equals(luaKey)).toList();
-			if (forms.isEmpty()) {
+			if (lines.stream().noneMatch(line -> line.luaName().equals(luaKey))) {
 				warnings.add(enumDef.name() + "." + luaKey + " has no hook line; its callback takes the"
 						+ " component alone.");
-				forms = List.of(new HookLine(luaKey, luaKey, "Notify", List.of()));
 			}
-			for (HookLine form : forms) {
+			for (HookLine form : linesOf(lines, luaKey)) {
 				callbacks.putIfAbsent(form.callback(), form.params());
 				firedBy.computeIfAbsent(form.callback(), _ -> new ArrayList<>()).add(form.javaName());
 				out.append("\n");
@@ -205,12 +204,29 @@ final class ConstantTables {
 		out.append(indent).append("}\n");
 	}
 
+	/** The lines of one hook, or for a hook without a line, one whose callback takes the component alone. */
+	private static List<HookLine> linesOf(List<HookLine> lines, String luaKey) {
+		List<HookLine> forms = lines.stream().filter(line -> line.luaName().equals(luaKey)).toList();
+		return forms.isEmpty() ? List.of(new HookLine(luaKey, luaKey, "Notify", List.of())) : forms;
+	}
+
+	/** The callbacks a table's hooks take, in the order the table first names them. */
+	private static List<String> callbacks(ApiModel.EnumDef enumDef, List<HookLine> lines) {
+		return enumDef.values().stream()
+				.flatMap(value -> linesOf(lines, value.key()).stream())
+				.map(HookLine::callback)
+				.distinct()
+				.toList();
+	}
+
 	/**
-	 * The parameters of a form as the hook table types them: a hook parameter becomes {@code ui.Hook<C, ?>} and the
-	 * callback beside it {@code C}, so that the callback must be the one the hook takes; a hook without a callback, as
+	 * The forms of a member's parameters as the hook table types them, so that the callback must be the one the hook
+	 * takes. For Java, a hook parameter beside a callback becomes {@code ui.Hook<C, ?>} and the callback {@code C}; for
+	 * Kotlin, there is a form for each callback and its stopping kind, {@code ui.Hook<ui.Hook.Pointer, ?>} with a
+	 * {@code ui.Hook.Pointer} (see {@link BindingsGenerator.Language}). A hook without a callback, as
 	 * {@code Unsubscribe(hook)} takes, becomes {@code ui.Hook<?, ?>}. Other forms are returned as they are.
 	 */
-	List<JParam> hookTyped(List<JParam> params) {
+	List<List<JParam>> hookTyped(List<JParam> params) {
 		for (String table : bindings.hooks.keySet()) {
 			Node node = bindings.byLuaName.get(table);
 			if (node == null) {
@@ -230,18 +246,38 @@ final class ConstantTables {
 			if (hook < 0) {
 				continue;
 			}
-			List<JParam> typed = new ArrayList<>(params);
-			JParam hookParam = params.get(hook);
-			JType hookParamType = JType.reference(hookType + (callback < 0 ? "<?, ?>" : "<C, ?>"));
-			typed.set(hook, new JParam(hookParam.name(), hookParamType, hookParam.description()));
-			if (callback >= 0) {
-				JParam callbackParam = params.get(callback);
-				typed.set(callback,
-						new JParam(callbackParam.name(), JType.reference("C"), callbackParam.description()));
+			if (callback < 0) {
+				return List.of(typedHook(params, hook, "?", -1));
 			}
-			return typed;
+			if (bindings.language == BindingsGenerator.Language.JAVA) {
+				return List.of(typedHook(params, hook, "C", callback));
+			}
+			List<List<JParam>> forms = new ArrayList<>();
+			for (String name : callbacks(Objects.requireNonNull(node.enumDef), bindings.hooks.get(table))) {
+				forms.add(typedHook(params, hook, hookType + "." + name, callback));
+				forms.add(typedHook(params, hook, hookType + "." + name + ".Stopping", callback));
+			}
+			return forms;
 		}
-		return params;
+		return List.of(params);
+	}
+
+	/**
+	 * The parameters with the hook's typed as {@code ui.Hook<callback, ?>}, and the callback's, when there is one, as
+	 * that callback.
+	 */
+	private static List<JParam> typedHook(List<JParam> params, int hook, String callbackType, int callback) {
+		List<JParam> typed = new ArrayList<>(params);
+		JParam hookParam = params.get(hook);
+		String hookType = hookParam.type().erased();
+		typed.set(hook, new JParam(hookParam.name(), JType.reference(hookType + "<" + callbackType + ", ?>"),
+				hookParam.description()));
+		if (callback >= 0) {
+			JParam callbackParam = params.get(callback);
+			typed.set(callback,
+					new JParam(callbackParam.name(), JType.reference(callbackType), callbackParam.description()));
+		}
+		return typed;
 	}
 
 	/**

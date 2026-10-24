@@ -167,6 +167,7 @@ final class JavaBindings {
 	final ApiModel model;
 	private final Map<String, CsvConstants.Namespace> csvs;
 	final Overrides overrides;
+	final BindingsGenerator.Language language;
 	final List<String> warnings;
 	final Map<String, Integer> typeUses;
 	private final SourceFiles sourceFiles;
@@ -186,10 +187,11 @@ final class JavaBindings {
 	/** The hook lines, by the Lua name of the table of hooks they describe, {@code ui.Hook}, in order. */
 	final Map<String, List<HookLine>> hooks = new LinkedHashMap<>();
 
-	JavaBindings(Stubs stubs, Overrides overrides, List<String> warnings) {
+	JavaBindings(Stubs stubs, Overrides overrides, BindingsGenerator.Language language, List<String> warnings) {
 		this.model = stubs.model();
 		this.csvs = stubs.namespaces();
 		this.overrides = overrides;
+		this.language = language;
 		this.warnings = warnings;
 		this.corrections = new ModelCorrections(this);
 		this.sourceFiles = new SourceFiles(this);

@@ -180,8 +180,13 @@ final class MemberBindings {
 		boolean colon = function.style() == ApiModel.CallStyle.COLON;
 		boolean isStatic = shape == Shape.NAMESPACE || (shape == Shape.INSTANCE && !colon);
 		String javaName = javaMethodName(owner.name, function.name());
+		List<Form> forms = new ArrayList<>();
 		for (Form untyped : forms(owner.name, function)) {
-			Form form = new Form(bindings.constantTables().hookTyped(untyped.params()), untyped.returned());
+			for (List<JParam> params : bindings.constantTables().hookTyped(untyped.params())) {
+				forms.add(new Form(params, untyped.returned()));
+			}
+		}
+		for (Form form : forms) {
 			boolean generic = form.params().stream().anyMatch(param -> param.type().text().equals("C"));
 			String key = javaName + "(" + erased(form.params()) + ")";
 			if (OBJECT_METHODS.contains(key)) {

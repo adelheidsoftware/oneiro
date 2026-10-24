@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -24,11 +25,16 @@ class RealStubsTest {
 		Assumptions.assumeTrue(!location.isEmpty() && Files.isRegularFile(stubs.resolve("types.lua")),
 				"runescape-api-stubs is not checked out next to Oneiro.");
 
-		BindingsGenerator.Result result = BindingsGenerator.generate(stubs, Path.of("build", "real-bindings"));
-		// Lines of the overrides file the stubs have caught up with: they change nothing, and can be deleted
-		result.notes().forEach(System.out::println);
-		assertTrue(Files.size(result.classesJar()) > 0);
-		assertTrue(Files.size(result.sourcesJar()) > 0);
-		assertEquals(List.of(), result.warnings());
+		for (BindingsGenerator.Language language : BindingsGenerator.Language.values()) {
+			BindingsGenerator.Result result = BindingsGenerator.generate(stubs,
+					Path.of("build", "real-bindings-" + language.name().toLowerCase(Locale.ROOT)), language);
+			// Lines of the overrides file the stubs have caught up with: they change nothing, and can be deleted
+			if (language == BindingsGenerator.Language.JAVA) {
+				result.notes().forEach(System.out::println);
+			}
+			assertTrue(Files.size(result.classesJar()) > 0);
+			assertTrue(Files.size(result.sourcesJar()) > 0);
+			assertEquals(List.of(), result.warnings());
+		}
 	}
 }

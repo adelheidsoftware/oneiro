@@ -256,19 +256,19 @@ class ConformanceTest {
 	private static List<Path> classpath() {
 		List<Path> classpath = new ArrayList<>(
 				Stream.of(System.getProperty("java.class.path").split(File.pathSeparator)).map(Path::of).toList());
-		classpath.add(FixtureBindings.JAR);
+		classpath.add(FixtureBindings.JAVA);
 		return classpath;
 	}
 
 	/**
-	 * What the Kotlin twins compile against: the bindings generated from the fixture, and Oneiro's API, JSpecify and
-	 * the Kotlin standard library, which the build names. The test's own classpath holds the Analysis API, which plugin
-	 * code never sees.
+	 * What the Kotlin twins compile against: the bindings generated from the fixture for a plugin written in Kotlin,
+	 * and Oneiro's API, JSpecify and the Kotlin standard library, which the build names. The test's own classpath holds
+	 * the Analysis API, which plugin code never sees.
 	 */
 	private static List<Path> kotlinClasspath() {
 		List<Path> classpath = new ArrayList<>(Stream.of(System.getProperty("oneiro.kotlinClasspath")
 				.split(File.pathSeparator)).map(Path::of).toList());
-		classpath.add(FixtureBindings.JAR);
+		classpath.add(FixtureBindings.KOTLIN);
 		return classpath;
 	}
 
@@ -296,21 +296,25 @@ class ConformanceTest {
 
 	/** The jar of the bindings generated from the bindings generator's stubs fixture, once per run. */
 	static Path fixtureBindings() {
-		return FixtureBindings.JAR;
+		return FixtureBindings.JAVA;
 	}
 
-	/** The bindings that the cases compile against, generated once per run from the bindings generator's fixture. */
+	/**
+	 * The bindings that the cases compile against, generated once per run from the bindings generator's fixture: for
+	 * the Java inputs, and for the Kotlin sources, whose hooks take a callback of each kind.
+	 */
 	private static final class FixtureBindings {
 
-		static final Path JAR = generate();
+		static final Path JAVA = generate(BindingsGenerator.Language.JAVA, "conformance-bindings");
+		static final Path KOTLIN = generate(BindingsGenerator.Language.KOTLIN, "conformance-bindings-kotlin");
 
 		private FixtureBindings() {
 		}
 
-		private static Path generate() {
+		private static Path generate(BindingsGenerator.Language language, String folder) {
 			try {
 				return BindingsGenerator.generate(Path.of(System.getProperty("oneiro.stubsFixture")),
-						Path.of("build", "conformance-bindings")).classesJar();
+						Path.of("build", folder), language).classesJar();
 			} catch (IOException e) {
 				throw new UncheckedIOException(e);
 			}

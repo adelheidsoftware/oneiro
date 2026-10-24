@@ -72,7 +72,7 @@ overrides Oneiro applies to them may no longer match.
 
 | Task | What it does | Output |
 | --- | --- | --- |
-| `oneiroBindings` | Generates the RS3 bindings from the stubs, in a worker process on JDK 25, and compiles them | `build/oneiro/bindings/rs3-bindings.jar`, and a sources jar for the IDE |
+| `oneiroBindings` | Generates the RS3 bindings from the stubs, in a worker process on JDK 25, and compiles them; for a plugin written in Kotlin, a member that takes a hook has a form for each callback the hook takes, so that the callback can be a trailing lambda | `build/oneiro/bindings/rs3-bindings.jar`, and a sources jar for the IDE |
 | `oneiroSources` | Writes the typed `Resources` class from `src/main/resources/` and the `Urls` class from the manifest's URLs | `build/generated/sources/oneiro/java/main` |
 | `compileJava` | javac, with Oneiro as a javac plugin: once javac has analysed the sources without errors, Oneiro checks them and writes the Lua | `build/oneiro/lua/main/` |
 | `oneiroKotlin` | For a plugin written in Kotlin, after Kotlin's own `compileKotlin`: Oneiro's Kotlin front end checks the sources and writes the Lua, in a worker process on JDK 25 | `build/oneiro/lua/main/` |

@@ -21,8 +21,9 @@ All notable changes to Oneiro are listed here. The format follows
   kotlinc reports an error. [kotlin-subset.md](docs/kotlin-subset.md) lists the Kotlin it accepts: everything the
   conformance suite covers for Java, which every case now checks from Kotlin too, and Kotlin's own forms, such as a
   chain of collection functions as one loop, `require` and `check`, fun interfaces and object expressions, and maps
-  and sets that keep the order Kotlin promises. Its jar bundles the Kotlin Analysis API, so a plugin's build needs
-  only Maven Central.
+  and sets that keep the order Kotlin promises. The RS3 bindings generated for such a plugin have a `Subscribe` for
+  each callback a hook takes, so a hook's callback is a trailing lambda, `label.Subscribe(ui.Hook.ONCLICK) { ... }`.
+  Its jar bundles the Kotlin Analysis API, so a plugin's build needs only Maven Central.
 
 - `LuaString`, Lua's string patterns where Java and Kotlin have regular expressions: `match`, `captures`, `find`,
   `gsub` and `gmatch`, each Lua's string function of its name, with the pattern syntax in its Javadoc. The errors for

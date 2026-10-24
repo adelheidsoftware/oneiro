@@ -88,7 +88,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 		dependencies.add(JavaPlugin.ANNOTATION_PROCESSOR_CONFIGURATION_NAME,
 				"org.adelheid:oneiro-frontend-java:" + version);
 
-		TaskProvider<GenerateBindings> bindings = bindings(project, extension, tool, launcher);
+		TaskProvider<GenerateBindings> bindings = bindings(project, extension, tool, launcher, kotlin);
 		dependencies.add(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME,
 				project.files(bindings.flatMap(GenerateBindings::getClassesJar)));
 
@@ -221,7 +221,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 
 	/** {@code oneiroBindings}, with the stubs the build names: a local checkout, or a remote at a resolved commit. */
 	private static TaskProvider<GenerateBindings> bindings(Project project, OneiroExtension extension,
-			Configuration tool, Provider<JavaLauncher> launcher) {
+			Configuration tool, Provider<JavaLauncher> launcher, Provider<Boolean> kotlin) {
 		File cache = new File(project.getGradle().getGradleUserHomeDir(), "caches/oneiro/stubs");
 		boolean refresh = project.getGradle().getStartParameter().getTaskNames().stream()
 				.anyMatch(name -> name.endsWith("oneiroBindings"));
@@ -241,6 +241,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 			task.getRemote().set(stubs.getRemote());
 			task.getCommit().set(stubs.getRemote().flatMap(remote -> stubs.getCommit().orElse(latest)));
 			task.getStubsCache().set(cache);
+			task.getLanguage().set(kotlin.map(isKotlin -> isKotlin ? "KOTLIN" : "JAVA"));
 			task.getToolClasspath().from(tool);
 			task.getJavaLauncher().set(launcher);
 			task.getClassesJar().set(output.map(folder -> folder.file("rs3-bindings.jar")));

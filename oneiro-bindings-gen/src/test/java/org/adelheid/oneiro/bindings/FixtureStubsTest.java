@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.bindings;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -24,6 +25,8 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * Generates the bindings from the small stubs fixture in {@code src/test/stubs}, which mimics runescape-api-stubs, and
@@ -34,19 +37,27 @@ class FixtureStubsTest {
 
 	private static final Path STUBS = Path.of("src", "test", "stubs");
 	private static BindingsGenerator.Result result;
+	private static BindingsGenerator.Result kotlinResult;
 
 	@BeforeAll
 	static void generate() throws IOException {
-		result = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings"));
+		result = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings"),
+				BindingsGenerator.Language.JAVA);
+		kotlinResult = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings-kotlin"),
+				BindingsGenerator.Language.KOTLIN);
 	}
 
-	@Test
-	void everyShapeCompiles() throws IOException, URISyntaxException {
+	/** Both shapes compile, and Java code compiles against either, so the overloads Kotlin needs clash nowhere. */
+	@ParameterizedTest
+	@EnumSource(BindingsGenerator.Language.class)
+	void everyShapeCompiles(BindingsGenerator.Language language) throws IOException, URISyntaxException {
+		BindingsGenerator.Result bindings = language == BindingsGenerator.Language.JAVA ? result : kotlinResult;
 		Path usage = Path.of(Objects.requireNonNull(getClass().getResource("/usage/Usage.java")).toURI());
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
-		Path output = Files.createDirectories(Path.of("build", "fixture-usage"));
-		String classpath = Stream.concat(Stream.of(result.classesJar().toString()),
+		String shape = language.name().toLowerCase(Locale.ROOT);
+		Path output = Files.createDirectories(Path.of("build", "fixture-usage-" + shape));
+		String classpath = Stream.concat(Stream.of(bindings.classesJar().toString()),
 				Stream.of(System.getProperty("java.class.path").split(File.pathSeparator)))
 				.collect(Collectors.joining(File.pathSeparator));
 		try (StandardJavaFileManager files =
@@ -58,6 +69,27 @@ class FixtureStubsTest {
 					.map(diagnostic -> diagnostic.getLineNumber() + ": " + diagnostic.getMessage(Locale.ROOT))
 					.collect(Collectors.joining("\n")));
 		}
+	}
+
+	/**
+	 * A member that takes a hook types the callback by the hook: for Java through one generic method, and for Kotlin,
+	 * which converts a lambda only to an interface the parameter names, through one method for each callback.
+	 */
+	@Test
+	void hooksTypeTheirCallbacks() throws IOException {
+		String java = source("ui.java");
+		assertTrue(java.contains("public native <C> void Subscribe(ui.Hook<C, ?> hook, C callback);"));
+		String kotlin = source(kotlinResult, "ui.java");
+		assertFalse(kotlin.contains("<C> void Subscribe"));
+		assertTrue(kotlin.contains("public native void Subscribe(ui.Hook<ui.Hook.Pointer, ?> hook,"
+				+ " ui.Hook.Pointer callback);"));
+		assertTrue(kotlin.contains("public native void Subscribe(ui.Hook<ui.Hook.Pointer.Stopping, ?> hook,"
+				+ " ui.Hook.Pointer.Stopping callback);"));
+		assertTrue(kotlin.contains("public native void Subscribe(ui.Hook<ui.Hook.Notify, ?> hook, String id,"
+				+ " ui.Hook.Notify callback);"));
+		// A hook without a callback is any hook in both
+		assertTrue(java.contains("public native void Unsubscribe(ui.Hook<?, ?> hook);"));
+		assertTrue(kotlin.contains("public native void Unsubscribe(ui.Hook<?, ?> hook);"));
 	}
 
 	/** A table's names Java cannot use are left out with one warning for the table, not one for each name. */
@@ -75,7 +107,8 @@ class FixtureStubsTest {
 
 	@Test
 	void jarsAreReproducible() throws IOException {
-		BindingsGenerator.Result again = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings-again"));
+		BindingsGenerator.Result again = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings-again"),
+				BindingsGenerator.Language.JAVA);
 		assertEquals(-1, Files.mismatch(result.classesJar(), again.classesJar()));
 		assertEquals(-1, Files.mismatch(result.sourcesJar(), again.sourcesJar()));
 	}
@@ -103,7 +136,7 @@ class FixtureStubsTest {
 			overrides = Overrides.parse(new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
 		}
 		BindingsGenerator.Result run = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings-caught-up"),
-				overrides);
+				overrides, BindingsGenerator.Language.JAVA);
 		List<String> notes = run.notes().stream()
 				.map(note -> note.replaceFirst("^overrides\\.txt:\\d+: ", ""))
 				.toList();

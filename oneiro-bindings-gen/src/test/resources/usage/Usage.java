@@ -45,6 +45,10 @@ final class Usage {
 		ui.Text text = new ui.Text(parent);
 		text.content = "Hello";
 		text.SetPos(10, 20);
+		text.Subscribe(ui.Hook.ONCLICK, (_, x, y) -> log("clicked", x, y));
+		text.Subscribe(ui.Hook.ONCLICK.stoppable(), (_, x, _) -> x > 10);
+		text.Subscribe(ui.Hook.ONTIMER, "usage.timer", _ -> log("timer"));
+		text.Unsubscribe(ui.Hook.ONCLICK);
 		ui.Component found = ui.Interfaces.GetComponent(1477, 2);
 		int coins = id.Obj.RS3_COINS;
 		String name = id.Obj.FromID(coins);

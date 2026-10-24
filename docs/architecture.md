@@ -136,10 +136,12 @@ The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` r
    `CsvConstants` reads the name lists behind `id`, `config` and `var`.
 2. `Overrides` reads `overrides.txt`, which states what the stubs do not: which tables are singletons, which values
    can be `nil`, which fields are read-only or hand out copies, which members need a permission or draw moderation's
-   closer review, and the Java names for Lua names Java cannot use. The file's own header describes its format. `ModelCorrections` applies its corrections to the model.
+   closer review, and the Java names for Lua names Java cannot use. The file's own header describes its format.
+   `ModelCorrections` applies its corrections to the model.
 3. `JavaBindings` writes the sources, with `MemberBindings` for fields and methods, `TypeMapping` for types,
    `ConstantTables` for enums, hooks and constant namespaces, and `SourceFiles` for the files that do not come from a
-   table.
+   table. The plugin's language (`BindingsGenerator.Language`) decides how a member that takes a hook types the
+   callback: one generic method, from which javac types a lambda, or for Kotlin one method for each callback.
 4. The constant namespaces hold about half a million names; `config.Loc` alone has more than one class can hold.
    `ConstantChunks` writes them straight to class files with the JDK's ClassFile API, as a chain of chunk classes
    that each extend the one before, which is also far faster than compiling them from Java. `Jars` packs everything

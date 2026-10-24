@@ -83,19 +83,19 @@ object Watch {
 
 	/** A hook's callback gets the component, then the hook's own values, which Kotlin checks against the hook. */
 	fun clicks(label: ui.Text) {
-		label.Subscribe(ui.Hook.ONCLICK, ui.Hook.Pointer { _, x, y -> label.content = "Clicked at $x, $y" })
-		label.Subscribe(ui.Hook.ONTIMER, "watch.timer", ui.Hook.Notify { self -> label.hidden = false })
+		label.Subscribe(ui.Hook.ONCLICK) { _, x, y -> label.content = "Clicked at $x, $y" }
+		label.Subscribe(ui.Hook.ONTIMER, "watch.timer") { self -> label.hidden = false }
 	}
 
 	/** Unnamed parameters at the end are left out, as Lua drops the values a function does not name. */
 	fun clickAnywhere(label: ui.Text) {
-		label.Subscribe(ui.Hook.ONCLICK, ui.Hook.Pointer { _, x, _ -> label.content = "Clicked at $x" })
-		label.Subscribe(ui.Hook.ONTIMER, "watch.hide", ui.Hook.Notify { _ -> label.hidden = true })
+		label.Subscribe(ui.Hook.ONCLICK) { _, x, _ -> label.content = "Clicked at $x" }
+		label.Subscribe(ui.Hook.ONTIMER, "watch.hide") { _ -> label.hidden = true }
 	}
 
 	/** A callback that returns false stops the listeners after it, as a Lua one may. */
 	fun clicksOnRight(label: ui.Text) {
-		label.Subscribe(ui.Hook.ONCLICK.stoppable(), ui.Hook.Pointer.Stopping { _, x, y -> x > 10 })
+		label.Subscribe(ui.Hook.ONCLICK.stoppable()) { _, x, y -> x > 10 }
 	}
 
 	fun unclick(label: ui.Text) {
