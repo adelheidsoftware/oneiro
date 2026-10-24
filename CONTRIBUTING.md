@@ -55,7 +55,7 @@ A case is a folder under `conformance/src/test/resources/cases/`:
 | --- | --- |
 | `input/` | The Java sources, in the root package `plugin`. |
 | `expected/` | The Lua Oneiro must write, at the paths it has in the plugin: `main.lua`, `src/...`, `dev/main.lua`. |
-| `diagnostics.txt` | For a case that must not compile: the exact errors and warnings, in javac's format. |
+| `diagnostics.txt` | The exact errors and warnings the case must report, in javac's format; a case without one must report none. |
 | `check.lua` | Optional. Assertions run on Lua 5.4 against the generated modules, to show that the Lua behaves as the Java does. |
 | `lua/` | Optional. Hand-written Lua modules that the case's Java declares with `@LuaModule`. |
 | `case.properties` | Optional. The plugin's identifier (`id`), its `permissions` and manifest `flags`, and `dev=true` for a dev source set. |

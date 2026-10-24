@@ -11,6 +11,9 @@ All notable changes to Oneiro are listed here. The format follows
 - `explainError`: copy errors from the client's console into a file, run `./gradlew explainError --input=<file>`,
   and each error of the plugin is shown with the Java file, line and code of every place it names. The compiler
   writes the line maps it reads to `build/oneiro/line-maps/`.
+- Compliance warnings: a use that Jagex's moderators review closely (the chat, HTTP requests, the tracking ID,
+  changes to the right-click menu, finding other players) compiles with a warning that names what they look at.
+  `@SuppressWarnings("oneiro:<area>")` silences an area's warnings once the plugin meets them.
 
 ### Changed
 

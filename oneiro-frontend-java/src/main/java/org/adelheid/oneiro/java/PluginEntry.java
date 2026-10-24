@@ -106,7 +106,10 @@ final class PluginEntry {
 		return found;
 	}
 
-	/** An event that needs a permission or a manifest flag fails to compile unless the build declares it. */
+	/**
+	 * An event that needs a permission or a manifest flag fails to compile unless the build declares it; one that
+	 * moderation reviews closely is warned about.
+	 */
 	private void checkEventAllowed(TypeElement payload, JavaTypes.Event event, Tree where) {
 		String permission = types.inherited(payload, JavaTypes.LUA_PERMISSION);
 		if (permission != null && !unit.plugin.permissions().contains(permission)) {
@@ -120,6 +123,7 @@ final class PluginEntry {
 			throw new Rejection(where, "The " + event.name() + " event fires only when the manifest sets " + flag
 					+ "; set " + setting + " = true in the build's oneiro { plugin { } } block.");
 		}
+		unit.reviewWarnings().check(payload, "Subscribing to " + event.name(), where);
 	}
 
 	private boolean usesParameter(MethodTree method, Element parameter) {

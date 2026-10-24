@@ -47,6 +47,7 @@ final class JavaTypes {
 	static final String LUA_FROM_ID = API + "LuaFromId";
 	static final String LUA_PERMISSION = API + "LuaPermission";
 	static final String LUA_MANIFEST_FLAG = API + "LuaManifestFlag";
+	private static final String LUA_REVIEW = API + "LuaReview";
 
 	private final Types types;
 	private final Elements elements;
@@ -527,6 +528,14 @@ final class JavaTypes {
 			return own;
 		}
 		return annotationValue(owner, annotation);
+	}
+
+	/**
+	 * The area moderation reviews the member in, from its own {@code @LuaReview}: an event payload's is about
+	 * subscribing to its event, not about its fields, so a member does not take its class's. Null when it has none.
+	 */
+	@Nullable String reviewArea(Element member) {
+		return annotationValue(member, LUA_REVIEW);
 	}
 
 	/** Whether the element or the class that declares it carries the annotation. */

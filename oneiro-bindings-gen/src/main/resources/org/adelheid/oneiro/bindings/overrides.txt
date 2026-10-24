@@ -37,6 +37,8 @@
 #   returns <function> <Record> <name...>   the record and component names of a function's several return values
 #   permission <class|member> <p>  using it needs the manifest permission
 #   manifest-flag <event> <flag> subscribing to the event needs the manifest flag
+#   review <member|event> <area> moderation reviews calling the function, assigning the field or subscribing to
+#                                the event closely: the compiler warns there, naming what it looks at in the area
 #   dev-only <member>            allowed only in a plugin's dev source set
 #   skip <class|member>          not bound at all
 #   element-table <class> <Type> <name...>  the stubs describe one element of the table as the table itself
@@ -393,6 +395,24 @@ permission HTTPRequest httpAccess                  # docs: core/http.html
 permission Player.GetTrackingID trackingAccess     # docs: core/plugin.html, trackingAccess
 manifest-flag Event.SettingsLayerReady hasSettingsIcon   # docs: core/events.html
 manifest-flag Event.ContentLayerReady hasRibbonIcon      # docs: core/events.html
+
+# ---- Uses moderation reviews closely, by area
+# The guidelines put every plugin that requests a permission under review, and its Mod.io description must say what
+# each permission is for; they also review input and menu customisation, and obtaining information about other
+# players. The compiler holds what moderation looks at in each area.
+
+review Chat.AddMessage chat                        # docs: submission/guidelines.html, a permission; submission/example.html
+review Event.ChatMessage chat                      # docs: the same pages; other players' messages
+review HTTPRequest.new http                        # docs: the same pages, and the description's data protection section
+review Player.GetTrackingID tracking               # docs: submission/guidelines.html, a permission; submission/example.html
+review MiniMenu.Swap mini-menu                     # docs: submission/guidelines.html, input or menu customisation
+review MiniMenu.Add mini-menu                      # docs: the same page, which also prohibits entries that act on the server
+review MiniMenuEntry.overrideText mini-menu        # docs: the same page
+review PlayerList.All other-players                # docs: submission/guidelines.html, information about other players
+review PlayerList.ByUID other-players              # docs: the same page
+review PlayerList.ByName other-players             # docs: the same page
+review PlayerList.ByDistance other-players         # docs: the same page
+review PlayerList.Filter other-players             # docs: the same page
 
 # ---- Development only
 

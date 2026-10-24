@@ -64,8 +64,8 @@ import org.jspecify.annotations.Nullable;
  * <p>This class lowers the file's classes and their members, and keeps what the whole file shares: its diagnostics,
  * helpers, requires and locals. The rest has classes of its own, which reach that shared state through this one:
  * {@link Constructors}, {@link Overloading}, {@link MemberComments}, {@link InheritedMembers}, {@link PluginEntry} for
- * the plugin class, {@link SettingsModule}, {@link DeclarationChecks}, {@link NonNegativeMembers} and
- * {@link ModuleAssembly}. The code inside methods is lowered by {@link BodyLowering}.
+ * the plugin class, {@link SettingsModule}, {@link DeclarationChecks}, {@link NonNegativeMembers},
+ * {@link ReviewWarnings} and {@link ModuleAssembly}. The code inside methods is lowered by {@link BodyLowering}.
  */
 final class UnitLowering {
 
@@ -115,6 +115,7 @@ final class UnitLowering {
 	private final InheritedMembers inheritedMembers;
 	private final DeclarationChecks declarationChecks;
 	private final NonNegativeMembers nonNegativeMembers;
+	private final ReviewWarnings reviewWarnings;
 
 	/**
 	 * @param names the Lua names for Java locals, which avoid the helpers and globals a first lowering found
@@ -146,6 +147,7 @@ final class UnitLowering {
 		this.inheritedMembers = new InheritedMembers(this);
 		this.declarationChecks = new DeclarationChecks(this);
 		this.nonNegativeMembers = new NonNegativeMembers(this);
+		this.reviewWarnings = new ReviewWarnings(this);
 	}
 
 	/** The errors and warnings found while lowering, in source order. */
@@ -177,6 +179,10 @@ final class UnitLowering {
 
 	NonNegativeMembers nonNegativeMembers() {
 		return nonNegativeMembers;
+	}
+
+	ReviewWarnings reviewWarnings() {
+		return reviewWarnings;
 	}
 
 	/** The Lua globals the module reads: the first name of each API path, such as {@code ui} for {@code ui.Text}. */

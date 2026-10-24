@@ -74,8 +74,9 @@ file to the classes below.
   for each plugin class it uses, the helpers its translations need, the module table, and its members. The parts of
   a file each have a class: `Constructors`, `Overloading` (default chains of overloads), `MemberComments` (Javadoc to
   `---@param` and `---@return`), `InheritedMembers`, `PluginEntry` (the plugin class as `main.lua`), `SettingsModule`
-  (a `@ConfigGroup` interface over `PersistentDB`), `DeclarationChecks`, `NonNegativeMembers` and `ModuleAssembly`,
-  which puts the module's statements in the order Lua needs them.
+  (a `@ConfigGroup` interface over `PersistentDB`), `DeclarationChecks`, `NonNegativeMembers`, `ReviewWarnings`
+  (the warnings at uses moderation reviews closely) and `ModuleAssembly`, which puts the module's statements in the
+  order Lua needs them.
 - **`BodyLowering`** lowers the statements and expressions of one method. It keeps the scope that the rest share and
   hands each kind of code to a class of its own: `Loops` and `OneBasedLoops`, `Switches`, `Exceptions` (`try` as
   `pcall`), `Lambdas` and `MethodReferences`, `Operators`, `TypeTests`, `ObjectCreation` and `PluginCalls`.
@@ -97,8 +98,8 @@ The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` r
 1. `Stubs` reads a checkout. `LuaCatsParser` and `TypeParser` turn the LuaCATS files into an `ApiModel`, and
    `CsvConstants` reads the name lists behind `id`, `config` and `var`.
 2. `Overrides` reads `overrides.txt`, which states what the stubs do not: which tables are singletons, which values
-   can be `nil`, which fields are read-only or hand out copies, and the Java names for Lua names Java cannot use. The
-   file's own header describes its format. `ModelCorrections` applies its corrections to the model.
+   can be `nil`, which fields are read-only or hand out copies, which members need a permission or draw moderation's
+   closer review, and the Java names for Lua names Java cannot use. The file's own header describes its format. `ModelCorrections` applies its corrections to the model.
 3. `JavaBindings` writes the sources, with `MemberBindings` for fields and methods, `TypeMapping` for types,
    `ConstantTables` for enums, hooks and constant namespaces, and `SourceFiles` for the files that do not come from a
    table.

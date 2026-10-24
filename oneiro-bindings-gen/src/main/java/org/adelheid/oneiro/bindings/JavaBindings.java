@@ -619,6 +619,7 @@ final class JavaBindings {
 		if (flag != null) {
 			out.append(indent).append("@LuaManifestFlag(\"").append(flag).append("\")\n");
 		}
+		reviewAnnotation(out, "Event." + event.name(), indent);
 	}
 
 	private void writeClass(StringBuilder out, Node node, ApiModel.ClassDef classDef, String indent) {
@@ -790,14 +791,25 @@ final class JavaBindings {
 		}
 	}
 
-	/** The annotations the overrides give a member or class: the permission it needs, and whether it is dev-only. */
+	/**
+	 * The annotations the overrides give a member or class: the permission it needs, the area moderation reviews it in,
+	 * and whether it is dev-only.
+	 */
 	void memberAnnotations(StringBuilder out, String target, String indent) {
 		String permission = overrides.value("permission", target);
 		if (permission != null) {
 			out.append(indent).append("@LuaPermission(\"").append(permission).append("\")\n");
 		}
+		reviewAnnotation(out, target, indent);
 		if (overrides.has("dev-only", target)) {
 			out.append(indent).append("@LuaDevOnly\n");
+		}
+	}
+
+	private void reviewAnnotation(StringBuilder out, String target, String indent) {
+		String area = overrides.value("review", target);
+		if (area != null) {
+			out.append(indent).append("@LuaReview(\"").append(area).append("\")\n");
 		}
 	}
 

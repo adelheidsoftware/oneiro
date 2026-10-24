@@ -20,6 +20,17 @@ function NPCEntity:GetHeadbar() end
 ---@field coordGrid CoordGrid The player's tile.
 local PlayerEntity = {}
 
+---@class PlayerList
+PlayerList = {}
+
+---The local player.
+---@return PlayerEntity # The player.
+function PlayerList.Self() end
+
+---Every player in view.
+---@return PlayerEntity[] # The players.
+function PlayerList.All() end
+
 ---@class NPCList
 NPCList = {}
 

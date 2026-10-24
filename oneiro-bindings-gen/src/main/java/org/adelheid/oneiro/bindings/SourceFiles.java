@@ -24,7 +24,8 @@ final class SourceFiles {
 			"org.adelheid.oneiro.api.LuaManifestFlag", "org.adelheid.oneiro.api.LuaName",
 			"org.adelheid.oneiro.api.LuaOperator", "org.adelheid.oneiro.api.LuaSame",
 			"org.adelheid.oneiro.api.LuaPermission", "org.adelheid.oneiro.api.LuaReturnValues",
-			"org.adelheid.oneiro.api.LuaType", "org.jspecify.annotations.Nullable");
+			"org.adelheid.oneiro.api.LuaReview", "org.adelheid.oneiro.api.LuaType",
+			"org.jspecify.annotations.Nullable");
 	/** The JDK types the bindings use, which the generator names fully until {@link #file} imports them. */
 	private static final Pattern JDK_TYPE = Pattern.compile("\\bjava\\.util\\.(?:function\\.)?[A-Z]\\w*");
 

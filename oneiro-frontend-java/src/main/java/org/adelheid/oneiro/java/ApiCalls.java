@@ -10,6 +10,7 @@ import com.sun.source.tree.Tree;
 import java.util.ArrayList;
 import java.util.List;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
@@ -27,7 +28,8 @@ import org.jspecify.annotations.Nullable;
  * shape: a static method is {@code Table.Name(...)}, or {@code Table:Name(...)} with {@code @LuaColon}; an instance
  * method is {@code object:Name(...)}, or {@code object.Name(...)} with {@code @LuaDot}; a constructor is
  * {@code Table.new(...)}, or {@code {}} for a {@code @LuaType} table the plugin fills in. Members that need a
- * permission the manifest does not declare, or that must never ship, are rejected here.
+ * permission the manifest does not declare, or that must never ship, are rejected here, and members moderation
+ * reviews closely are warned about.
  */
 final class ApiCalls {
 
@@ -48,6 +50,7 @@ final class ApiCalls {
 	Expression invocation(MethodInvocationTree call, ExecutableElement method, TypeElement owner,
 			@Nullable ExpressionTree receiver) {
 		checkUse(method, call);
+		checkSubscription(method, receiver, call);
 		List<Expression> arguments = arguments(method, call.getArguments());
 		String name = types().memberName(method);
 		boolean isStatic = method.getModifiers().contains(Modifier.STATIC);
@@ -226,7 +229,9 @@ final class ApiCalls {
 
 	/**
 	 * Rejects what the build does not allow: a member that needs a permission the manifest does not declare, and a
-	 * development-only member outside the {@code dev} source set.
+	 * development-only member outside the {@code dev} source set. A function moderation reviews closely is warned
+	 * about where it is called; a field, where it is assigned ({@link #assigned}) or, for an event, subscribed to
+	 * ({@link #checkSubscription}).
 	 */
 	private void checkUse(Element member, Tree where) {
 		if (JavaTypes.hasOwnOrClass(member, JavaTypes.LUA_DEV_ONLY) && !unit().plugin.dev()) {
@@ -239,6 +244,26 @@ final class ApiCalls {
 					+ " does not declare; add it to the build, oneiro { plugin { permissions { optional(" + permission
 					+ ") } } }, and check CurrentPlugin.HasPermission(PluginPermissions." + permission + ")"
 					+ " before using it.");
+		}
+		if (member.getKind() != ElementKind.FIELD) {
+			unit().reviewWarnings().check(member, display(member), where);
+		}
+	}
+
+	/** An API field being assigned, such as a menu entry's {@code overrideText}, which moderation may review. */
+	void assigned(VariableElement field, Tree where) {
+		unit().reviewWarnings().check(field, display(field), where);
+	}
+
+	/**
+	 * {@code Event.ChatMessage.Subscribe(...)}: subscribing to an event that moderation reviews, whose field says so.
+	 * Unsubscribing is no use of the event of its own.
+	 */
+	private void checkSubscription(ExecutableElement method, @Nullable ExpressionTree receiver, Tree where) {
+		if (receiver != null && method.getSimpleName().contentEquals("Subscribe")
+				&& unit().trees.getElement(unit().path(receiver)) instanceof VariableElement event
+				&& event.getKind() == ElementKind.FIELD) {
+			unit().reviewWarnings().check(event, "Subscribing to " + event.getSimpleName(), where);
 		}
 	}
 

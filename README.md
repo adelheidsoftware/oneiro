@@ -86,7 +86,8 @@ end
 The Gradle plugin also writes `plugin.json` from the build, checks the folder that ships, runs the plugin's Lua tests,
 zips it for upload, and links it into the beta client's `dev_plugins` folder. A construct Oneiro cannot
 translate, or a call that needs a permission the build does not declare, is a compile error that says what to do
-instead.
+instead. A call that Jagex's moderators review closely, such as a change to the right-click menu, compiles with a
+warning that names what they look at.
 
 ## Getting started
 

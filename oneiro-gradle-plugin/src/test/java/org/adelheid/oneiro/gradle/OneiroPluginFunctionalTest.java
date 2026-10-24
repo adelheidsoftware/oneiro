@@ -197,6 +197,9 @@ class OneiroPluginFunctionalTest {
 		plugin();
 		BuildResult result = gradle("build", "assembleDevPlugin").build();
 		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":checkPlugin"));
+		// Moderation reviews the chat, and the compiler says so where the plugin subscribes to it
+		String warning = "HerbPlugin.java:28: warning: Subscribing to ChatMessage uses the chat,";
+		assertTrue(result.getOutput().contains(warning), result.getOutput());
 		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":testLua"));
 
 		Path shipped = project.resolve("build/oneiro/plugin");

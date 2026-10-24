@@ -573,6 +573,10 @@ final class BodyLowering {
 					+ " module, so remove the assignment.");
 		}
 		checkNotIntoCopy(target);
+		if (assigned instanceof VariableElement field && field.getKind() == ElementKind.FIELD
+				&& types().isApi(JavaTypes.owner(field))) {
+			api.assigned(field, target);
+		}
 		return switch (target) {
 			case IdentifierTree identifier -> identifier(identifier);
 			case MemberSelectTree select -> memberSelect(select);

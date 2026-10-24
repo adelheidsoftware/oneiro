@@ -51,6 +51,10 @@ GameState = {
 
 ---@class WorldUpdatedEventPayload
 
+---The right-click menu is complete and can be changed.
+---@class MiniMenuReadyEventPayload
+---@field miniMenu MiniMenu (Read-only) The menu.
+
 ---@class Event
 ---@field Logic EventSubscription<LogicEventPayload, nil> Fifty times a second.
 ---@field ServerLogic EventSubscription<nil, nil> After each packet from the server.
@@ -60,4 +64,5 @@ GameState = {
 ---@field GameStateChanged EventSubscription<GameStateChangedEventPayload, nil> The client's state changed.
 ---@field SettingsLayerReady EventSubscription<SettingsLayerReadyEventPayload, nil> The settings layer opened.
 ---@field WorldUpdated EventSubscription<WorldUpdatedEventPayload, nil> The world area changed.
+---@field MiniMenuReady EventSubscription<MiniMenuReadyEventPayload, nil> The right-click menu is complete.
 Event = {}

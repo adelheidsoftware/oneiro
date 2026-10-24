@@ -58,7 +58,7 @@ oneiro {
 | `plugin { permissions { optional(chatAccess) } }` | `httpAccess`, `chatAccess` or `trackingAccess`. Prefer `optional`, and check `CurrentPlugin.HasPermission` before using what it unlocks; `required` makes the plugin unusable without it. Code that needs an undeclared permission does not compile, and Oneiro never adds one on its own. |
 | `plugin { urls { url(alias, url) } }` | A base URL the plugin may reach with `httpAccess`, read in code as `Urls.<alias>`. |
 | `rootPackage` | The package whose subpackages become folders under `src/`; by default the plugin class's package. |
-| `warningsAsErrors` | Whether a warning, such as a comment Oneiro cannot place, fails the build. |
+| `warningsAsErrors` | Whether a warning, such as a comment Oneiro cannot place or a use moderation reviews closely, fails the build. |
 | `devPlugins` | The client's `dev_plugins` folder; by default the beta client's on Windows, `C:\ProgramData\Jagex\RuneScape-BETA\dev_plugins`. |
 | `lua { executable = file(...) }` | An installed Lua 5.4 for `testLua`, instead of the bundled Lua 5.4.8. |
 
@@ -101,6 +101,28 @@ reported in one run, and no Lua is written while any remains. The checks against
 - A development-only member, such as `ExecuteConsoleCommand`, compiles only in the dev source set.
 - `Resources.icons.herb` and `Urls.prices` are fields of generated classes, so a missing file or an undeclared alias
   does not compile.
+
+A use that Jagex's moderators review closely compiles with a warning that names what they look at, so that the
+plugin meets it before it is submitted rather than in a moderator's report:
+
+| Area | Uses |
+| --- | --- |
+| `chat` | `Chat.AddMessage`, subscribing to `ChatMessage` |
+| `http` | `new HTTPRequest` |
+| `tracking` | `Player.GetTrackingID` |
+| `mini-menu` | `MiniMenu.Swap`, `MiniMenu.Add`, assigning `MiniMenuEntry.overrideText` |
+| `other-players` | `PlayerList.All`, `ByUID`, `ByName`, `ByDistance` and `Filter`; not `PlayerList.Self` |
+
+```text
+HerbPlugin.java:28: warning: Subscribing to ChatMessage uses the chat, which Jagex's moderators review closely: the
+Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about
+them, which a plugin must never export. Once the plugin meets this, @SuppressWarnings("oneiro:chat") on the method
+or class silences this warning.
+```
+
+Once the plugin meets what a warning names, `@SuppressWarnings("oneiro:<area>")` on a method or class around the
+use silences that area's warnings there, as it silences javac's own. The dev source set is never warned about, since
+it never ships. With `warningsAsErrors`, a warning nobody has silenced fails the build.
 
 ## The plugin class, events and settings
 

@@ -144,6 +144,10 @@ class FixtureStubsTest {
 		assertTrue(chat.contains("\tpublic String chatMessage;"), "the overrides make chatMessage writable");
 		assertTrue(chat.contains("\tpublic final String senderNameSimple;"), "payload fields are read-only");
 		assertTrue(source("SettingsLayerReadyEventPayload.java").contains("@LuaManifestFlag(\"hasSettingsIcon\")"));
+		assertTrue(chat.contains("@LuaReview(\"chat\")"), "moderation reviews subscribing to ChatMessage");
+		assertTrue(source("MiniMenu.java").contains("\t@LuaReview(\"mini-menu\")\n\tpublic native void Swap("));
+		assertTrue(source("MiniMenuEntry.java").contains("\t@LuaReview(\"mini-menu\")\n\tpublic @Nullable String"
+				+ " overrideText;"));
 		assertTrue(source("Globals.java")
 				.contains("\t@LuaDevOnly\n\tpublic static native void ExecuteConsoleCommand("));
 		assertTrue(!source("Globals.java").contains("require"), "Oneiro writes require itself");
