@@ -32,6 +32,7 @@ import javax.lang.model.element.Element;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import org.adelheid.oneiro.lowering.IndexArithmetic;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Comment;
 import org.adelheid.oneiro.lua.Expression;

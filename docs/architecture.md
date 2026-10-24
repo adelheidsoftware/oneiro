@@ -49,14 +49,18 @@ plugin's Java ──► javac ────────────────�
 | `oneiro-lua-runner` | Yes | Runs Lua 5.4: the bundled Lua 5.4.8 through LuaJava, or an installed interpreter, and the plugin's Lua tests. |
 | `oneiro-bindings-gen` | Yes | Generates the RS3 bindings from the stubs and `overrides.txt`. |
 | `oneiro-plugin-model` | Yes | The plugin apart from its code: the manifest, the checks of the folder that ships, the typed `Resources` and `Urls` classes, the compiler's settings, and the line maps and console errors behind `explainError`. |
+| `oneiro-lowering` | Yes | What lowering is apart from the source language, shared by both front ends: the compile result and its diagnostics, Lua modules, the plugin facts the code is checked against, module paths, local names, comment text, doc annotations and index arithmetic. |
 | `oneiro-frontend-java` | Yes | The Java front end: javac's trees to the Lua tree, and the javac plugin. |
+| `oneiro-frontend-kotlin` | Yes | The Kotlin front end, in Kotlin: the Kotlin Analysis API's trees to the Lua tree. In progress; the Gradle plugin does not use it yet. |
 | `oneiro-gradle-plugin` | Yes | The Gradle plugin `org.adelheid.oneiro`: the `oneiro { }` block and the tasks. |
-| `conformance` | No | The conformance suite: Java inputs with hand-written expected Lua. |
+| `conformance` | No | The conformance suite: Java inputs and their Kotlin twins, with hand-written expected Lua. |
 
 ```text
-oneiro-gradle-plugin ──► oneiro-plugin-model
-oneiro-frontend-java ──► oneiro-lua-tree, oneiro-plugin-model, (oneiro-api at compile time)
-oneiro-bindings-gen  ──► oneiro-api
+oneiro-gradle-plugin   ──► oneiro-plugin-model
+oneiro-frontend-java   ──► oneiro-lowering, oneiro-plugin-model, (oneiro-api at compile time)
+oneiro-frontend-kotlin ──► oneiro-lowering, the Kotlin Analysis API and the IntelliJ platform
+oneiro-lowering        ──► oneiro-lua-tree
+oneiro-bindings-gen    ──► oneiro-api
 ```
 
 `oneiro-gradle-plugin` and `oneiro-plugin-model` are compiled for Java 17, because they run inside the Gradle daemon,
@@ -90,6 +94,25 @@ file to the classes below.
 - **Rejections.** When a construct has no translation, lowering throws a `Rejection`. The member being lowered is
   skipped and the rejection becomes an error at its position, so one run reports every problem. No Lua is written
   while any error remains.
+
+## The Kotlin front end
+
+The Kotlin front end lives in `org.adelheid.oneiro.kotlin` and is written in Kotlin, the language the Kotlin
+Analysis API is made for. It is in progress: [kotlin-subset.md](kotlin-subset.md) lists what it accepts so far, and
+the Gradle plugin does not use it yet.
+
+- **`KotlinFrontend`** compiles a set of sources: `AnalysisSessions` builds a standalone Analysis API session over
+  them and their classpath, Kotlin's own errors are reported first, and each file is then lowered and the session
+  disposed of. The Analysis API is released with Kotlin and needs the IntelliJ platform build that Kotlin release
+  was built against; the version catalog pins the pair.
+- **`FileLowering`** turns one file into one Lua module, and keeps what the file shares: its diagnostics, its
+  `SourceText` (positions, and the comments, which Kotlin's tree keeps), `KotlinTypes`, and the loops that
+  `OneBasedLoops` lets count from 1. **`BodyLowering`** lowers the statements and expressions of a function.
+- **Rejections** work as in the Java front end: a `Rejection` skips the member being lowered and becomes an error
+  at its position.
+
+What lowering is apart from the language, such as module paths, local names and the folding of index arithmetic,
+lives in `oneiro-lowering`, where both front ends use it; more moves there as the Kotlin front end needs it.
 
 ## The bindings generator
 

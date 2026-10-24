@@ -1,8 +1,15 @@
-// The conformance suite: Java inputs with hand-written expected Lua, a case for each row of docs/java-subset.md.
-// Tests only; nothing here is published.
+// The conformance suite: Java inputs with hand-written expected Lua, a case for each row of docs/java-subset.md, and
+// the Kotlin twins that must give the same Lua. Tests only; nothing here is published.
+
+// What the Kotlin twins compile against besides the bindings; the Analysis API on the test's classpath stays out of it
+val kotlinCasesClasspath = configurations.create("kotlinCasesClasspath")
 
 dependencies {
 	testImplementation(project(":oneiro-frontend-java"))
+	testImplementation(project(":oneiro-frontend-kotlin"))
+	kotlinCasesClasspath(project(":oneiro-api"))
+	kotlinCasesClasspath(libs.jspecify)
+	kotlinCasesClasspath(libs.kotlin.stdlib)
 	testImplementation(project(":oneiro-lua-runner"))
 	testImplementation(project(":oneiro-api"))
 	testImplementation(project(":oneiro-bindings-gen"))
@@ -35,4 +42,9 @@ tasks.test {
 	}
 	// LuaJava loads its native library through System.load, which JDK 25 reports unless native access is granted
 	jvmArgs("--enable-native-access=ALL-UNNAMED")
+	val kotlinClasspath = files(kotlinCasesClasspath)
+	inputs.files(kotlinClasspath).withPropertyName("kotlinCasesClasspath")
+	jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Doneiro.kotlinClasspath=" + kotlinClasspath.asPath) })
+	// The Kotlin front end runs the Analysis API, and with it the IntelliJ platform, inside the test's JVM
+	maxHeapSize = "2g"
 }

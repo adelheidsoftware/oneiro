@@ -1,4 +1,4 @@
-package org.adelheid.oneiro.java;
+package org.adelheid.oneiro.lowering;
 
 import static org.adelheid.oneiro.lua.Expression.binary;
 import static org.adelheid.oneiro.lua.Expression.integer;
@@ -12,16 +12,16 @@ import org.jspecify.annotations.Nullable;
  * Arithmetic on the Lua expression of an index, which Java counts from 0 and Lua from 1: adding or subtracting one,
  * folded where the result reads better.
  */
-final class IndexArithmetic {
+public final class IndexArithmetic {
 
 	private IndexArithmetic() {
 	}
 
-	static Expression plusOne(Expression expression) {
+	public static Expression plusOne(Expression expression) {
 		return offset(expression, 1);
 	}
 
-	static Expression minusOne(Expression expression) {
+	public static Expression minusOne(Expression expression) {
 		return offset(expression, -1);
 	}
 
@@ -53,7 +53,7 @@ final class IndexArithmetic {
 	}
 
 	/** The value of a decimal integer numeral, or of a negated one; null for anything else. */
-	static @Nullable Long integerValue(Expression expression) {
+	public static @Nullable Long integerValue(Expression expression) {
 		if (expression instanceof Expression.NumberLiteral numeral && numeral.text().matches("\\d+")) {
 			return Long.parseLong(numeral.text());
 		}

@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.TypeKind;
+import org.adelheid.oneiro.lowering.IndexArithmetic;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Expression;
 import org.adelheid.oneiro.lua.UnaryOperator;

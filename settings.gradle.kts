@@ -13,6 +13,20 @@ plugins {
 dependencyResolutionManagement {
 	repositories {
 		mavenCentral()
+		// The Kotlin front end runs on the Kotlin Analysis API and the IntelliJ platform modules it needs, which
+		// JetBrains publishes only to its own repositories; each is asked only for what it hosts
+		maven("https://cache-redirector.jetbrains.com/intellij-dependencies") {
+			content {
+				includeModuleByRegex("org\\.jetbrains\\.kotlin", ".*-for-ide")
+				includeGroup("com.intellij.platform")
+				includeGroupByRegex("org\\.jetbrains\\.intellij\\.deps.*")
+			}
+		}
+		maven("https://cache-redirector.jetbrains.com/intellij-repository/releases") {
+			content {
+				includeGroupByRegex("com\\.jetbrains\\.intellij\\..*")
+			}
+		}
 	}
 }
 
@@ -26,7 +40,9 @@ include(
 	"oneiro-lua-runner",
 	"oneiro-bindings-gen",
 	"oneiro-plugin-model",
+	"oneiro-lowering",
 	"oneiro-gradle-plugin",
 	"oneiro-frontend-java",
+	"oneiro-frontend-kotlin",
 	"conformance",
 )

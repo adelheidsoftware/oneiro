@@ -11,6 +11,7 @@ plugins {
 	alias(libs.plugins.errorprone) apply false
 	alias(libs.plugins.maven.publish) apply false
 	alias(libs.plugins.plugin.publish) apply false
+	alias(libs.plugins.kotlin.jvm) apply false
 }
 
 // The type-safe `libs` accessor resolves against the project being configured, so inside subprojects it would target
@@ -72,6 +73,20 @@ subprojects {
 		toolVersion = checkstyleVersion
 		configFile = rootProject.file("config/checkstyle/checkstyle.xml")
 		maxWarnings = 0
+	}
+	// Kotlin sources follow the same layout rules. Checkstyle's syntax checks read only Java, so for Kotlin it applies
+	// the rules on lines and files: their length, trailing whitespace, blank lines and the final newline
+	pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
+		extensions.getByType<SourceSetContainer>().configureEach {
+			val kotlinSources = extensions.getByName<SourceDirectorySet>("kotlin")
+			val checkstyleKotlin = tasks.register<Checkstyle>(getTaskName("checkstyle", "kotlin")) {
+				source(kotlinSources)
+				classpath = files()
+			}
+			tasks.named("check") {
+				dependsOn(checkstyleKotlin)
+			}
+		}
 	}
 
 	tasks.withType<Test>().configureEach {

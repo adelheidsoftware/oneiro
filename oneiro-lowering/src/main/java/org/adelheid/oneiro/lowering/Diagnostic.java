@@ -1,4 +1,4 @@
-package org.adelheid.oneiro.java;
+package org.adelheid.oneiro.lowering;
 
 /**
  * An error or warning about a plugin's source, printed in javac's format so that IDEs and build logs link it to the

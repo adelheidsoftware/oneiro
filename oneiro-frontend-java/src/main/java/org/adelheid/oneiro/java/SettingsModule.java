@@ -19,6 +19,8 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import org.adelheid.oneiro.lowering.Diagnostic;
+import org.adelheid.oneiro.lowering.LuaModule;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Comment;

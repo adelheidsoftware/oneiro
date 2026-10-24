@@ -6,14 +6,13 @@ import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import org.adelheid.oneiro.lowering.DocAnnotations;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Comment;
 import org.adelheid.oneiro.lua.Trivia;
@@ -25,8 +24,6 @@ import org.jspecify.annotations.Nullable;
  * something that has no Lua of its own cannot be placed and gets a warning instead.
  */
 final class MemberComments {
-
-	private static final Pattern NAMED_RETURN = Pattern.compile("([A-Za-z_]\\w*):\\s+(.+)", Pattern.DOTALL);
 
 	private final UnitLowering unit;
 	private final JavaTypes types;
@@ -114,21 +111,9 @@ final class MemberComments {
 				}
 			} else if (returnType.getKind() != TypeKind.VOID && !UnitLowering.isConstructor(method)) {
 				String luaType = types.luaType(returnType, types.isNullable(returnType));
-				lines.add(Comment.annotation(returnAnnotation(luaType, DocText.returned(doc))));
+				lines.add(Comment.annotation(DocAnnotations.returned(luaType, DocText.returned(doc))));
 			}
 		}
 		return new Trivia(blankLine, lines, null);
-	}
-
-	/**
-	 * The {@code @return} annotation: {@code @return boolean # text}, or a named return, {@code @return boolean
-	 * complete text}, when the Javadoc's return text starts with a name and a colon, {@code complete: text}.
-	 */
-	private static String returnAnnotation(String luaType, String text) {
-		Matcher named = NAMED_RETURN.matcher(text);
-		if (named.matches()) {
-			return "@return " + luaType + " " + named.group(1) + " " + named.group(2);
-		}
-		return "@return " + luaType + (text.isEmpty() ? "" : " # " + text);
 	}
 }

@@ -10,6 +10,7 @@ description = "Oneiro's Java front end, which compiles RS3 plugins written in Ja
 
 dependencies {
 	api(project(":oneiro-lua-tree"))
+	api(project(":oneiro-lowering"))
 	implementation(project(":oneiro-plugin-model"))
 	// For constants such as LuaConstants.PREFIX, which javac copies into the code that reads them; the front end finds
 	// the annotations themselves by name, in the plugin's own classpath

@@ -22,11 +22,12 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.adelheid.oneiro.bindings.BindingsGenerator;
-import org.adelheid.oneiro.java.CompileResult;
-import org.adelheid.oneiro.java.Diagnostic;
 import org.adelheid.oneiro.java.JavaFrontend;
-import org.adelheid.oneiro.java.LuaModule;
-import org.adelheid.oneiro.java.PluginFacts;
+import org.adelheid.oneiro.kotlin.KotlinFrontend;
+import org.adelheid.oneiro.lowering.CompileResult;
+import org.adelheid.oneiro.lowering.Diagnostic;
+import org.adelheid.oneiro.lowering.LuaModule;
+import org.adelheid.oneiro.lowering.PluginFacts;
 import org.adelheid.oneiro.lua.LuaPrinter;
 import org.adelheid.oneiro.runner.LuaRunner;
 import org.adelheid.oneiro.runner.LuaTests;
@@ -47,7 +48,9 @@ import org.junit.jupiter.api.TestFactory;
  *   <li>{@code lua/}: hand-written Lua the generated modules use, such as a module the Java declares with
  *       {@code @LuaModule};
  *   <li>{@code case.properties}: the plugin's {@code id}, {@code permissions} and {@code flags}, and whether the
- *       sources are the {@code dev} source set.
+ *       sources are the {@code dev} source set;
+ *   <li>{@code kotlin/}: the same plugin in Kotlin, its twin, which must give the same Lua, and its own
+ *       {@code diagnostics.txt}.
  * </ul>
  *
  * <p>Lua is the bundled Lua 5.4.8 unless {@code oneiro.luaExecutable} names an installed one. Every expected file must
@@ -63,6 +66,16 @@ class ConformanceTest {
 		try (Stream<Path> folders = Files.list(resource("cases"))) {
 			return folders.filter(Files::isDirectory).sorted().toList().stream()
 					.map(folder -> DynamicTest.dynamicTest(folder.getFileName().toString(), () -> run(folder)));
+		}
+	}
+
+	/** Every case's Kotlin twin, where it has one: the same plugin in Kotlin, which must give the same Lua. */
+	@TestFactory
+	Stream<DynamicTest> kotlinTwins() throws IOException {
+		try (Stream<Path> folders = Files.list(resource("cases"))) {
+			return folders.filter(folder -> Files.isDirectory(folder.resolve("kotlin"))).sorted().toList().stream()
+					.map(folder -> DynamicTest.dynamicTest(folder.getFileName() + " (Kotlin)",
+							() -> compileKotlinAndCompare(folder)));
 		}
 	}
 
@@ -107,17 +120,39 @@ class ConformanceTest {
 	 */
 	static Map<String, String> compileAndCompare(Path folder) throws IOException {
 		Path input = folder.resolve("input");
-		List<Path> sources;
-		try (Stream<Path> files = Files.walk(input)) {
-			sources = files.filter(file -> file.toString().endsWith(".java")).sorted().toList();
-		}
-		CompileResult result = JavaFrontend.compile(sources,
+		CompileResult result = JavaFrontend.compile(sources(input, ".java"),
 				new JavaFrontend.Options(ROOT_PACKAGE, classpath(), facts(folder.resolve("case.properties"))));
+		return compare(folder, input, result, folder.resolve("diagnostics.txt"));
+	}
 
+	/**
+	 * Compiles a case's Kotlin twin, in its {@code kotlin/} folder, and compares the diagnostics with
+	 * {@code kotlin/diagnostics.txt} and the modules with the same hand-written Lua as the Java input's.
+	 */
+	private static void compileKotlinAndCompare(Path folder) throws IOException {
+		Path input = folder.resolve("kotlin");
+		CompileResult result = KotlinFrontend.compile(sources(input, ".kt"),
+				new KotlinFrontend.Options(ROOT_PACKAGE, kotlinClasspath(), facts(folder.resolve("case.properties"))));
+		compare(folder, input, result, input.resolve("diagnostics.txt"));
+	}
+
+	private static List<Path> sources(Path input, String extension) throws IOException {
+		try (Stream<Path> files = Files.walk(input)) {
+			return files.filter(file -> file.toString().endsWith(extension)).sorted().toList();
+		}
+	}
+
+	/**
+	 * Compares what compiling a case produced with what it must: the diagnostics, and when the case has
+	 * {@code expected/}, the modules.
+	 *
+	 * @return the printed modules by path
+	 */
+	private static Map<String, String> compare(Path folder, Path input, CompileResult result,
+			Path expectedDiagnostics) throws IOException {
 		String diagnostics = result.diagnostics().stream()
 				.map(diagnostic -> relativeTo(input, diagnostic).format())
 				.collect(Collectors.joining("\n\n"));
-		Path expectedDiagnostics = folder.resolve("diagnostics.txt");
 		String expected = Files.exists(expectedDiagnostics)
 				? read(expectedDiagnostics).replace("\r\n", "\n").strip()
 				: "";
@@ -194,6 +229,18 @@ class ConformanceTest {
 	private static List<Path> classpath() {
 		List<Path> classpath = new ArrayList<>(
 				Stream.of(System.getProperty("java.class.path").split(File.pathSeparator)).map(Path::of).toList());
+		classpath.add(FixtureBindings.JAR);
+		return classpath;
+	}
+
+	/**
+	 * What the Kotlin twins compile against: the bindings generated from the fixture, and Oneiro's API, JSpecify and
+	 * the Kotlin standard library, which the build names. The test's own classpath holds the Analysis API, which plugin
+	 * code never sees.
+	 */
+	private static List<Path> kotlinClasspath() {
+		List<Path> classpath = new ArrayList<>(Stream.of(System.getProperty("oneiro.kotlinClasspath")
+				.split(File.pathSeparator)).map(Path::of).toList());
 		classpath.add(FixtureBindings.JAR);
 		return classpath;
 	}

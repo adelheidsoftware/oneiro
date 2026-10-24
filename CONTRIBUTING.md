@@ -59,6 +59,7 @@ A case is a folder under `conformance/src/test/resources/cases/`:
 | `check.lua` | Optional. Assertions run on Lua 5.4 against the generated modules, to show that the Lua behaves as the Java does. |
 | `lua/` | Optional. Hand-written Lua modules that the case's Java declares with `@LuaModule`. |
 | `case.properties` | Optional. The plugin's identifier (`id`), its `permissions` and manifest `flags`, and `dev=true` for a dev source set. |
+| `kotlin/` | Optional. The same plugin in Kotlin, the case's twin, which must give the same Lua as `expected/`; with its own `diagnostics.txt` when it has any. |
 
 Write the expected Lua by hand, in the style described below, as a careful person would write it. Never copy it from
 Oneiro's output: the case exists to check that output against what it should be.

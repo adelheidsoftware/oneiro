@@ -9,6 +9,15 @@ checkstyle = "14.3.0"
 luajava = "4.1.0"
 maven-publish = "0.37.0"
 plugin-publish = "2.2.1"
+# The Kotlin front end runs on the Kotlin Analysis API, which is released with Kotlin, and on the IntelliJ platform
+# build that Kotlin release was built against (versions.intellijSdk in Kotlin's gradle/versions.properties at the
+# v2.4.21 tag). The two must match exactly; upgrading Kotlin means reading the new intellijSdk.
+kotlin = "2.4.21"
+intellij = "251.27812.49"
+# What the Analysis API needs at run time and no POM brings, at the versions Kotlin 2.4.21 builds with; the IntelliJ
+# POMs ask for kotlinx-collections-immutable 0.3.8, which lacks what the Analysis API calls
+caffeine = "2.9.3"
+kotlinx-collections-immutable = "0.5.1"
 
 # junit-jupiter and junit-platform-launcher take their versions from junit-bom.
 [libraries]
@@ -20,6 +29,34 @@ errorprone-core = { module = "com.google.errorprone:error_prone_core", version.r
 nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
 luajava-lua54 = { module = "party.iroiro.luajava:lua54", version.ref = "luajava" }
 luajava-lua54-platform = { module = "party.iroiro.luajava:lua54-platform", version.ref = "luajava" }
+kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
+# The Analysis API's "-for-ide" artifacts declare no dependencies, so each is listed, and used without transitives
+kotlin-analysis-api = { module = "org.jetbrains.kotlin:analysis-api-for-ide", version.ref = "kotlin" }
+kotlin-analysis-api-standalone = { module = "org.jetbrains.kotlin:analysis-api-standalone-for-ide", version.ref = "kotlin" }
+kotlin-analysis-api-impl-base = { module = "org.jetbrains.kotlin:analysis-api-impl-base-for-ide", version.ref = "kotlin" }
+kotlin-analysis-api-k2 = { module = "org.jetbrains.kotlin:analysis-api-k2-for-ide", version.ref = "kotlin" }
+kotlin-analysis-api-platform-interface = { module = "org.jetbrains.kotlin:analysis-api-platform-interface-for-ide", version.ref = "kotlin" }
+kotlin-low-level-api-fir = { module = "org.jetbrains.kotlin:low-level-api-fir-for-ide", version.ref = "kotlin" }
+kotlin-symbol-light-classes = { module = "org.jetbrains.kotlin:symbol-light-classes-for-ide", version.ref = "kotlin" }
+kotlin-compiler-common = { module = "org.jetbrains.kotlin:kotlin-compiler-common-for-ide", version.ref = "kotlin" }
+kotlin-compiler-fir = { module = "org.jetbrains.kotlin:kotlin-compiler-fir-for-ide", version.ref = "kotlin" }
+kotlin-compiler-fe10 = { module = "org.jetbrains.kotlin:kotlin-compiler-fe10-for-ide", version.ref = "kotlin" }
+kotlin-compiler-ir = { module = "org.jetbrains.kotlin:kotlin-compiler-ir-for-ide", version.ref = "kotlin" }
+# The IntelliJ platform core and Java PSI; util and util-base again, because the POMs give them run-time scope only
+# while PSI classes extend types from them
+intellij-core-impl = { module = "com.jetbrains.intellij.platform:core-impl", version.ref = "intellij" }
+intellij-java-psi-impl = { module = "com.jetbrains.intellij.java:java-psi-impl", version.ref = "intellij" }
+intellij-util = { module = "com.jetbrains.intellij.platform:util", version.ref = "intellij" }
+intellij-util-base = { module = "com.jetbrains.intellij.platform:util-base", version.ref = "intellij" }
+caffeine = { module = "com.github.ben-manes.caffeine:caffeine", version.ref = "caffeine" }
+kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm", version.ref = "kotlinx-collections-immutable" }
+
+[bundles]
+kotlin-analysis-api = ["kotlin-analysis-api", "kotlin-analysis-api-standalone", "kotlin-analysis-api-impl-base",
+	"kotlin-analysis-api-k2", "kotlin-analysis-api-platform-interface", "kotlin-low-level-api-fir",
+	"kotlin-symbol-light-classes", "kotlin-compiler-common", "kotlin-compiler-fir", "kotlin-compiler-fe10",
+	"kotlin-compiler-ir"]
+intellij-platform = ["intellij-core-impl", "intellij-java-psi-impl", "intellij-util", "intellij-util-base"]
 
 [plugins]
 errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
@@ -27,3 +64,4 @@ errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
 maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "maven-publish" }
 # Publishes the Gradle plugin to the Gradle Plugin Portal
 plugin-publish = { id = "com.gradle.plugin-publish", version.ref = "plugin-publish" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

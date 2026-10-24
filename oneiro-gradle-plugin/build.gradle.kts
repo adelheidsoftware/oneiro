@@ -53,8 +53,8 @@ tasks.processResources {
 tasks.test {
 	// The functional test builds a plugin as its author would, resolving Oneiro from the repository the published
 	// modules go to, against the bindings generator's stubs fixture
-	val publishedModules = listOf("api", "lua-tree", "lua-runner", "bindings-gen", "plugin-model", "frontend-java",
-		"gradle-plugin").map { ":oneiro-$it" }
+	val publishedModules = listOf("api", "lua-tree", "lua-runner", "bindings-gen", "plugin-model", "lowering",
+		"frontend-java", "gradle-plugin").map { ":oneiro-$it" }
 	dependsOn(publishedModules.map { "$it:publishAllPublicationsToFunctionalTestRepository" })
 	// The published modules are what the test builds with, so a change to any of them must rerun it
 	inputs.files(publishedModules.map { project(it).tasks.named("jar") }).withPropertyName("publishedJars")

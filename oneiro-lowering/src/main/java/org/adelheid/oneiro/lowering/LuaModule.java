@@ -1,4 +1,4 @@
-package org.adelheid.oneiro.java;
+package org.adelheid.oneiro.lowering;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +18,7 @@ public record LuaModule(String path, Chunk chunk) {
 	 * A module whose header starts with its path, {@code -- src/core/row.lua}, followed by its description. The client
 	 * loads files without names, so its errors name a file by its first line; this way they name it by its path.
 	 */
-	static LuaModule of(String path, List<Comment> description, Block body) {
+	public static LuaModule of(String path, List<Comment> description, Block body) {
 		List<Comment> header = new ArrayList<>();
 		header.add(Comment.line(path));
 		header.addAll(description);

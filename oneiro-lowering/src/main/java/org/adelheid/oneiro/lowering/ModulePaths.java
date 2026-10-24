@@ -1,19 +1,19 @@
-package org.adelheid.oneiro.java;
+package org.adelheid.oneiro.lowering;
 
 import java.util.Locale;
 
 /**
- * Where a plugin class's Lua goes: packages below the plugin's root package become folders under {@code src/}, and
- * the class name becomes a snake case file name, so {@code <root>.core.OpeningTable} is
+ * Where a module's Lua goes: packages below the plugin's root package become folders under {@code src/}, and the
+ * module's name, its class's or its file's, becomes a snake case file name, so {@code <root>.core.OpeningTable} is
  * {@code src/core/opening_table.lua}, loaded with {@code require("src/core/opening_table")}.
  */
-final class ModulePaths {
+public final class ModulePaths {
 
 	private ModulePaths() {
 	}
 
 	/** The require path, without {@code .lua}, under {@code src/}. */
-	static String requirePath(String rootPackage, String packageName, String className) {
+	public static String requirePath(String rootPackage, String packageName, String className) {
 		return requirePath("src", rootPackage, packageName, className);
 	}
 
@@ -21,7 +21,7 @@ final class ModulePaths {
 	 * The require path, without {@code .lua}, under a folder of the plugin: {@code src}, or {@code dev} for the dev
 	 * source set, whose Lua stays out of the zip.
 	 */
-	static String requirePath(String folder, String rootPackage, String packageName, String className) {
+	public static String requirePath(String folder, String rootPackage, String packageName, String className) {
 		String relative;
 		if (packageName.equals(rootPackage)) {
 			relative = "";
@@ -33,7 +33,7 @@ final class ModulePaths {
 		return folder + "/" + relative + snakeCase(className);
 	}
 
-	static boolean isInside(String rootPackage, String packageName) {
+	public static boolean isInside(String rootPackage, String packageName) {
 		return packageName.equals(rootPackage) || packageName.startsWith(rootPackage + ".");
 	}
 

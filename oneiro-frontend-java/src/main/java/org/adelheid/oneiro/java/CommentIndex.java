@@ -2,6 +2,7 @@ package org.adelheid.oneiro.java;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.adelheid.oneiro.lowering.CommentText;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -23,25 +24,7 @@ final class CommentIndex {
 
 		/** The comment's text without delimiters or leading asterisks, one entry per line. */
 		List<String> lines() {
-			if (kind == Kind.LINE) {
-				return List.of(raw.substring(2).strip());
-			}
-			String inner = raw.substring(kind == Kind.DOC ? 3 : 2, raw.length() - 2);
-			List<String> lines = new ArrayList<>();
-			for (String line : inner.lines().toList()) {
-				String text = line.strip();
-				if (text.startsWith("*")) {
-					text = text.substring(1).strip();
-				}
-				lines.add(text);
-			}
-			while (!lines.isEmpty() && lines.getFirst().isEmpty()) {
-				lines.removeFirst();
-			}
-			while (!lines.isEmpty() && lines.getLast().isEmpty()) {
-				lines.removeLast();
-			}
-			return lines;
+			return CommentText.lines(raw);
 		}
 	}
 

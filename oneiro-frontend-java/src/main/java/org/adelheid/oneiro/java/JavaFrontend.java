@@ -38,6 +38,11 @@ import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
+import org.adelheid.oneiro.lowering.CompileResult;
+import org.adelheid.oneiro.lowering.Diagnostic;
+import org.adelheid.oneiro.lowering.LocalNames;
+import org.adelheid.oneiro.lowering.LuaModule;
+import org.adelheid.oneiro.lowering.PluginFacts;
 import org.jspecify.annotations.Nullable;
 
 /**
