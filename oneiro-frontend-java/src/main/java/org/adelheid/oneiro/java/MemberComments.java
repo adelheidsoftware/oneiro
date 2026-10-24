@@ -97,7 +97,7 @@ final class MemberComments {
 				String optional = chain != null && chain.defaults().containsKey(index) ? "?" : "";
 				// A varargs parameter is Lua's ..., each value of the array's type
 				boolean varargs = element.isVarArgs() && index == parameters.size() - 1;
-				String luaName = varargs ? "..." : unit.names.luaName(parameter.getName().toString());
+				String luaName = varargs ? "..." : unit.codeLocalName(unit.element(parameter), parameter);
 				TypeMirror annotated = varargs ? ((ArrayType) type).getComponentType() : type;
 				String annotation = "@param " + luaName + optional + " "
 						+ types.luaType(annotated, types.isNullable(annotated)) + " " + text;

@@ -228,7 +228,7 @@ final class Operators {
 	/** A Java index as a Lua one: one more, folded where it can be, unless the loop already counts from 1. */
 	Expression index(ExpressionTree javaIndex) {
 		if (javaIndex instanceof IdentifierTree identifier && unit.countsFromOne(unit.element(identifier))) {
-			return name(unit.names.luaName(identifier.getName().toString()));
+			return name(unit.codeLocalName(unit.element(identifier), identifier));
 		}
 		return IndexArithmetic.plusOne(body.expression(javaIndex));
 	}

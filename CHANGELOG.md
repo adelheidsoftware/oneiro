@@ -6,6 +6,18 @@ All notable changes to Oneiro are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A local or parameter named like a private method or static field of the file, or like a member of the plugin class,
+  no longer hides that member in the Lua when the same method uses it. `this.shown = shown` in the plugin class
+  compiled to `shown = shown`, which changed nothing, and a private method `step` that declared a local `step` called
+  the local. Such a local now gets a trailing underscore, `shown_`.
+- A method reference to a private method declared further down the file, such as `this::label`, no longer reaches
+  `nil`: the method's local is declared ahead, as it is for a call. A parameter of the method named like the method
+  itself no longer hides it in the function the reference becomes.
+- A record with methods stores each component under the name its accessor reads. A component named like a Lua global,
+  such as `type`, was stored as `self.type_` and read back as `nil`.
+
 ## [0.1.0] - 2026-10-24
 
 The first release.

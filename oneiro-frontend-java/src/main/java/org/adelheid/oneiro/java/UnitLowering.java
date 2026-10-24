@@ -11,6 +11,8 @@ import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.MemberReferenceTree;
+import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
@@ -101,6 +103,10 @@ final class UnitLowering {
 	private @Nullable Set<Element> oneBased;
 	private @Nullable CharConversions charConversions;
 	private @Nullable Set<String> fileLocals;
+	// The Lua name of each local and parameter, decided once; see codeLocalName
+	private final Map<Element, String> codeLocalNames = new HashMap<>();
+	// The file-level locals each member's code uses, by the member
+	private final Map<Tree, Set<String>> fileLocalsUsed = new HashMap<>();
 	private final SettingsModule settings;
 	private final PluginEntry pluginEntry;
 	private final ModuleAssembly assembly;
@@ -1099,6 +1105,89 @@ final class UnitLowering {
 	}
 
 	/**
+	 * The Lua name of a local variable or parameter. Java keeps a method's locals apart from the file's private
+	 * members and classes, but in Lua they are all locals, so a local that shares a name with one its own member uses
+	 * would hide it: {@code int step = n - 1; return step(step);} in a private method {@code step}. Such a local gets
+	 * a trailing underscore. Every use of a local asks here, so that its declaration and its uses agree.
+	 *
+	 * @param where the local's declaration, or a tree of the code it belongs to
+	 */
+	String codeLocalName(Element variable, Tree where) {
+		String known = codeLocalNames.get(variable);
+		if (known != null) {
+			return known;
+		}
+		// The declaration's member decides, so that a use inside a lambda or an anonymous class gets the same name.
+		// javac cannot find every local's declaration again, such as one in an anonymous class; the use's member then
+		// decides, which is the same one.
+		boolean isDeclaration = where instanceof VariableTree declared && variable.equals(element(declared));
+		TreePath declaration = isDeclaration ? null : trees.getPath(variable);
+		TreePath member = declaration != null ? enclosingMember(declaration) : memberPath(where);
+		Set<String> used = fileLocalsUsed.computeIfAbsent(member.getLeaf(), _ -> fileLocalsUsedIn(member));
+		String name = names.luaName(variable.getSimpleName().toString());
+		while (used.contains(name)) {
+			name = name + "_";
+		}
+		codeLocalNames.put(variable, name);
+		return name;
+	}
+
+	/** The file-level locals that a member's code uses, by their Lua names. */
+	private Set<String> fileLocalsUsedIn(TreePath member) {
+		Set<String> used = new HashSet<>();
+		new TreePathScanner<Void, Void>() {
+			@Override
+			public Void visitIdentifier(IdentifierTree node, Void unused) {
+				add(fileLocalOf(trees.getElement(getCurrentPath()), true));
+				return super.visitIdentifier(node, null);
+			}
+
+			@Override
+			public Void visitMemberSelect(MemberSelectTree node, Void unused) {
+				add(fileLocalOf(trees.getElement(getCurrentPath()), false));
+				return super.visitMemberSelect(node, null);
+			}
+
+			@Override
+			public Void visitMemberReference(MemberReferenceTree node, Void unused) {
+				add(fileLocalOf(trees.getElement(getCurrentPath()), false));
+				return super.visitMemberReference(node, null);
+			}
+
+			private void add(@Nullable String local) {
+				if (local != null) {
+					used.add(local);
+				}
+			}
+		}.scan(member, null);
+		return used;
+	}
+
+	/**
+	 * The file-level local the Lua reaches a declaration through, or null when it reaches it otherwise. That is a
+	 * class's table, a private method or static field, or a member of the plugin class, which are all locals of
+	 * main.lua; and for a static member of one of the file's classes used without a qualifier, the class's table.
+	 */
+	@Nullable String fileLocalOf(@Nullable Element element, boolean unqualified) {
+		if (element == null) {
+			return null;
+		}
+		if (element instanceof TypeElement) {
+			return element.getSimpleName().toString();
+		}
+		boolean member = element.getKind() == ElementKind.METHOD || element.getKind() == ElementKind.FIELD;
+		Element owner = element.getEnclosingElement();
+		if (isFileLocal(element) || (member && entry != null && entry.equals(owner))) {
+			return names.luaName(element.getSimpleName().toString());
+		}
+		if (unqualified && element.getModifiers().contains(Modifier.STATIC) && owner instanceof TypeElement type
+				&& fileTypes.contains(type)) {
+			return type.getSimpleName().toString();
+		}
+		return null;
+	}
+
+	/**
 	 * Whether a lambda's parameter can become a local of the function around the lambda: no other variable of the
 	 * member and no local of the file has its Lua name, so the local hides nothing.
 	 */
@@ -1122,7 +1211,11 @@ final class UnitLowering {
 
 	/** The path of the member, a method, field or initializer, that a tree is part of. */
 	private TreePath memberPath(Tree where) {
-		TreePath member = path(where);
+		return enclosingMember(path(where));
+	}
+
+	private static TreePath enclosingMember(TreePath path) {
+		TreePath member = path;
 		while (member.getParentPath() != null && !(member.getParentPath().getLeaf() instanceof ClassTree)) {
 			member = member.getParentPath();
 		}

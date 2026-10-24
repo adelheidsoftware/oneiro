@@ -238,17 +238,22 @@ final class MethodReferences {
 	}
 
 	/**
-	 * The function's parameters, named as the method names them; one that would hide the name of the object a bound
-	 * reference calls gets a name of its own.
+	 * The function's parameters, named as the method names them. One that would hide the name of the object a bound
+	 * reference calls gets a name of its own; one named like the function the reference calls, such as a private
+	 * method's {@code label} in {@code label(String label)}, gets a trailing underscore.
 	 */
 	List<String> parameters(ExecutableElement method, MemberReferenceTree where) {
 		String qualifier = where.getQualifierExpression() instanceof IdentifierTree identifier
 				? unit.names.luaName(identifier.getName().toString())
 				: "";
+		String called = unit.fileLocalOf(method, true);
 		return method.getParameters().stream()
 				.map(parameter -> {
 					String own = unit.names.luaName(parameter.getSimpleName().toString());
-					return own.equals(qualifier) ? unit.freshLocal(own + "Value", where) : own;
+					if (own.equals(qualifier)) {
+						return unit.freshLocal(own + "Value", where);
+					}
+					return own.equals(called) ? own + "_" : own;
 				})
 				.toList();
 	}

@@ -45,8 +45,8 @@ final class Comparators {
 	Expression function(ExpressionTree comparator) {
 		List<? extends VariableTree> own = ownParameters(comparator);
 		List<String> compared = own != null
-				? List.of(unit.names.luaName(own.get(0).getName().toString()),
-						unit.names.luaName(own.get(1).getName().toString()))
+				? List.of(unit.codeLocalName(unit.element(own.get(0)), own.get(0)),
+						unit.codeLocalName(unit.element(own.get(1)), own.get(1)))
 				: List.of(unit.freshLocal("a", comparator), unit.freshLocal("b", comparator));
 		return MethodReferences.function(compared, comesBefore(comparator, compared.get(0), compared.get(1)), false);
 	}

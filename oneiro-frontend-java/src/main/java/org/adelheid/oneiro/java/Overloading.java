@@ -234,7 +234,7 @@ final class Overloading {
 				continue;
 			}
 			VariableTree parameter = method.getParameters().get(filled.getKey());
-			Expression local = name(unit.names.luaName(parameter.getName().toString()));
+			Expression local = name(unit.codeLocalName(unit.element(parameter), parameter));
 			Expression lowered = lowering.expression(value);
 			Statement fill = types.isBoolean(unit.type(parameter))
 					? Statement.ifThen(

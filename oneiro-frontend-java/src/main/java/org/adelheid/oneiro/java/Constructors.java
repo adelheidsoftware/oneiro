@@ -21,6 +21,7 @@ import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.ElementFilter;
 import org.adelheid.oneiro.lua.Block;
@@ -67,13 +68,25 @@ final class Constructors {
 		if (inner) {
 			parameters.add(outerParameter);
 		}
-		// A record's implicit or compact canonical constructor takes the components and assigns them after its body
+		// A record's implicit or compact canonical constructor takes the components as parameters, and after its body
+		// assigns each to the field its accessor reads
 		List<String> components = new ArrayList<>();
+		List<String> componentFields = new ArrayList<>();
 		boolean record = owner.getKind() == ElementKind.RECORD;
 		if (record && (constructor == null
 				|| unit.elements.isCompactConstructor((ExecutableElement) unit.element(constructor)))) {
-			owner.getRecordComponents().forEach(component ->
-					components.add(unit.names.luaName(component.getSimpleName().toString())));
+			List<? extends RecordComponentElement> recordComponents = owner.getRecordComponents();
+			for (int index = 0; index < recordComponents.size(); index++) {
+				RecordComponentElement component = recordComponents.get(index);
+				componentFields.add(unit.types.memberName(component.getAccessor()));
+				// The implicit constructor has no code of its own, which a parameter's name could clash with
+				if (constructor == null) {
+					components.add(unit.names.luaName(component.getSimpleName().toString()));
+				} else {
+					ExecutableElement compact = (ExecutableElement) unit.element(constructor);
+					components.add(unit.codeLocalName(compact.getParameters().get(index), constructor));
+				}
+			}
 			parameters.addAll(components);
 		}
 		boolean varargs = constructor != null && ((ExecutableElement) unit.element(constructor)).isVarArgs();
@@ -151,8 +164,8 @@ final class Constructors {
 			references.addAll(unit.assembly().references(constructor));
 			origin = unit.origin(constructor);
 		}
-		for (String component : components) {
-			add(entries, List.of(assignToSelf(component, name(component))), pending);
+		for (int index = 0; index < components.size(); index++) {
+			add(entries, List.of(assignToSelf(componentFields.get(index), name(components.get(index)))), pending);
 		}
 		if (!(entries.getLast().statement() instanceof Statement.Return)) {
 			add(entries, List.of(Block.Entry.of(new Statement.Return(List.of(name("self"))))), pending);

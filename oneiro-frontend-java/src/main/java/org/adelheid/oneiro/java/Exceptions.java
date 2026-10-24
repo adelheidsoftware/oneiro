@@ -266,7 +266,7 @@ final class Exceptions {
 			TypeMirror type;
 			if (resource instanceof VariableTree variable) {
 				body.localVariable(variable).forEach(statement -> declared.add(Block.Entry.of(statement)));
-				closed = name(unit.names.luaName(variable.getName().toString()));
+				closed = name(unit.codeLocalName(unit.element(variable), variable));
 				type = unit.type(variable);
 			} else {
 				closed = body.expression((ExpressionTree) resource);

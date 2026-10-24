@@ -7,6 +7,7 @@ import static org.adelheid.oneiro.lua.Expression.name;
 import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.NewClassTree;
@@ -205,6 +206,12 @@ final class ModuleAssembly {
 			public Void visitNewClass(NewClassTree node, Void unused) {
 				note(unit.trees.getElement(getCurrentPath()));
 				return super.visitNewClass(node, null);
+			}
+
+			@Override
+			public Void visitMemberReference(MemberReferenceTree node, Void unused) {
+				note(unit.trees.getElement(getCurrentPath()));
+				return super.visitMemberReference(node, null);
 			}
 
 			private void note(@Nullable Element element) {

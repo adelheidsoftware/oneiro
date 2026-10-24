@@ -512,7 +512,7 @@ final class BodyLowering {
 			throw new Rejection(variable, ((DeclaredType) type).asElement().getSimpleName() + " stands for several Lua"
 					+ " values, which only a local can receive, from a call; pass its components one by one instead.");
 		}
-		return unit.names.luaName(javaName);
+		return unit.codeLocalName(unit.element(variable), variable);
 	}
 
 	/** An expression used as a statement; usually one Lua statement, but each chained {@code append} is its own. */
@@ -894,7 +894,7 @@ final class BodyLowering {
 		}
 		return switch (element.getKind()) {
 			case LOCAL_VARIABLE, PARAMETER, RESOURCE_VARIABLE, EXCEPTION_PARAMETER, BINDING_VARIABLE ->
-					aliases.getOrDefault(element, name(unit.names.luaName(javaName)));
+					aliases.getOrDefault(element, name(unit.codeLocalName(element, identifier)));
 			case FIELD -> field((VariableElement) element, null, identifier);
 			case ENUM_CONSTANT -> enumConstant((VariableElement) element, identifier);
 			default -> throw Rejection.notYet(identifier, "Using " + javaName + " as a value");

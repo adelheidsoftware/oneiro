@@ -29,6 +29,7 @@ only when it uses them. Each one is listed in [Helpers](#helpers).
 | `import <root>.core.Row;` (used) | `local Row = require("src/core/row")` | In import order, after the header. Unused imports produce nothing. |
 | `import static <root>.core.Row.complete;` | `local Row = require("src/core/row")`, calls become `Row.complete(...)` | |
 | Name that is a Lua keyword (`end`, `local`, `nil`, `repeat`, ...), a Lua global the generated code calls (`table`, `string`, `type`, `pairs`, `formatStr`, ...), or the name of a helper the module uses | The name with a trailing underscore: `end_`, `table_` | Applies to locals, parameters and private members; public members are fields of the module table and keep their names. |
+| Local or parameter named like a private method or static field of the file, a member of the plugin class, or a class, that the same method uses: `int step = n - 1; return step(step);` in a private method `step` | The local with a trailing underscore, `local step_ = n - 1` | Java tells a method's locals from the file's members, but in Lua all of them are locals, so the local would hide the member. A local whose method does not use the member keeps its name. |
 | Identifier with non-ASCII letters | *Never*: "Lua names are ASCII only; rename `größe`." | |
 
 ## Classes and members
