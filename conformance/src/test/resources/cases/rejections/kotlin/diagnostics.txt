@@ -1,0 +1,167 @@
+plugin/Clash.kt:3: warning: Clash has no KDoc, but every Lua file starts with a comment that says what it does; add a KDoc comment to it.
+class Clash {
+^
+
+plugin/Clash.kt:7: error: The property count and the function count() would share one slot in the Lua table; rename one.
+	fun count(): Int {
+	^
+
+plugin/Gaps.kt:27: error: In Lua, the private members and nested classes of the classes in a file are locals of one scope, so two of them cannot both be named helper; rename one.
+		private fun helper(): Int {
+		^
+
+plugin/Gaps.kt:33: error: In Lua when is a statement, not a value; give its value to a return, a local or an assignment of its own.
+		return 1 + when (value) {
+		           ^
+
+plugin/Gaps.kt:40: error: Lua has no runtime type information, so a value has no class to read; test it with is instead.
+		return value::class.simpleName
+		       ^
+
+plugin/Gaps.kt:44: error: Lua has no regular expressions, so split takes only a string separator that stands for itself, such as a comma.
+		return text.split(Regex("""\s+""")).size
+		                  ^
+
+plugin/Gaps.kt:48: error: Kotlin evaluates both sides of and, but Lua's skips the right side when the left decides; evaluate the right side into a local first.
+		return ready and values.isEmpty()
+		       ^
+
+plugin/Gaps.kt:52: error: In Lua set is a statement, not a value; call it on its own line.
+		val old = values.set(0, 1)
+		          ^
+
+plugin/Gaps.kt:58: error: Lua compares table keys by identity, so value-equal keys would not match; key the map by a string or number.
+		map[Point(1, 2)] = 3
+		    ^
+
+plugin/Gaps.kt:63: error: Lua tables cannot hold nil, so a list, map or set cannot store null.
+		names.add(null)
+		          ^
+
+plugin/Gaps.kt:71: error: Lua's break and continue only reach the innermost loop; move the loops into a function and return from it.
+					continue@rows
+					^
+
+plugin/Gaps.kt:84: error: The client's formatStr drops trailing zeros for %g, which Kotlin keeps; use %f or %e.
+		return "%g".format(value)
+		       ^
+
+plugin/Gaps.kt:88: error: The client's formatStr adds no digit grouping, so %,d cannot print as Kotlin prints it.
+		return "%,d".format(value)
+		       ^
+
+plugin/Gaps.kt:92: error: Kotlin generates hashCode() for a data class, but its Lua table has no such function; use the class's properties instead.
+		return point.hashCode()
+		       ^
+
+plugin/Gaps.kt:96: error: The client has no os library to read the calendar from, so %t has nothing to format; format the parts yourself with %d.
+		return "%tF".format(millis)
+		       ^
+
+plugin/Gaps.kt:100: error: Kotlin's %b of anything but a boolean prints whether it is null; pass that test, such as value != null, instead.
+		return "%b".format(name)
+		                   ^
+
+plugin/Gaps.kt:104: error: Lua would evaluate this position twice; store it in a local first.
+		return text[text.indexOf(" ") + 1]
+		            ^
+
+plugin/Gaps.kt:108: error: A Lua string holds bytes, and 'é' takes several, so Lua has no one number for it; compare it as a char, or use its number, 233, as an Int.
+		return 'é' - 'a'
+		       ^
+
+plugin/Gaps.kt:112: error: Calling kotlin.collections.distinct is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+		return names.distinct()
+		       ^
+
+plugin/Gaps.kt:116: error: In Lua a chain of collection functions is a loop, which runs as statements; make the chain the whole value of a local, an assignment or a return, or a forEach statement of its own.
+		return 1 + names.count { it.isNotEmpty() }
+		           ^
+
+plugin/Gaps.kt:120: error: A chain's loop sees one element at a time, so it sorts only what it collects; sort at the end of the chain, or sort the list afterwards.
+		return names.sorted().filter { it.isNotEmpty() }
+		       ^
+
+plugin/Gaps.kt:124: error: Lua's for loop walks tables, not iterator objects; give the class a function that returns its list, and loop over that.
+	abstract class Basket : Iterable<String>
+	^
+
+plugin/Gaps.kt:136: error: A value of Step is a Lua function, which carries no methods; make describe() a function outside the interface that takes the Step.
+		return step.describe()
+		       ^
+
+plugin/Gaps.kt:140: error: Lua has none of ArrayList's code to inherit; keep one in a property instead of extending it.
+	class Names : ArrayList<String>()
+	^
+
+plugin/Misuse.kt:13: error: Only a @LuaModule declaration has external functions; they stand for Lua functions that exist already.
+	external fun outside(): Int
+	^
+
+plugin/Misuse.kt:16: error: Kotlin generates toString() for a data class, but its Lua table has no such function; give Point a toString() function, or put its properties into the text instead.
+		return "point $point"
+		               ^
+
+plugin/Misuse.kt:20: error: Calling kotlin.Any.hashCode is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+		return count.hashCode()
+		       ^
+
+plugin/Pair.kt:7: error: Lua has one module per file; move Second into a file of its own.
+class Second
+^
+
+plugin/Rejected.kt:10: error: Lua functions have no parameter types, so two functions cannot share a name; rename one (for example sumAll, sumOne), or give one function default values for the parameters the others leave out.
+	fun sum(a: Int, b: Int, c: Int): Int {
+	^
+
+plugin/Rejected.kt:15: error: Plugins run on one thread, and Lua has no threads to synchronise; run the block's code without synchronized.
+		synchronized(this) {
+		^
+
+plugin/Rejected.kt:20: error: Kotlin's assert runs only where the JVM enables assertions, but Lua's assert always runs; write check(condition) { "..." } instead.
+		assert(ready) { "not ready" }
+		^
+
+plugin/Rejected.kt:25: error: Lua has no increment or decrement expressions; put it on a line of its own.
+		val next = current++
+		           ^
+
+plugin/Rejected.kt:30: error: A new array from arrayOfNulls is full of null, and Lua arrays cannot hold nil; use a list and add elements.
+		val names = arrayOfNulls<String>(count)
+		            ^
+
+plugin/Rejected.kt:37: error: Lua's break and continue only reach the innermost loop; move the loops into a function and return from it.
+				break@outer
+				^
+
+plugin/Store.kt:9: error: A @LuaModule declaration's properties take their values from the Lua module; declare them without a value and with external accessors: val LEVEL: Int external get.
+	var limit = 3
+	^
+
+plugin/Store.kt:11: error: Every function of a @LuaModule declaration is external: it stands for a function the Lua module defines.
+	fun count(): Int {
+	^
+
+plugin/Umlauts.kt:6: error: Lua names are ASCII letters, digits and underscores only; rename größe.
+	fun größe(): Int {
+	^
+
+plugin/Waiting.kt:11: error: The client gives plugins no clock to read; to measure time, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		return System.currentTimeMillis()
+		       ^
+
+plugin/Waiting.kt:15: error: The client gives plugins no clock to read; to measure time, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		return Instant.now().toEpochMilli()
+		       ^
+
+plugin/Waiting.kt:19: error: Plugins run on the client's one thread and cannot start threads or schedule work of their own; do the work in an event callback, and to do it later, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		Thread(work).start()
+		^
+
+plugin/Waiting.kt:23: error: Plugins run on the client's one thread and cannot start threads or schedule work of their own; do the work in an event callback, and to do it later, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		val executor = Executors.newSingleThreadScheduledExecutor()
+		               ^
+
+plugin/Waiting.kt:24: error: Plugins run on the client's one thread and cannot start threads or schedule work of their own; do the work in an event callback, and to do it later, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		executor.scheduleAtFixedRate(work, 0, 1, TimeUnit.SECONDS)
+		^

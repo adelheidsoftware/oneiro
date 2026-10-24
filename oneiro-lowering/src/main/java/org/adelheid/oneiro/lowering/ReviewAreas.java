@@ -3,8 +3,8 @@ package org.adelheid.oneiro.lowering;
 /**
  * The areas of the API that Jagex's moderators review closely, which the bindings mark {@code @LuaReview}, and the
  * warning at a use in one: what the use does, what moderation looks at there, and how to silence the area's warnings
- * once the plugin meets that. Both front ends warn alike; only the annotation that silences a warning is each
- * language's own.
+ * once the plugin meets that. Both front ends warn alike; only the annotation that silences a warning, and where it
+ * goes, is each language's own.
  */
 public final class ReviewAreas {
 
@@ -16,11 +16,15 @@ public final class ReviewAreas {
 	 *
 	 * @param use the use as the warning starts it: {@code Chat.AddMessage}, or {@code Subscribing to ChatMessage}
 	 * @param area the area the bindings give the member, such as {@code chat}
-	 * @param silencer the annotation that silences the area's warnings, such as {@code @SuppressWarnings}
+	 * @param language the plugin's language, whose annotation silences the area's warnings: Java's
+	 *     {@code @SuppressWarnings} on a method or class, Kotlin's {@code @Suppress} on a function, class or file
 	 */
-	public static String warning(String use, String area, String silencer) {
-		return use + " " + lookedAt(area) + " Once the plugin meets this, " + silencer + "(\"oneiro:" + area
-				+ "\") on the method or class silences this warning.";
+	public static String warning(String use, String area, SourceLanguage language) {
+		String silencer = switch (language) {
+			case JAVA -> "@SuppressWarnings(\"oneiro:" + area + "\") on the method or class";
+			case KOTLIN -> "@Suppress(\"oneiro:" + area + "\") on the function, class or file";
+		};
+		return use + " " + lookedAt(area) + " Once the plugin meets this, " + silencer + " silences this warning.";
 	}
 
 	/** The key of an area's warnings, which the silencing annotation names: {@code oneiro:chat}. */

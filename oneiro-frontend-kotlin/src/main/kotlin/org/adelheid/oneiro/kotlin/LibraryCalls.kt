@@ -4,9 +4,11 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.lowering.Helper
 import org.adelheid.oneiro.lowering.IndexArithmetic
+import org.adelheid.oneiro.lowering.Inlining
 import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
+import org.adelheid.oneiro.lua.LuaNames
 import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.UnaryOperator
 import org.jetbrains.kotlin.KtNodeTypes
@@ -21,12 +23,17 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.StandardClassIds
+import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtConstantExpression
+import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
+import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtPsiUtil
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
+import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtValueArgument
 
 /**
@@ -39,7 +46,8 @@ internal class LibraryCalls(private val body: BodyLowering) {
 
 	private val unit = body.unit
 	private val types = body.types
-	private val strings = StringMembers(body)
+	val strings = StringMembers(body)
+	private val copies = CollectionCopies(body)
 
 	/** How Lua holds a collection, which decides what its members become. */
 	enum class Kind { SEQUENCE, MAP, SET }
@@ -121,6 +129,10 @@ internal class LibraryCalls(private val body: BodyLowering) {
 				else -> creation(where, name, arguments)
 			}
 		}
+		if (lowered == null && function.callableId?.packageName?.asString() == "kotlin.collections" &&
+			name in CollectionLoops.FUNCTIONS) {
+			throw Rejection(where, CHAIN_IN_STATEMENT)
+		}
 		return lowered ?: throw Rejection.notYet(where, "Calling ${display(function)}")
 	}
 
@@ -140,6 +152,16 @@ internal class LibraryCalls(private val body: BodyLowering) {
 				(name == "add" || name == "addLast") && arguments.size == 1 -> appended(receiver, arguments[0])
 				name == "addFirst" -> Statement.CallStatement(tableCall("insert", body.expression(receiver),
 					Expression.integer(1), element(arguments[0])))
+				// A sort in natural order, which the elements' < gives, and an object's __lt
+				name == "sort" && arguments.isEmpty() -> Statement.CallStatement(tableCall("sort",
+					body.expression(receiver)))
+				name == "sortWith" -> Statement.CallStatement(tableCall("sort", body.expression(receiver),
+					body.comparators.lessThan(arguments[0])))
+				name == "sortBy" || name == "sortByDescending" -> Statement.CallStatement(tableCall("sort",
+					body.expression(receiver), body.comparators.byKey(arguments[0], name == "sortByDescending")))
+				name == "sortDescending" && arguments.isEmpty() -> Statement.CallStatement(tableCall("sort",
+					body.expression(receiver), body.comparators.reversed(where)))
+				name == "addAll" && arguments.size == 1 -> copies.addedAll(receiver, Kind.SEQUENCE, arguments[0])
 				name == "add" && arguments.size == 2 -> Statement.CallStatement(tableCall("insert",
 					body.expression(receiver), position(arguments[0]), element(arguments[1])))
 				name == "set" -> Statement.assignment(Expression.Index(body.expression(receiver),
@@ -156,6 +178,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 					Statement.assignment(entry(receiver, arguments[0]), Expression.Nil())
 				}
 				"getOrPut", "putIfAbsent" -> storedIfAbsent(name, receiver, arguments)
+				"putAll" -> copies.addedAll(receiver, Kind.MAP, arguments[0])
 				else -> null
 			}
 			Kind.SET -> when (name) {
@@ -167,6 +190,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 					checkKey(arguments[0])
 					Statement.assignment(entry(receiver, arguments[0]), Expression.Nil())
 				}
+				"addAll" -> copies.addedAll(receiver, Kind.SET, arguments[0])
 				else -> null
 			}
 			null -> null
@@ -214,7 +238,12 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 */
 	private fun loopOver(where: KtExpression, name: String?, kind: Kind, receiver: KtExpression,
 		arguments: LibraryArguments): List<Statement>? {
-		val lambda = arguments.singleOrNull() as? KtLambdaExpression ?: return null
+		val argument = arguments.singleOrNull() ?: return null
+		val lambda = argument as? KtLambdaExpression ?: return if (name == "forEach") {
+			listOf(calledFor(kind, receiver, argument))
+		} else {
+			null
+		}
 		return when (name) {
 			"forEach" -> {
 				val inlined = body.lambdas.inline(lambda, name)
@@ -230,6 +259,26 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			"removeAll", "removeIf" -> listOf(removed(where, name, kind, receiver, lambda))
 			else -> null
 		}
+	}
+
+	/**
+	 * `forEach(f)` with a function rather than a lambda: a loop that calls it with each element, or with each key and
+	 * value of a map.
+	 */
+	private fun calledFor(kind: Kind, receiver: KtExpression, function: KtExpression): Statement {
+		val values = when (kind) {
+			Kind.MAP -> listOf(body.invent("key", function), body.invent("value", function))
+			else -> listOf(body.invent("item", function))
+		}
+		val names = if (kind == Kind.SEQUENCE) listOf("_") + values else values
+		val walk = if (kind == Kind.SEQUENCE) "ipairs" else "pairs"
+		// A reference's small function is opened into the call it makes
+		val lowered = body.expression(function)
+		val arguments = values.map(Expression::name)
+		val call = Inlining.statement(lowered, arguments)
+			?: Statement.CallStatement(Expression.Call(lowered, arguments))
+		return Statement.GenericFor(names, listOf(Expression.call(Expression.name(walk), body.expression(receiver))),
+			Block.of(call))
 	}
 
 	/**
@@ -324,31 +373,109 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			val size = arguments.singleOrNull() ?: throw Rejection.notYet(where, "An array with an initializer")
 			return helper(Helper.FILLED, body.expression(size), PRIMITIVE_ARRAYS.getValue(name))
 		}
-		if (arguments.isNotEmpty() && name != "java.lang.StringBuilder") {
+		if (name == "java.lang.StringBuilder") {
+			return body.strings.newBuilder(arguments)
+		}
+		val source = arguments.singleOrNull()
+		val sourceType = source?.let(::type)
+		// A capacity, which a Lua table needs no word about
+		if (sourceType != null && types.isIntegral(sourceType)) {
+			return construct(where, type, LibraryArguments(arguments.where, listOf(), mapOf()))
+		}
+		val comparator = sourceType?.let { with(unit.session) { it.expandedSymbol?.classId?.asFqNameString() } } ==
+			"java.util.Comparator"
+		if (arguments.size > 1) {
 			throw Rejection.notYet(where, "Creating a ${type.shortClassName} from arguments")
 		}
-		return when (name) {
+		val empty = when (name) {
 			"java.util.ArrayList", "java.util.HashMap", "java.util.HashSet" -> Expression.Table(listOf())
-			"java.lang.StringBuilder" -> body.strings.newBuilder(arguments)
 			"java.util.LinkedHashMap", "java.util.LinkedHashSet" -> helper(Helper.ORDERED_TABLE)
+			// A sorted map or set orders its keys when pairs walks them, by its comparator or by <
+			"java.util.TreeMap", "java.util.TreeSet" ->
+				if (comparator) helper(Helper.SORTED_TABLE, body.comparators.lessThan(source))
+				else helper(Helper.SORTED_TABLE)
 			else -> throw Rejection.notYet(where, "Creating a ${type.shortClassName}")
+		}
+		if (source == null || comparator) {
+			return empty
+		}
+		// A copy of another collection
+		return when {
+			name == "java.util.ArrayList" -> copies.listCopy(where, source)
+			name.endsWith("Set") -> copies.filled(where, empty, Kind.SET, source)
+			else -> copies.filled(where, empty, Kind.MAP, source)
 		}
 	}
 
 	/**
-	 * The library's functions that make a collection: `listOf(a, b)` is `{ a, b }`. `mutableMapOf()` and
-	 * `mutableSetOf()` keep the order their keys were added, as Kotlin promises, through a helper; `hashMapOf()` and
-	 * `hashSetOf()` are plain tables.
+	 * The library's functions that make a collection: `listOf(a, b)` is `{ a, b }`. A map or set keeps the order its
+	 * keys were added, as Kotlin promises, through a helper, which a map's entries and a set's elements are added to
+	 * in order; `hashMapOf()` and `hashSetOf()` are plain tables, `{ a = 1 }` and `{ a = true }`.
 	 */
 	private fun creation(where: KtExpression, name: String, arguments: List<KtExpression>): Expression? = when (name) {
 		"listOf", "mutableListOf", "arrayListOf", "arrayOf", "intArrayOf", "longArrayOf", "doubleArrayOf",
 		"booleanArrayOf", "emptyList", "emptyArray" -> Expression.Table(arguments.map {
 			Expression.TableField.Positional(if (isSpread(it)) body.argument(it) else element(it))
 		})
-		"hashMapOf", "hashSetOf", "emptyMap", "emptySet" -> empty(where, name, arguments, Expression.Table(listOf()))
+		"emptyMap", "emptySet" -> Expression.Table(listOf())
+		"hashMapOf" -> Expression.Table(arguments.map { argument ->
+			val (key, value) = entryOf(argument)
+			entry(key, element(value))
+		})
+		"hashSetOf" -> Expression.Table(arguments.map { entry(it, Expression.BooleanLiteral(true)) })
+		// A read-only map or set with nothing in it has no order to keep
+		"mapOf", "setOf" -> if (arguments.isEmpty()) Expression.Table(listOf()) else ordered(name, arguments)
 		"mutableMapOf", "linkedMapOf", "mutableSetOf", "linkedSetOf" ->
-			empty(where, name, arguments, helper(Helper.ORDERED_TABLE))
+			if (arguments.isEmpty()) helper(Helper.ORDERED_TABLE) else ordered(name, arguments)
+		"sortedMapOf", "sortedSetOf" -> empty(where, name, arguments, helper(Helper.SORTED_TABLE))
+		"arrayOfNulls" -> throw Rejection(where, "A new array from arrayOfNulls is full of null, and Lua arrays cannot"
+			+ " hold nil; use a list and add elements.")
+		"synchronized" -> throw Rejection(where, "Plugins run on one thread, and Lua has no threads to synchronise;"
+			+ " run the block's code without synchronized.")
+		"assert" -> throw Rejection(where, "Kotlin's assert runs only where the JVM enables assertions, but Lua's"
+			+ " assert always runs; write check(condition) { \"...\" } instead.")
 		else -> null
+	}
+
+	/**
+	 * A map or set that keeps its keys' order, filled in that order: a map from a list of its keys and values in turn,
+	 * `putEntries(orderedTable(), { "a", 1, "b", 2 })`, and a set from a list of its elements.
+	 */
+	private fun ordered(name: String, arguments: List<KtExpression>): Expression {
+		if (name.lowercase().contains("set")) {
+			arguments.forEach(::checkKey)
+			return helper(Helper.ADD_ELEMENTS, helper(Helper.ORDERED_TABLE), Expression.Table(arguments.map {
+				Expression.TableField.Positional(element(it))
+			}))
+		}
+		val list = arguments.flatMap { argument ->
+			val (key, value) = entryOf(argument)
+			checkKey(key)
+			listOf(Expression.TableField.Positional(element(key)), Expression.TableField.Positional(element(value)))
+		}
+		return helper(Helper.PUT_ENTRIES, helper(Helper.ORDERED_TABLE), Expression.Table(list))
+	}
+
+	/** The key and value of an entry, `key to value`. */
+	private fun entryOf(argument: KtExpression): Pair<KtExpression, KtExpression> {
+		val pair = KtPsiUtil.safeDeparenthesize(argument) as? KtBinaryExpression
+		val key = pair?.left
+		val value = pair?.right
+		if (pair?.operationReference?.getReferencedName() != "to" || key == null || value == null) {
+			throw Rejection.notYet(argument, "An entry not written as key to value")
+		}
+		return key to value
+	}
+
+	/** `name = value` for a key that is a string literal and a Lua name, otherwise `[key] = value`. */
+	private fun entry(key: KtExpression, value: Expression): Expression.TableField {
+		checkKey(key)
+		val literal = (key as? KtStringTemplateExpression)?.takeIf { !it.hasInterpolation() }?.entries?.singleOrNull()
+		val text = (literal as? KtLiteralStringTemplateEntry)?.text
+		if (text != null && LuaNames.isName(text)) {
+			return Expression.TableField.Named(text, value)
+		}
+		return Expression.TableField.Keyed(body.expression(key), value)
 	}
 
 	private fun empty(where: KtExpression, name: String, arguments: List<KtExpression>, table: Expression): Expression {
@@ -368,14 +495,31 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			// An empty list's first and last are nil, which is firstOrNull's and lastOrNull's null
 			"first", "firstOrNull" -> if (arguments.isEmpty()) Expression.Index(list, Expression.integer(1)) else null
 			"last", "lastOrNull" -> if (arguments.isEmpty()) Expression.Index(list, length(stable(receiver))) else null
-			"isEmpty" -> Expression.binary(length(list), BinaryOperator.EQUAL, Expression.integer(0))
-			"isNotEmpty" -> Expression.binary(length(list), BinaryOperator.GREATER, Expression.integer(0))
+			"isEmpty", "none" -> if (arguments.isEmpty()) {
+				Expression.binary(length(list), BinaryOperator.EQUAL, Expression.integer(0))
+			} else {
+				null
+			}
+			"isNotEmpty", "any" -> if (arguments.isEmpty()) {
+				Expression.binary(length(list), BinaryOperator.GREATER, Expression.integer(0))
+			} else {
+				null
+			}
+			"count" -> if (arguments.isEmpty()) length(list) else null
 			"contains" -> helper(Helper.LIST_CONTAINS, list, body.expression(arguments[0]))
 			"indexOf" -> helper(Helper.LIST_INDEX_OF, list, body.expression(arguments[0]))
 			"removeAt" -> tableCall("remove", list, position(arguments[0]))
 			"removeFirst", "removeFirstOrNull" -> tableCall("remove", list, Expression.integer(1))
 			"removeLast" -> tableCall("remove", list)
 			"joinToString" -> joined(where, receiver, list, arguments)
+			// A copy: Lua's table.move of every element into a new table
+			"toMutableList", "toList" -> if (arguments.isEmpty()) {
+				val copied = stable(receiver)
+				tableCall("move", copied, Expression.integer(1), length(copied), Expression.integer(1),
+					Expression.Table(listOf()))
+			} else {
+				null
+			}
 			"concatToString" -> tableCall("concat", list)
 			"add", "set" -> throw Rejection(where, STATEMENT_ONLY.format(name))
 			else -> null
@@ -440,7 +584,10 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	/** The members of a map. */
 	private fun map(where: KtExpression, name: String, receiver: KtExpression, arguments: List<KtExpression>):
 		Expression? = when (name) {
-		"get" -> index(where, receiver, arguments[0])
+		"firstKey" -> helper(Helper.FIRST_KEY, body.expression(receiver))
+		"lastKey" -> helper(Helper.LAST_KEY, body.expression(receiver))
+		// A key getValue finds, as it must, reads as any other; a missing one is nil, where Kotlin throws
+		"get", "getValue" -> index(where, receiver, arguments[0])
 		"getOrDefault" -> {
 			checkKey(arguments[0])
 			orDefault(entry(receiver, arguments[0]), arguments[1])
@@ -450,8 +597,9 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			checkKey(arguments[0])
 			present(entry(receiver, arguments[0]))
 		}
-		"isEmpty" -> empty(body.expression(receiver))
-		"isNotEmpty" -> Expression.Unary(UnaryOperator.NOT, empty(body.expression(receiver)))
+		"isEmpty", "none" -> if (arguments.isEmpty()) empty(body.expression(receiver)) else null
+		"isNotEmpty", "any" -> if (arguments.isEmpty()) notEmpty(body.expression(receiver)) else null
+		"count" -> if (arguments.isEmpty()) helper(Helper.COUNT, body.expression(receiver)) else null
 		"put", "set", "remove" -> throw Rejection(where, STATEMENT_ONLY.format(name))
 		else -> null
 	}
@@ -460,8 +608,12 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	private fun set(where: KtExpression, name: String, receiver: KtExpression, arguments: List<KtExpression>):
 		Expression? = when (name) {
 		"contains" -> contains(where, arguments[0], body.expression(arguments[0]), receiver)
-		"isEmpty" -> empty(body.expression(receiver))
-		"isNotEmpty" -> Expression.Unary(UnaryOperator.NOT, empty(body.expression(receiver)))
+		// The first and last keys pairs gives, which a sorted set's are
+		"first" -> if (arguments.isEmpty()) helper(Helper.FIRST_KEY, body.expression(receiver)) else null
+		"last" -> if (arguments.isEmpty()) helper(Helper.LAST_KEY, body.expression(receiver)) else null
+		"isEmpty", "none" -> if (arguments.isEmpty()) empty(body.expression(receiver)) else null
+		"isNotEmpty", "any" -> if (arguments.isEmpty()) notEmpty(body.expression(receiver)) else null
+		"count" -> if (arguments.isEmpty()) helper(Helper.COUNT, body.expression(receiver)) else null
 		"add", "remove" -> throw Rejection(where, STATEMENT_ONLY.format(name))
 		else -> null
 	}
@@ -585,16 +737,19 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * `equals` can be one, and neither can a value the client hands out, a new proxy each time it is read. An API
 	 * enum's constants are plain Lua values, which make good keys.
 	 */
-	private fun checkKey(key: KtExpression): Unit = with(unit.session) {
-		val symbol = type(key)?.expandedSymbol ?: return
+	private fun checkKey(key: KtExpression): Unit = checkKey(key, type(key))
+
+	/** A key's check, by the type of the keys, as for the elements a chain's `toSet()` collects. */
+	fun checkKey(where: PsiElement, type: KaType?): Unit = with(unit.session) {
+		val symbol = type?.expandedSymbol ?: return
 		val isData = (symbol as? KaNamedClassSymbol)?.isData == true
 		if (unit.isPluginType(symbol) && (isData || declaresEquals(symbol))) {
-			throw Rejection(key, "Lua compares table keys by identity, so value-equal keys would not match; key the map"
-				+ " by a string or number.")
+			throw Rejection(where, "Lua compares table keys by identity, so value-equal keys would not match; key the"
+				+ " map by a string or number.")
 		}
 		if (body.api.isApi(symbol) && symbol.classKind != KaClassKind.ENUM_CLASS) {
 			val name = unit.annotations.value(symbol, Annotations.LUA_TYPE) ?: symbol.classId?.shortClassName
-			throw Rejection(key, "The client hands out a new $name object each time one is read, and Lua"
+			throw Rejection(where, "The client hands out a new $name object each time one is read, and Lua"
 				+ " compares table keys by identity, so the map or set would not find it again; key it by a number or"
 				+ " string the value carries, such as its id or uid.")
 		}
@@ -618,13 +773,30 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	private fun empty(table: Expression): Expression =
 		Expression.binary(Expression.call(Expression.name("next"), table), BinaryOperator.EQUAL, Expression.Nil())
 
+	private fun notEmpty(table: Expression): Expression =
+		Expression.binary(Expression.call(Expression.name("next"), table), BinaryOperator.NOT_EQUAL, Expression.Nil())
+
+	/** A map's `keys`, `values` or `entries`, which Lua walks on the map itself. */
+	class MapView(val map: KtExpression, val selector: String)
+
+	/** The map view a collection is, or null when it is none. */
+	fun mapView(collection: KtExpression): MapView? {
+		val qualified = collection as? KtDotQualifiedExpression ?: return null
+		val selector = (qualified.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+		val receiverType = type(qualified.receiverExpression)
+		if (selector !in setOf("keys", "values", "entries") || receiverType == null || !types.isMap(receiverType)) {
+			return null
+		}
+		return MapView(qualified.receiverExpression, selector)
+	}
+
 	private fun isSpread(value: KtExpression): Boolean = (value.parent as? KtValueArgument)?.getSpreadElement() != null
 
 	private fun isCall(expression: KtExpression): Boolean =
 		expression is KtCallExpression || (expression as? KtQualifiedExpression)?.selectorExpression is KtCallExpression
 
 	/** A receiver the Lua names twice, as in `list[#list + 1] = x`, which therefore must not contain a call. */
-	private fun stable(receiver: KtExpression): Expression {
+	fun stable(receiver: KtExpression): Expression {
 		if (isCall(receiver)) {
 			throw Rejection(receiver, "Lua needs this value twice; store it in a local first.")
 		}
@@ -652,6 +824,9 @@ internal class LibraryCalls(private val body: BodyLowering) {
 
 		const val STATEMENT_ONLY = "In Lua %s is a statement, not a value; call it on its own line."
 
+		const val CHAIN_IN_STATEMENT = "In Lua a chain of collection functions is a loop, which runs as statements; " +
+			"make the chain the whole value of a local, an assignment or a return, or a forEach statement of its own."
+
 		/** The limits of Kotlin's integers, which Lua's integers, of 64 bits, hold. */
 		private val LIMITS: Map<String, (LibraryCalls) -> Expression> = mapOf(
 			"kotlin.Int.Companion.MAX_VALUE" to { _ -> Expression.integer(Int.MAX_VALUE.toLong()) },
@@ -661,7 +836,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		)
 
 		/** The elements `table.concat` joins as Kotlin writes them: strings and numbers. */
-		private val JOINABLE = setOf(StandardClassIds.String, StandardClassIds.Char, StandardClassIds.Int,
+		val JOINABLE = setOf(StandardClassIds.String, StandardClassIds.Char, StandardClassIds.Int,
 			StandardClassIds.Long, StandardClassIds.Short, StandardClassIds.Byte, StandardClassIds.Double,
 			StandardClassIds.Float)
 

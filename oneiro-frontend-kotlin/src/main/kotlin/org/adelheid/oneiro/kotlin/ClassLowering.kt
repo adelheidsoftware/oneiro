@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.kotlin
 
 import com.intellij.psi.PsiElement
+import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Comment
 import org.adelheid.oneiro.lua.Expression
@@ -34,6 +35,7 @@ import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
 internal class ClassLowering(private val unit: FileLowering) {
 
 	private val functions = Functions(unit)
+	private val inherited = InheritedMembers(unit)
 
 	/**
 	 * A class's or object's members, with its constants first: a `const val` has no effects and uses nothing, so it
@@ -48,7 +50,8 @@ internal class ClassLowering(private val unit: FileLowering) {
 
 	fun members(declaration: KtClassOrObject): List<Member> = when {
 		declaration is KtObjectDeclaration -> staticMembers(declaration, declaration.name!!)
-		declaration is KtClass && !declaration.isInterface() && !declaration.isEnum() -> classMembers(declaration)
+		declaration is KtClass && declaration.isInterface() -> interfaceMembers(declaration)
+		declaration is KtClass && !declaration.isEnum() -> classMembers(declaration)
 		else -> throw Rejection.notYet(declaration, "This kind of declaration")
 	}
 
@@ -63,12 +66,21 @@ internal class ClassLowering(private val unit: FileLowering) {
 	/** The class of the plugin's that a class extends, or null when it extends none. */
 	private fun superclass(declaration: KtClassOrObject): KaClassSymbol? = with(unit.session) {
 		val symbol = declaration.classSymbol ?: return null
-		val extended = symbol.superTypes.mapNotNull { it.expandedSymbol }.filter { it.classKind == KaClassKind.CLASS }
-		for (type in extended) {
+		val supertypes = symbol.superTypes.mapNotNull { it.expandedSymbol }
+		if (supertypes.any { it.classId?.asFqNameString() in ITERATORS }) {
+			throw Rejection(declaration, "Lua's for loop walks tables, not iterator objects; give the class a function"
+				+ " that returns its list, and loop over that.")
+		}
+		for (type in supertypes.filter { it.classKind == KaClassKind.CLASS }) {
 			if (unit.isPluginType(type)) {
 				return type
 			}
-			if (type.classId != StandardClassIds.Any) {
+			// Every class extends Any, and every enum Enum, which have no Lua of their own
+			if (type.classId != StandardClassIds.Any && type.classId != StandardClassIds.Enum) {
+				if (!ApiCalls(unit).isApi(type)) {
+					throw Rejection(declaration, "Lua has none of ${type.classId?.shortClassName}'s code to inherit;"
+						+ " keep one in a property instead of extending it.")
+				}
 				throw Rejection.notYet(declaration, "Extending ${type.classId?.asFqNameString()}")
 			}
 		}
@@ -178,6 +190,34 @@ internal class ClassLowering(private val unit: FileLowering) {
 		if (!constructorPlaced) {
 			members.add(0, constructor(declaration))
 		}
+		members += inherited.defaults(declaration, table)
+		members += inherited.metamethods(declaration, table)
+		return nested + constantsFirst(members)
+	}
+
+	/**
+	 * An interface's members: its default functions, as methods of its table that the classes implementing it copy,
+	 * and its companion object's members. Its abstract functions and properties have no code.
+	 */
+	private fun interfaceMembers(declaration: KtClass): List<Member> {
+		val table = declaration.name!!
+		val members = mutableListOf<Member>()
+		val nested = mutableListOf<Member>()
+		for (member in declaration.declarations) {
+			try {
+				when {
+					member is KtNamedFunction && member.hasBody() ->
+						members += functions.method(member, table, isPrivate(member))
+					member is KtNamedFunction -> {}
+					member is KtProperty && member.initializer == null && member.getter == null -> {}
+					member is KtObjectDeclaration && member.isCompanion() -> members += staticMembers(member, table)
+					member is KtClassOrObject -> nested += nestedType(member, declaration, table)
+					else -> throw Rejection.notYet(member, "This member of an interface")
+				}
+			} catch (rejection: Rejection) {
+				unit.reject(rejection)
+			}
+		}
 		return nested + constantsFirst(members)
 	}
 
@@ -193,7 +233,11 @@ internal class ClassLowering(private val unit: FileLowering) {
 			// An interface of abstract functions alone is a type, which has no Lua
 			nested is KtClass && nested.isInterface() && nested.declarations.all { it is KtNamedFunction &&
 				!it.hasBody() } -> listOf()
-			nested is KtClass && nested.isInterface() -> throw Rejection.notYet(nested, "An interface inside a class")
+			nested is KtClass && nested.isInterface() -> listOf(tableMember(nested, outer, outerTable, empty, false)) +
+				interfaceMembers(nested).map { it.after(nested) }
+			nested is KtClass && nested.isEnum() && isObjectEnum(nested) ->
+				listOf(tableMember(nested, outer, outerTable, empty, true)) +
+					objectEnumMembers(nested).map { it.after(nested) }
 			nested is KtClass && nested.isEnum() -> listOf(tableMember(nested, outer, outerTable, enumTable(nested),
 				false))
 			nested is KtClass -> listOf(tableMember(nested, outer, outerTable, classTable(nested), true)) +
@@ -234,8 +278,11 @@ internal class ClassLowering(private val unit: FileLowering) {
 	 * parameters, then each property's value and each `init` block, in declaration order. An inner class's
 	 * constructor takes the object it belongs to first and keeps it as `outer`; a subclass's object starts as its
 	 * superclass makes one.
+	 *
+	 * @param kept the values the constructor takes first and keeps under their names, as an object enum's constant
+	 *     keeps its `name` and `ordinal`
 	 */
-	private fun constructor(declaration: KtClass): Member {
+	private fun constructor(declaration: KtClass, kept: List<String> = listOf()): Member {
 		val body = BodyLowering(unit, declaration, true)
 		val self = Expression.name("self")
 		val entries = mutableListOf<Block.Entry>()
@@ -251,7 +298,10 @@ internal class ClassLowering(private val unit: FileLowering) {
 		}
 		val metatable = Expression.call(Expression.name("setmetatable"), created, Expression.name(declaration.name!!))
 		entries += Block.Entry.of(Statement.Local(listOf("self"), listOf(metatable)))
-		val parameters = mutableListOf<String>()
+		val parameters = kept.toMutableList()
+		for (value in kept) {
+			entries += Block.Entry.of(Statement.assignment(Expression.field(self, value), Expression.name(value)))
+		}
 		// A parameter a call leaves out gets its default before the object is made
 		entries.addAll(0, functions.defaults(declaration.primaryConstructorParameters, body).map(Block.Entry::of))
 		if (declaration.isInner()) {
@@ -259,7 +309,7 @@ internal class ClassLowering(private val unit: FileLowering) {
 			entries += Block.Entry.of(Statement.assignment(Expression.field(self, "outer"), Expression.name("outer")))
 		}
 		for (parameter in declaration.primaryConstructorParameters) {
-			val name = unit.names.luaName(parameter.name!!)
+			val name = unit.localName(parameter, parameter.name!!)
 			parameters += name
 			if (parameter.hasValOrVar()) {
 				entries += Block.Entry.of(Statement.assignment(Expression.field(self, unit.memberName(parameter)),
@@ -317,6 +367,86 @@ internal class ClassLowering(private val unit: FileLowering) {
 		return functions.parameterAnnotations(parameters, doc)
 	}
 
+	/**
+	 * An enum whose constants are objects: `Herb.new(name, ordinal, ...)`, which keeps the constant's name and its
+	 * place in the enum besides the constructor's properties; each constant, `Herb.GUAM = Herb.new("GUAM", 0, ...)`,
+	 * with its body's properties and functions; the enum's own functions; and `__lt`, which orders the constants as
+	 * they are declared.
+	 */
+	fun objectEnumMembers(declaration: KtClass): List<Member> {
+		val table = declaration.name!!
+		val members = mutableListOf(constructor(declaration, listOf("name", "ordinal")))
+		val nested = mutableListOf<Member>()
+		var ordinal = 0L
+		for (member in declaration.declarations) {
+			try {
+				when (member) {
+					is KtEnumEntry -> members += enumConstant(declaration, member, ordinal++)
+					is KtNamedFunction -> if (!member.hasModifier(KtTokens.ABSTRACT_KEYWORD)) {
+						members += functions.method(member, table, isPrivate(member))
+					}
+					is KtProperty -> {}
+					is KtObjectDeclaration -> if (member.isCompanion()) {
+						members += staticMembers(member, table)
+					} else {
+						nested += nestedType(member, declaration, table)
+					}
+					is KtClass -> nested += nestedType(member, declaration, table)
+					else -> throw Rejection.notYet(member, "This member of an enum")
+				}
+			} catch (rejection: Rejection) {
+				unit.reject(rejection)
+			}
+		}
+		val lessThan = Expression.binary(Expression.field(Expression.name("a"), "ordinal"), BinaryOperator.LESS,
+			Expression.field(Expression.name("b"), "ordinal"))
+		val order = Statement.FunctionDeclaration(listOf(table, "__lt"), null,
+			FunctionBody.of(listOf("a", "b"), Block.of(Statement.Return(listOf(lessThan)))))
+		val comment = Comment.line("Orders the constants as they are declared, as Kotlin's natural order does")
+		members += Member(listOf(), true, null, listOf(Block.Entry(order, Trivia(true, listOf(comment), null), null)))
+		return nested + members
+	}
+
+	/**
+	 * One constant of an object enum, `Herb.GUAM = Herb.new("GUAM", 0, 5291, 9)`; a body's properties are set on it,
+	 * and its functions, which replace the enum's, are its own.
+	 */
+	private fun enumConstant(declaration: KtClass, constant: KtEnumEntry, ordinal: Long): List<Member> {
+		val table = Expression.name(declaration.name!!)
+		val name = constant.name!!
+		val body = BodyLowering(unit, null, false)
+		val arguments = constant.initializerList?.initializers?.filterIsInstance<KtSuperTypeCallEntry>()?.firstOrNull()
+			?.valueArguments?.map {
+				body.expression(it.getArgumentExpression() ?: throw Rejection(constant, "This argument is empty."))
+			}
+			?: listOf()
+		val created = Expression.Call(Expression.field(table, "new"),
+			listOf(Expression.string(name), Expression.integer(ordinal)) + arguments)
+		val field = Expression.field(table, name)
+		val trivia = Trivia(unit.source.blankLineBefore(constant), declarationComments(constant),
+			unit.source.trailing(constant))
+		val origin = unit.source.position(unit.codeStart(constant))
+		val entries = mutableListOf(Block.Entry(Statement.assignment(field, created), trivia, origin))
+		val members = mutableListOf<Member>()
+		val inner = BodyLowering(unit, constant, true)
+		for (member in constant.body?.declarations ?: listOf()) {
+			when (member) {
+				is KtProperty -> {
+					val value = member.initializer ?: throw Rejection.notYet(member, "A property without a value")
+					val assignment = Statement.assignment(Expression.field(field, unit.memberName(member)),
+						inner.expression(value))
+					entries += Block.Entry(assignment, Trivia(false, declarationComments(member),
+						unit.source.trailing(member)), unit.source.position(unit.codeStart(member)))
+				}
+				is KtNamedFunction -> members += functions.constantMethod(member, listOf(declaration.name!!, name))
+				else -> throw Rejection.notYet(member, "This member of an enum constant's body")
+			}
+		}
+		val uses: Set<PsiElement> = setOfNotNull(declaration.primaryConstructor ?: declaration) +
+			References.of(unit, constant)
+		return listOf(Member(listOf(constant), false, null, entries, uses = uses)) + members
+	}
+
 	/** An init block's statements, with the blank line before the block on the first. */
 	private fun initializerEntries(lowered: Block, blankLine: Boolean): List<Block.Entry> {
 		val entries = lowered.entries().toMutableList()
@@ -348,6 +478,9 @@ internal class ClassLowering(private val unit: FileLowering) {
 			listOfNotNull(declaration.docComment).flatMap(KDocText::description).map(Comment::line)
 
 	private fun isPrivate(declaration: KtDeclaration): Boolean = declaration.hasModifier(KtTokens.PRIVATE_KEYWORD)
+
+	private fun isObjectEnum(declaration: KtClass): Boolean =
+		with(unit.session) { declaration.classSymbol }?.let(unit::isObjectEnum) == true
 }
 
 /**
@@ -356,3 +489,10 @@ internal class ClassLowering(private val unit: FileLowering) {
  */
 internal fun KtClass.isPlainData(): Boolean =
 	isData() && declarations.isEmpty() && superTypeListEntries.isEmpty()
+
+/** The library's iterable and iterator types, which no class of the plugin's can be, as Lua's for loop walks tables. */
+private val ITERATORS = setOf("kotlin.collections.Iterable", "kotlin.collections.MutableIterable",
+	"kotlin.collections.Iterator", "kotlin.collections.MutableIterator", "kotlin.collections.Collection",
+	"kotlin.collections.MutableCollection", "kotlin.collections.List", "kotlin.collections.MutableList",
+	"kotlin.collections.Set", "kotlin.collections.MutableSet", "kotlin.sequences.Sequence", "java.lang.Iterable",
+	"java.util.Iterator")

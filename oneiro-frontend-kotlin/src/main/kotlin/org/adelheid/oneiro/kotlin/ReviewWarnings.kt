@@ -2,6 +2,7 @@ package org.adelheid.oneiro.kotlin
 
 import com.intellij.psi.PsiElement
 import org.adelheid.oneiro.lowering.ReviewAreas
+import org.adelheid.oneiro.lowering.SourceLanguage
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
 import org.jetbrains.kotlin.psi.KtAnnotated
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
@@ -26,7 +27,7 @@ internal class ReviewWarnings(private val unit: FileLowering) {
 		if (unit.options.plugin.dev() || isSuppressed(where, ReviewAreas.key(area))) {
 			return
 		}
-		unit.warning(where, ReviewAreas.warning(use, area, "@Suppress"))
+		unit.warning(where, ReviewAreas.warning(use, area, SourceLanguage.KOTLIN))
 	}
 
 	/** Whether a declaration around the use, or its file, carries `@Suppress` with the area's key. */

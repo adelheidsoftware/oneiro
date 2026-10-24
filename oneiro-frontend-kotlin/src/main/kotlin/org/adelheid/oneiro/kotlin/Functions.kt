@@ -1,13 +1,13 @@
 package org.adelheid.oneiro.kotlin
 
 import org.adelheid.oneiro.lowering.DocAnnotations
+import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Comment
 import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.FunctionBody
 import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.Trivia
-import org.adelheid.oneiro.lua.BinaryOperator
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.lexer.KtTokens
@@ -41,6 +41,12 @@ internal class Functions(private val unit: FileLowering) {
 		} else {
 			field(function, listOf(table), unit.memberName(function), body(function, owner, true, listOf()))
 		}
+	}
+
+	/** A function of an enum constant's body, which replaces the enum's: `function Herb.RANARR:describe()`. */
+	fun constantMethod(function: KtNamedFunction, path: List<String>): Member {
+		val owner = function.parent.parent as KtClassOrObject
+		return field(function, path, unit.memberName(function), body(function, owner, true, listOf()))
 	}
 
 	/**
@@ -87,7 +93,12 @@ internal class Functions(private val unit: FileLowering) {
 		val parameters = first.toMutableList()
 		var gathered: String? = null
 		for (parameter in function.valueParameters) {
-			val name = unit.names.luaName(parameter.name!!)
+			val name = unit.localName(parameter, parameter.name!!)
+			val type = with(unit.session) { parameter.symbol.returnType.expandedSymbol }
+			if (type != null && unit.annotations.has(type, Annotations.LUA_RETURN_VALUES)) {
+				throw Rejection(parameter, "${type.classId?.shortClassName} stands for several Lua values, which only a"
+					+ " local can receive, from a call; pass its components one by one instead.")
+			}
 			if (!parameter.isVarArg) {
 				parameters += name
 			} else if (parameter == function.valueParameters.last()) {
@@ -124,7 +135,7 @@ internal class Functions(private val unit: FileLowering) {
 				throw Rejection(default, "Lua cannot tell a null argument from one left out, so a parameter that may be"
 					+ " null takes no default but null.")
 			}
-			val name = Expression.name(unit.names.luaName(parameter.name!!))
+			val name = Expression.name(unit.localName(parameter, parameter.name!!))
 			val value = lowering.expression(default)
 			statements += if (unit.types.isBoolean(type)) {
 				val absent = Expression.binary(name, BinaryOperator.EQUAL, Expression.Nil())
@@ -164,8 +175,8 @@ internal class Functions(private val unit: FileLowering) {
 			val text = KDocText.param(doc, parameter.name!!)
 			val name = when {
 				parameter.isVarArg -> "..."
-				parameter.hasDefaultValue() -> unit.names.luaName(parameter.name!!) + "?"
-				else -> unit.names.luaName(parameter.name!!)
+				parameter.hasDefaultValue() -> unit.localName(parameter, parameter.name!!) + "?"
+				else -> unit.localName(parameter, parameter.name!!)
 			}
 			Comment.annotation("@param $name $type $text".trimEnd())
 		}
@@ -181,7 +192,13 @@ internal class Functions(private val unit: FileLowering) {
 		KDocText.description(doc).forEach { lines += Comment.line(it) }
 		lines += parameterAnnotations(function.valueParameters, doc)
 		val returned = function.symbol.returnType
-		if (!returned.isUnitType) {
+		val values = returned.expandedSymbol?.takeIf { unit.annotations.has(it, Annotations.LUA_RETURN_VALUES) }
+		if (values != null) {
+			// Several values: one annotation per value, named after it
+			for (value in values.declaredMemberScope.constructors.first().valueParameters) {
+				lines += Comment.annotation("@return ${unit.types.luaType(value.returnType)} ${value.name.asString()}")
+			}
+		} else if (!returned.isUnitType) {
 			lines += Comment.annotation(DocAnnotations.returned(unit.types.luaType(returned), KDocText.returned(doc)))
 		}
 		return lines

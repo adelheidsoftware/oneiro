@@ -27,9 +27,10 @@ internal class StringMembers(private val body: BodyLowering) {
 		if (arguments.byName.containsKey("ignoreCase")) {
 			throw Rejection.notYet(where, "Comparing text with ignoreCase")
 		}
+		if (arguments.isEmpty()) {
+			ofText(name, text)?.let { return it }
+		}
 		return when (name) {
-			"isEmpty" -> Expression.binary(text, BinaryOperator.EQUAL, Expression.string(""))
-			"isNotEmpty" -> Expression.binary(text, BinaryOperator.NOT_EQUAL, Expression.string(""))
 			"equals" -> Expression.binary(text, BinaryOperator.EQUAL, body.expression(arguments[0]))
 			"substring" -> if (arguments.size == 1) {
 				Expression.methodCall(text, "sub", IndexArithmetic.plusOne(body.expression(arguments[0])))
@@ -60,23 +61,29 @@ internal class StringMembers(private val body: BodyLowering) {
 					helper(Helper.ENDS_WITH, text, suffix)
 				}
 			}
-			"uppercase" -> Expression.methodCall(text, "upper")
-			"lowercase" -> Expression.methodCall(text, "lower")
-			"trim" -> helper(Helper.TRIM, text)
 			"repeat" -> Expression.methodCall(text, "rep", body.expression(arguments[0]))
-			"toString" -> text
 			"trimIndent", "trimMargin" -> trimmed(where, name, receiver, arguments)
-			"reversed" -> Expression.methodCall(text, "reverse")
 			"get" -> body.library.characterAt(text, arguments[0])
-			"first" -> if (arguments.isEmpty()) Expression.methodCall(text, "sub", Expression.integer(1),
-				Expression.integer(1)) else null
-			"last" -> if (arguments.isEmpty()) Expression.methodCall(text, "sub", Expression.integer(-1)) else null
-			// Parsing gives nil for text that is no number, where Kotlin's toInt() throws
-			"toInt", "toIntOrNull", "toLong", "toLongOrNull" -> call("tonumber", text, Expression.integer(10))
-			"toDouble", "toDoubleOrNull" -> call("tonumber", text)
 			"split" -> split(where, text, arguments)
 			else -> null
 		}
+	}
+
+	/** A member of a string that takes no arguments, which a reference such as `String::uppercase` names too. */
+	fun ofText(name: String, text: Expression): Expression? = when (name) {
+		"isEmpty" -> Expression.binary(text, BinaryOperator.EQUAL, Expression.string(""))
+		"isNotEmpty" -> Expression.binary(text, BinaryOperator.NOT_EQUAL, Expression.string(""))
+		"uppercase" -> Expression.methodCall(text, "upper")
+		"lowercase" -> Expression.methodCall(text, "lower")
+		"trim" -> helper(Helper.TRIM, text)
+		"toString" -> text
+		"reversed" -> Expression.methodCall(text, "reverse")
+		"first" -> Expression.methodCall(text, "sub", Expression.integer(1), Expression.integer(1))
+		"last" -> Expression.methodCall(text, "sub", Expression.integer(-1))
+		// Parsing gives nil for text that is no number, where Kotlin's toInt() throws
+		"toInt", "toIntOrNull", "toLong", "toLongOrNull" -> call("tonumber", text, Expression.integer(10))
+		"toDouble", "toDoubleOrNull" -> call("tonumber", text)
+		else -> null
 	}
 
 	/**
@@ -89,6 +96,11 @@ internal class StringMembers(private val body: BodyLowering) {
 			throw Rejection.notYet(where, "split with more than one separator")
 		}
 		val separator = arguments[0]
+		val regex = with(unit.session) { separator.expressionType?.expandedSymbol?.classId?.asFqNameString() }
+		if (regex == "kotlin.text.Regex") {
+			throw Rejection(separator, "Lua has no regular expressions, so split takes only a string separator that"
+				+ " stands for itself, such as a comma.")
+		}
 		if (literalText(separator) == null) {
 			throw Rejection.notYet(where, "split with a separator that is not a string literal")
 		}

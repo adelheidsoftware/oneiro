@@ -51,7 +51,7 @@ plugin's Kotlin ──► kotlinc ───────────────�
 | `oneiro-lua-runner` | Yes | Runs Lua 5.4: the bundled Lua 5.4.8 through LuaJava, or an installed interpreter, and the plugin's Lua tests. |
 | `oneiro-bindings-gen` | Yes | Generates the RS3 bindings from the stubs and `overrides.txt`. |
 | `oneiro-plugin-model` | Yes | The plugin apart from its code: the manifest, the checks of the folder that ships, the typed `Resources` and `Urls` classes, the compiler's settings, and the line maps and console errors behind `explainError`. |
-| `oneiro-lowering` | Yes | What lowering is apart from the source language, shared by both front ends: the compile result and its diagnostics, Lua modules, the plugin facts the code is checked against, the layout of a module's members, the Lua helpers, the settings functions and the plugin lifecycle, module paths, local names, comment text, doc annotations, index arithmetic, the review warnings' wording, and the writing of the Lua and its line map. |
+| `oneiro-lowering` | Yes | What lowering is apart from the source language, shared by both front ends: the compile result and its diagnostics, Lua modules, the plugin facts the code is checked against, the layout of a module's members, the Lua helpers, the settings functions and the plugin lifecycle, module paths, local names, comment text, doc annotations, index arithmetic, the review warnings' wording, what the client has nothing for (a clock and threads), the opening of a reference's small function where it is called, the folding of a table's field assignments into its constructor, and the writing of the Lua and its line map. |
 | `oneiro-frontend-java` | Yes | The Java front end: javac's trees to the Lua tree, and the javac plugin. |
 | `oneiro-frontend-kotlin` | Yes | The Kotlin front end, in Kotlin: the Kotlin Analysis API's trees to the Lua tree, and the entry the Gradle plugin's worker calls. Its jar bundles the Analysis API and the IntelliJ platform modules it needs, which JetBrains publishes only to its own repositories. In progress. |
 | `oneiro-gradle-plugin` | Yes | The Gradle plugin `org.adelheid.oneiro`: the `oneiro { }` block and the tasks. |
@@ -100,8 +100,7 @@ file to the classes below.
 ## The Kotlin front end
 
 The Kotlin front end lives in `org.adelheid.oneiro.kotlin` and is written in Kotlin, the language the Kotlin
-Analysis API is made for. It is in progress: [kotlin-subset.md](kotlin-subset.md) lists what it accepts so far. In a
-plugin's build, `oneiroKotlin` runs it in a worker process on JDK 25 through `KotlinCompiler`, which reads the same
+Analysis API is made for. [kotlin-subset.md](kotlin-subset.md) lists what it accepts. In a plugin's build, `oneiroKotlin` runs it in a worker process on JDK 25 through `KotlinCompiler`, which reads the same
 settings the javac plugin reads and writes the Lua and its line map to the same places.
 
 - **`KotlinFrontend`** compiles a set of sources: `AnalysisSessions` builds a standalone Analysis API session over
@@ -111,13 +110,20 @@ settings the javac plugin reads and writes the Lua and its line map to the same 
 - **`FileLowering`** turns one file into one Lua module, and keeps what the file shares: its diagnostics, its
   `SourceText` (positions, and the comments, which Kotlin's tree keeps), `KotlinTypes`, its requires, helpers and
   globals, and the loops that `OneBasedLoops` lets count from 1. The parts of a file each have a class:
-  `ClassLowering` (objects, classes and enums), `PluginClass` (the plugin class as `main.lua`), `SettingsLowering`
-  (an interface of settings), `Functions`, and `References`, which finds what each member uses for `ModuleLayout`.
-- **`BodyLowering`** lowers the statements and expressions of a function. `ApiCalls` handles the RS3 bindings, reading
-  their annotations through `Annotations`; `LibraryCalls` handles the Kotlin library; `ReviewWarnings` warns at the
-  uses moderation reviews closely.
-- **Rejections** work as in the Java front end: a `Rejection` skips the member being lowered and becomes an error
-  at its position.
+  `ClassLowering` (objects, classes and enums, with `InheritedMembers` for the defaults and metamethods a class gets
+  from its interfaces), `PluginClass` (the plugin class as `main.lua`), `SettingsLowering` (an interface of
+  settings), `Functions`, and `References`, which finds what each member uses for `ModuleLayout`.
+  `DeclarationChecks` checks the file's names and declarations before any of them is lowered, and `ObjectEnums`
+  finds, across the compilation, the enums whose constants must be objects.
+- **`BodyLowering`** lowers the statements and expressions of a function, handing each kind of code to a class of its
+  own: `Loops`, `Branches`, `Exceptions`, `Lambdas`, `ObjectExpressions`, `Operators`, `TypeTests` and
+  `ReturnValues` (the several values of a `@LuaReturnValues` type). `ApiCalls` handles the RS3 bindings, reading their
+  annotations through `Annotations`; `LibraryCalls` handles the Kotlin library, with `StringMembers`,
+  `CollectionCopies` and `LibraryReferences`; `CollectionLoops` fuses a chain of collection functions into one loop;
+  `Comparators` turns a comparator into the test `table.sort` takes; and `ReviewWarnings` warns at the uses
+  moderation reviews closely.
+- **Rejections** work as in the Java front end: a `Rejection` skips the statement or member being lowered and becomes
+  an error at its position, so one run reports every problem.
 
 What lowering is apart from the language, such as the layout of a module, the settings functions and the plugin's
 lifecycle, lives in `oneiro-lowering`, where both front ends use it; more moves there as the Kotlin front end needs it.

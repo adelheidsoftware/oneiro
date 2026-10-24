@@ -1,4 +1,4 @@
-package org.adelheid.oneiro.java;
+package org.adelheid.oneiro.lowering;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -16,13 +16,13 @@ import org.jspecify.annotations.Nullable;
  * {@code tonumber(item, 10)}. It opens only a function of one statement whose arguments are names, which read the
  * same however often and in whatever order the opened code reads them.
  */
-final class Inlining {
+public final class Inlining {
 
 	private Inlining() {
 	}
 
 	/** The function's value for the arguments, opened; null when it cannot be opened. */
-	static @Nullable Expression value(Expression function, List<Expression> arguments) {
+	public static @Nullable Expression value(Expression function, List<Expression> arguments) {
 		Statement only = only(function, arguments);
 		Map<String, Expression> values = values(function, arguments);
 		if (only == null || values == null) {
@@ -37,7 +37,7 @@ final class Inlining {
 	}
 
 	/** The function's one statement for the arguments, opened, for a call whose value nothing reads; or null. */
-	static @Nullable Statement statement(Expression function, List<Expression> arguments) {
+	public static @Nullable Statement statement(Expression function, List<Expression> arguments) {
 		Statement only = only(function, arguments);
 		Map<String, Expression> values = values(function, arguments);
 		if (only == null || values == null) {

@@ -16,22 +16,31 @@ import org.adelheid.oneiro.lua.Comment
 import org.adelheid.oneiro.lua.Expression
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaJavaFieldSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolOrigin
+import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
+import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.ClassId
-import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtCallableDeclaration
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassBody
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtQualifiedExpression
+import org.jetbrains.kotlin.psi.KtTypeReference
+import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
 import java.util.EnumSet
 
 /**
@@ -58,7 +67,7 @@ internal class FileLowering(
 
 	val source = SourceText(file)
 	val annotations = Annotations(session)
-	val types = KotlinTypes(session, annotations, ::isPluginType)
+	val types = KotlinTypes(session, annotations, ::isPluginType, ::isObjectEnum)
 	val reviews = ReviewWarnings(this)
 
 	/** The parameters of the loops that count from 1, decided for the whole file at once. */
@@ -105,7 +114,17 @@ internal class FileLowering(
 				+ "${options.rootPackage}, so its Lua has no place under src/; move the file into that package.")
 			return null
 		}
+		val checks = DeclarationChecks(this)
+		if (!checks.names()) {
+			return null
+		}
 		val classes = file.declarations.filterIsInstance<KtClassOrObject>()
+		if (classes.size > 1) {
+			for (extra in classes.drop(1)) {
+				error(extra, "Lua has one module per file; move ${extra.name} into a file of its own.")
+			}
+			return null
+		}
 		val main = classes.singleOrNull()
 		if (main == null || main.name == null) {
 			reject(Rejection.notYet(file.declarations.firstOrNull() ?: file,
@@ -122,15 +141,25 @@ internal class FileLowering(
 			// A plain table, built where it is constructed, which produces no Lua of its own
 			return null
 		}
+		if (main is KtClass && (isPluginClass(main) || isDevEntry(main))) {
+			entry = main
+		}
+		checks.check(main)
 		val header = header(main)
+		checkSubscribers()
 		val module = try {
 			when {
-				main is KtClass && (isPluginClass(main) || isDevEntry(main)) -> {
-					entry = main
-					PluginClass(this, main).lower(header)
-				}
+				main is KtClass && (isPluginClass(main) || isDevEntry(main)) -> PluginClass(this, main).lower(header)
 				main is KtClass && main.isInterface() && hasAnnotation(main, Annotations.CONFIG_GROUP) ->
 					SettingsLowering(this, main).lower(header, path(packageName))
+				hasAnnotation(main, Annotations.CONFIG_GROUP) -> throw Rejection(main, "@ConfigGroup marks an interface"
+					+ " of settings; make ${main.name} an interface whose functions carry @ConfigItem.")
+				main is KtClass && main.isEnum() && with(session) { main.classSymbol }?.let(::isObjectEnum) == true -> {
+					val classes = ClassLowering(this)
+					val members = classes.objectEnumMembers(main)
+					LuaModule.of(path(packageName), header, Block(assemble(Expression.Table(listOf()), true, members),
+						listOf()))
+				}
 				main is KtClass && main.isEnum() -> {
 					// A simple enum's table holds its constants, and nothing else
 					val table = ClassLowering(this).enumTable(main)
@@ -185,6 +214,8 @@ internal class FileLowering(
 		annotations.value(member, Annotations.LUA_NAME)
 			?: (member as? KaPropertySymbol)?.backingFieldSymbol?.let { annotations.value(it, Annotations.LUA_NAME) }
 			?: member.callableId?.callableName?.asString()
+			// A member of a local class or an object expression has no callable ID, only its name
+			?: (member as? KaNamedSymbol)?.name?.asString()
 			?: throw IllegalStateException("a member without a name: $member")
 	}
 
@@ -261,9 +292,131 @@ internal class FileLowering(
 		return Expression.name(local)
 	}
 
+	/** The Lua names of the file's locals and parameters, by declaration and name. */
+	private val localNames = mutableMapOf<Pair<PsiElement, String>, String>()
+
+	/** The file's own locals each member's code uses, by their Lua names. */
+	private val fileLocalsUsed = mutableMapOf<PsiElement, Set<String>>()
+
+	/**
+	 * The Lua name of a local or parameter. Kotlin keeps locals apart from members and classes, but in Lua the file's
+	 * private members, the plugin class's members and the classes' tables are locals too, so a local that shares a name
+	 * with one its own member uses would hide it: `val step = n - 1; return step(step)` in a private function `step`.
+	 * Such a local gets a trailing underscore. Every use of a local asks here, so that its declaration and its uses
+	 * agree.
+	 *
+	 * @param declaration the local's declaration, or for one Kotlin declares itself, such as a lambda's `it`, the
+	 *     declaration it belongs to; null for a name no code of the file's shares
+	 */
+	fun localName(declaration: PsiElement?, name: String): String {
+		if (declaration == null) {
+			return names.luaName(name)
+		}
+		aliases[declaration]?.let { return it }
+		return localNames.getOrPut(declaration to name) {
+			val member = enclosingMember(declaration)
+			val used = fileLocalsUsed.getOrPut(member) { fileLocalsUsedIn(member) }
+			var lua = names.luaName(name)
+			while (lua in used) {
+				lua += "_"
+			}
+			lua
+		}
+	}
+
+	/** The Lua names locals and parameters stand for instead of their own, by declaration; see [alias]. */
+	private val aliases = mutableMapOf<PsiElement, String>()
+
+	/**
+	 * Makes a local or parameter stand for another Lua name, as a lambda's parameter stands for the variable of the
+	 * loop its code is opened in.
+	 */
+	fun alias(declaration: PsiElement, lua: String) {
+		aliases[declaration] = lua
+	}
+
+	/** The member, a function, a property or an `init` block of a class or of the file, that code is part of. */
+	private fun enclosingMember(element: PsiElement): PsiElement {
+		var current = element
+		while (current.parent != null && current.parent !is KtClassBody && current.parent !is KtFile) {
+			current = current.parent
+		}
+		return current
+	}
+
+	/**
+	 * The file's own locals a member's code uses, by their Lua names: a class's table, a private member of an object
+	 * or a class, a member of the plugin class or a file's property, and for a member of an object of the file used
+	 * without a qualifier, the object's table.
+	 */
+	private fun fileLocalsUsedIn(member: PsiElement): Set<String> = with(session) {
+		val used = mutableSetOf<String>()
+		for (reference in PsiTreeUtil.collectElementsOfType(member, KtNameReferenceExpression::class.java)) {
+			if (PsiTreeUtil.getParentOfType(reference, KtTypeReference::class.java) != null) {
+				continue
+			}
+			val symbol = reference.resolveSymbol() ?: continue
+			if (symbol is KaClassSymbol) {
+				symbol.classId?.shortClassName?.asString()?.let(used::add)
+				continue
+			}
+			val declaration = symbol.psi as? KtCallableDeclaration ?: continue
+			if (declaration.containingFile != file || declaration !is KtNamedFunction && declaration !is KtProperty) {
+				continue
+			}
+			val owner = PsiTreeUtil.getParentOfType(declaration, KtClassOrObject::class.java)
+			val ownerIsEntry = owner == entry || owner?.parent?.parent == entry && entry != null
+			val local = declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) || declaration.parent is KtFile ||
+				ownerIsEntry
+			if (local && declaration.parent.let { it is KtClassBody || it is KtFile }) {
+				used += names.luaName(declaration.name ?: continue)
+				continue
+			}
+			val qualified = (reference.parent as? KtQualifiedExpression)?.selectorExpression == reference
+			if (!qualified && owner is KtObjectDeclaration && declaration.parent is KtClassBody) {
+				val table = if (owner.isCompanion()) PsiTreeUtil.getParentOfType(owner, KtClassOrObject::class.java)
+				else owner
+				table?.name?.let(used::add)
+			}
+		}
+		used
+	}
+
+	/** The event a payload class is for, when that event passes nothing; null for any other type. */
+	fun eventWithoutPayload(type: KaType): String? = with(session) {
+		val payload = type.expandedSymbol ?: return null
+		val event = annotations.value(payload, Annotations.LUA_EVENT) ?: return null
+		val passesNothing = payload.declaredMemberScope.callables
+			.none { it is KaJavaFieldSymbol || it is KaPropertySymbol }
+		if (passesNothing) event else null
+	}
+
+	/** Whether a class is the plugin class, or the dev source set's, which the client creates once. */
+	fun isEntryClass(type: KaClassSymbol): Boolean {
+		val name = type.classId?.asFqNameString() ?: return false
+		return compilation.entries.any { it.qualifiedName == name } ||
+			type.classId == Annotations.PLUGIN || type.classId == Annotations.DEV_PLUGIN
+	}
+
+	/** `@Subscribe` subscribes only the plugin class's functions, which `main.lua` subscribes as it loads. */
+	private fun checkSubscribers() {
+		for (function in PsiTreeUtil.collectElementsOfType(file, KtNamedFunction::class.java)) {
+			val owner = function.containingClassOrObject?.let { with(session) { it.classSymbol } }
+			if (hasAnnotation(function, Annotations.SUBSCRIBE) && (owner == null || !isEntryClass(owner))) {
+				error(function, "Only the plugin class's functions are subscribed with @Subscribe; subscribe this one"
+					+ " with Event.<Name>.Subscribe(name, callback), and unsubscribe it when it is done.")
+			}
+		}
+	}
+
+	/** Whether an enum's constants are objects rather than the strings of their names; see [ObjectEnums]. */
+	fun isObjectEnum(type: KaClassSymbol): Boolean =
+		type.classKind == KaClassKind.ENUM_CLASS && type.classId?.asFqNameString() in compilation.objectEnums
+
 	/** Whether a class is the plugin's own, written in its sources or in the main source set the dev set builds on. */
 	fun isPluginType(type: KaClassSymbol): Boolean {
-		val packageName = type.classId?.packageFqName?.asString() ?: return false
+		// A class declared inside a function, or an object expression, has no name outside it, but is the file's
+		val packageName = type.classId?.packageFqName?.asString() ?: return type.psi?.containingFile == file
 		return ModulePaths.isInside(options.rootPackage, packageName)
 	}
 

@@ -1,0 +1,87 @@
+plugin/BadConfig.kt:10: error: A setting's getter is a function without parameters whose body is the default value, such as fun count(): Int = 5.
+	@ConfigItem(keyName = "computed", name = "Computed")
+	^
+
+plugin/BadConfig.kt:16: error: A setting's setter is a function with one parameter, the new value, and no body, such as fun setCount(count: Int); a getter is a function whose body is the default value.
+	@ConfigItem(keyName = "missing", name = "Missing")
+	^
+
+plugin/BadConfig.kt:19: error: A setting is a Boolean, an Int or Long, a Double, a String or an enum of the plugin's; PersistentDB keeps those with typed accessors.
+	@ConfigItem(keyName = "names", name = "Names")
+	^
+
+plugin/BadConfig.kt:22: error: Every function of an interface of settings is a setting's getter or setter, with @ConfigItem(keyName = ..., name = ...).
+	fun unmarked(): Int = 1
+	^
+
+plugin/BadPlugin.kt:12: error: Only one class extends Plugin, because it becomes main.lua; plugin.SecondPlugin does too.
+class BadPlugin : Plugin() {
+^
+
+plugin/BadPlugin.kt:14: error: A property of settings needs no value: every call through it calls the settings module, so remove the initializer.
+	private var settings: BadConfig? = null
+	                                   ^
+
+plugin/BadPlugin.kt:17: error: The client creates the plugin class, and main.lua runs once; put start-up code in startUp() instead of an init block.
+	init {
+	^
+
+plugin/BadPlugin.kt:22: error: The plugin class becomes main.lua, whose members are locals with no object to pass around; pass what is needed instead of this.
+		helper.remember(this)
+		                ^
+
+plugin/BadPlugin.kt:25: error: A @Subscribe function takes one parameter, the payload of the event it subscribes to, such as InventoryUpdatedEventPayload.
+	@Subscribe
+	^
+
+plugin/BadPlugin.kt:30: error: String is not an event's payload; the parameter of a @Subscribe function names the event, such as InventoryUpdatedEventPayload for InventoryUpdated.
+	fun onText(text: String) {
+	           ^
+
+plugin/BadPlugin.kt:33: error: EntityDraw's callbacks return a boolean the client acts on; declare onDraw to return Boolean.
+	@Subscribe
+	^
+
+plugin/BadPlugin.kt:37: error: Logic's callbacks return nothing; declare onLogic without a return type.
+	@Subscribe
+	^
+
+plugin/BadPlugin.kt:42: error: The ChatMessage event needs the chatAccess permission, which the manifest does not declare; add it to the build, oneiro { plugin { permissions { optional(chatAccess) } } }.
+	@Subscribe
+	^
+
+plugin/BadPlugin.kt:46: error: The SettingsLayerReady event fires only when the manifest sets hasSettingsIcon; set settingsIcon = true in the build's oneiro { plugin { } } block.
+	@Subscribe
+	^
+
+plugin/BadPlugin.kt:51: error: The ServerLogic event passes nothing, so its payload has nothing to read; leave tick unused.
+	fun onTick(tick: ServerLogicEventPayload) {
+	           ^
+
+plugin/BadPlugin.kt:56: error: startUp() runs once, when the plugin starts; move what it shares into a function of its own and call that.
+		startUp()
+		^
+
+plugin/BadPlugin.kt:57: error: A property of settings needs no value: every call through it calls the settings module, so remove the assignment.
+		settings = null
+		^
+
+plugin/Helper.kt:17: error: The client creates the plugin class, once, when the plugin starts; use its members directly instead of creating another.
+		val another = BadPlugin()
+		              ^
+
+plugin/Helper.kt:20: error: Only the plugin class's functions are subscribed with @Subscribe; subscribe this one with Event.<Name>.Subscribe(name, callback), and unsubscribe it when it is done.
+	@Subscribe
+	^
+
+plugin/NotAnInterface.kt:6: error: @ConfigGroup marks an interface of settings; make NotAnInterface an interface whose functions carry @ConfigItem.
+@ConfigGroup("wrong")
+^
+
+plugin/SecondPlugin.kt:6: error: Only one class extends Plugin, because it becomes main.lua; plugin.BadPlugin does too.
+class SecondPlugin : Plugin()
+^
+
+plugin/StrayCheats.kt:6: error: StrayCheats extends DevPlugin, whose code must never ship; move it into the dev source set, src/dev/kotlin.
+class StrayCheats : DevPlugin()
+^

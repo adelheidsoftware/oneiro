@@ -1,6 +1,6 @@
 // What lowering a plugin to Lua is apart from the language it is written in: the Lua modules and diagnostics a
-// compile produces, the facts about the plugin it checks the code against, and how the Lua is laid out and written. The Java and Kotlin front ends both
-// build on it.
+// compile produces, the facts about the plugin it checks the code against, and how the Lua is laid out and written.
+// The Java and Kotlin front ends both build on it.
 
 plugins {
 	`java-library`

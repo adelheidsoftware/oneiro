@@ -9,13 +9,11 @@ import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.UnaryOperator
 import org.jetbrains.kotlin.psi.KtContinueExpression
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
-import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
-import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtExpressionWithLabel
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtFunction
+import org.jetbrains.kotlin.psi.KtLabeledExpression
 import org.jetbrains.kotlin.psi.KtLoopExpression
-import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtWhileExpression
 
 /**
@@ -44,23 +42,33 @@ internal class Loops(private val body: BodyLowering) {
 	private fun counting(loop: KtForExpression, range: CountingRange): Statement {
 		val parameter = loop.loopParameter?.takeIf { it.destructuringDeclaration == null }
 			?: throw Rejection(loop, "A range's integers cannot be destructured.")
-		val name = unit.names.luaName(parameter.name!!)
-		val start = range.start?.let(body::expression) ?: Expression.integer(0)
-		// The end of indices is the collection's size, which they stop before
-		val end = range.end?.let(body::expression) ?: LibraryCalls.length(body.expression(range.indicesOf!!))
-		val block = loopBody(loop)
-		if (parameter in unit.oneBased) {
-			// Lua's variable is Kotlin's plus one, so its range is one higher
-			val last = if (range.inclusive) IndexArithmetic.plusOne(end) else end
-			return Statement.NumericFor(name, IndexArithmetic.plusOne(start), last, null, block)
+		val name = unit.localName(parameter, parameter.name!!)
+		if (parameter !in unit.oneBased) {
+			return numericFor(name, range) { loopBody(loop) }
 		}
+		val start = range.start?.let(body::expression) ?: Expression.integer(0)
+		val end = end(range)
+		// Lua's variable is Kotlin's plus one, so its range is one higher
+		val last = if (range.inclusive) IndexArithmetic.plusOne(end) else end
+		return Statement.NumericFor(name, IndexArithmetic.plusOne(start), last, null, loopBody(loop))
+	}
+
+	/** A numeric `for` over a range's integers, as Kotlin counts them, around the code [block] lowers. */
+	fun numericFor(name: String, range: CountingRange, block: () -> Block): Statement {
+		val start = range.start?.let(body::expression) ?: Expression.integer(0)
+		val end = end(range)
+		val code = block()
 		val step = range.step?.let(body::expression)
 		if (range.descending) {
-			return Statement.NumericFor(name, start, end, negated(step ?: Expression.integer(1)), block)
+			return Statement.NumericFor(name, start, end, negated(step ?: Expression.integer(1)), code)
 		}
 		val last = if (range.inclusive) end else IndexArithmetic.minusOne(end)
-		return Statement.NumericFor(name, start, last, step, block)
+		return Statement.NumericFor(name, start, last, step, code)
 	}
+
+	/** A range's end; for indices, the collection's size, which they stop before. */
+	private fun end(range: CountingRange): Expression =
+		range.end?.let(body::expression) ?: LibraryCalls.length(body.expression(range.indicesOf!!))
 
 	/** A step that counts down: `-2` for a step of 2. */
 	private fun negated(step: Expression): Expression {
@@ -81,7 +89,7 @@ internal class Loops(private val body: BodyLowering) {
 			val characters = Expression.methodCall(body.expression(collection), "gmatch", Expression.string("."))
 			return Statement.GenericFor(listOf(single(loop, variables)), listOf(characters), loopBody(loop))
 		}
-		val view = mapView(collection)
+		val view = body.library.mapView(collection)
 		val kind = if (view != null) null else body.library.kind(with(unit.session) { collection.expressionType })
 		val names = when {
 			view != null && view.selector == "keys" -> listOf(single(loop, variables))
@@ -123,8 +131,13 @@ internal class Loops(private val body: BodyLowering) {
 		return Statement.Goto(label)
 	}
 
+	/** A jump with a label is a plain one when the label names the innermost loop, which Lua's jumps reach. */
 	private fun checkUnlabelled(jump: KtExpressionWithLabel) {
-		if (jump.getTargetLabel() != null) {
+		val label = jump.getTargetLabel()?.getReferencedName() ?: return
+		val labelled = generateSequence(PsiTreeUtil.getParentOfType(jump, KtLabeledExpression::class.java)) {
+			PsiTreeUtil.getParentOfType(it, KtLabeledExpression::class.java)
+		}
+		if (labelled.firstOrNull { it.getLabelName() == label }?.baseExpression != innermostLoop(jump)) {
 			throw Rejection(jump, "Lua's break and continue only reach the innermost loop; move the loops into a"
 				+ " function and return from it.")
 		}
@@ -168,9 +181,9 @@ internal class Loops(private val body: BodyLowering) {
 	private fun variables(loop: KtForExpression): List<String> {
 		val destructured = loop.destructuringDeclaration
 		if (destructured != null) {
-			return destructured.entries.map { unit.names.luaName(it.name ?: "_") }
+			return destructured.entries.map { unit.localName(it, it.name ?: "_") }
 		}
-		return listOf(unit.names.luaName(loop.loopParameter?.name ?: "_"))
+		return listOf(unit.localName(loop.loopParameter, loop.loopParameter?.name ?: "_"))
 	}
 
 	private fun single(loop: KtForExpression, variables: List<String>): String =
@@ -183,19 +196,5 @@ internal class Loops(private val body: BodyLowering) {
 				+ " value) in map) instead")
 		}
 		return variables
-	}
-
-	/** `map.keys`, `map.values` or `map.entries`, which a loop walks on the map itself. */
-	private class MapView(val map: KtExpression, val selector: String)
-
-	private fun mapView(collection: KtExpression): MapView? {
-		val qualified = collection as? KtDotQualifiedExpression ?: return null
-		val selector = (qualified.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
-		val receiverType = with(unit.session) { qualified.receiverExpression.expressionType }
-		val view = selector in setOf("keys", "values", "entries")
-		if (!view || receiverType == null || !unit.types.isMap(receiverType)) {
-			return null
-		}
-		return MapView(qualified.receiverExpression, selector)
 	}
 }

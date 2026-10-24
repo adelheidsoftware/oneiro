@@ -18,11 +18,13 @@ import org.jetbrains.kotlin.psi.KtClass
  * another class of the plugin's its name, and a nullable type ends in `?`, as in the Java front end.
  *
  * @param isPluginType whether a class is the plugin's own
+ * @param isObjectEnum whether an enum's constants are objects, which their class's name types
  */
 internal class KotlinTypes(
 	private val session: KaSession,
 	private val annotations: Annotations,
 	private val isPluginType: (KaClassSymbol) -> Boolean,
+	private val isObjectEnum: (KaClassSymbol) -> Boolean,
 ) {
 
 	fun isList(type: KaType): Boolean = isOrExtends(type, StandardClassIds.List)
@@ -77,11 +79,15 @@ internal class KotlinTypes(
 		val symbol = plain(type).expandedSymbol ?: return "any"
 		annotations.value(symbol, Annotations.LUA_TYPE)?.let { return it }
 		annotations.value(symbol, Annotations.LUA_GLOBAL)?.takeIf { it.isNotEmpty() }?.let { return it }
+		// A functional interface of the library, such as Runnable, is a Lua function too
+		if (symbol.annotations.any { it.classId?.asFqNameString() == "java.lang.FunctionalInterface" }) {
+			return "function"
+		}
 		if (!isPluginType(symbol)) {
 			return "any"
 		}
 		return when {
-			symbol.classKind == KaClassKind.ENUM_CLASS -> "string"
+			symbol.classKind == KaClassKind.ENUM_CLASS && !isObjectEnum(symbol) -> "string"
 			(symbol.psi as? KtClass)?.isPlainData() == true -> "table"
 			// A fun interface's values are Lua functions
 			(symbol.psi as? KtClass)?.hasModifier(KtTokens.FUN_KEYWORD) == true -> "function"

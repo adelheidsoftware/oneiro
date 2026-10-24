@@ -120,7 +120,7 @@ internal class Exceptions(private val body: BodyLowering) {
 		unit.useGlobal("pcall")
 		val run = Expression.call(Expression.name("pcall"), attempted)
 		val ok = body.invent("ok", attempt)
-		val errorName = unit.names.luaName(parameter.name!!)
+		val errorName = unit.localName(parameter, parameter.name!!)
 		val catchBody = handler.catchBody ?: throw Rejection(handler, EMPTY)
 		val caughtBlock = if (value == null) body.block(catchBody) else body.block(catchBody, value.last)
 		if (!returns) {
@@ -190,7 +190,7 @@ internal class Exceptions(private val body: BodyLowering) {
 				+ " plugin's, which declares close().")
 		}
 		val parameter = lambda.functionLiteral.valueParameters.singleOrNull()
-		val name = unit.names.luaName(parameter?.name ?: "it")
+		val name = unit.localName(parameter ?: lambda.functionLiteral, parameter?.name ?: "it")
 		val code = lambda.bodyExpression ?: throw Rejection(lambda, EMPTY)
 		checkStaysInside(code)
 		val inner = body.nested()
@@ -240,7 +240,8 @@ internal class Exceptions(private val body: BodyLowering) {
 			val catchBody = handler.catchBody ?: throw Rejection(handler, EMPTY)
 			checkStaysInside(catchBody)
 			catchReturns = catchValue?.returning == true || completesByReturning(catchBody, handler, "catch")
-			errorName = unit.names.luaName(handler.catchParameter!!.name!!)
+			val caughtError = handler.catchParameter!!
+			errorName = unit.localName(caughtError, caughtError.name!!)
 			caught = lowered(catchBody, catchValue)
 		}
 		val returns = tryReturns || catchReturns

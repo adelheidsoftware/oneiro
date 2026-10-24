@@ -27,8 +27,10 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import org.adelheid.oneiro.lowering.ClientLimits;
 import org.adelheid.oneiro.lowering.Helper;
 import org.adelheid.oneiro.lowering.IndexArithmetic;
+import org.adelheid.oneiro.lowering.Inlining;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Expression;
@@ -54,12 +56,6 @@ final class LibraryCalls {
 			+ " text.toCharArray(), which walks the text itself.";
 	static final String STREAM_IN_STATEMENT = "In Lua a stream is a loop, which runs as statements; make the"
 			+ " stream the whole value of a local, an assignment or a return, or a forEach statement of its own.";
-	private static final String COUNT_TICKS = "count the ticks of Event.ServerLogic, about every 0.6 seconds, or of"
-			+ " Event.Logic, 50 a second.";
-	private static final String NO_THREADS = "Plugins run on the client's one thread and cannot start threads or"
-			+ " schedule work of their own; do the work in an event callback, and to do it later, " + COUNT_TICKS;
-	private static final String NO_CLOCK = "The client gives plugins no clock to read; to measure time, " + COUNT_TICKS;
-
 	final BodyLowering body;
 	private final StringMethods stringMethods;
 	private final NumberMethods numberMethods;
@@ -684,30 +680,17 @@ final class LibraryCalls {
 		throw Rejection.notYet(tree, construct);
 	}
 
-	/**
-	 * Rejects what the client has nothing for, which RuneLite plugins reach for: plugins run on the client's one
-	 * thread, so threads, executors, futures and timers have nothing to run on, and Lua's {@code os} library, with its
-	 * clock, is not there (checked in the client, 2026-10-23).
-	 *
-	 * @param method the method called on the class, or null for a constructor
-	 */
+	/** Rejects what the client has nothing for, a clock and threads; see {@link ClientLimits}. */
 	private void checkClientHasIt(Tree where, TypeElement type, @Nullable String method) {
 		String name = type.getQualifiedName().toString();
-		boolean readsClock = method != null && ((name.equals("java.lang.System")
-				&& (method.equals("currentTimeMillis") || method.equals("nanoTime")))
-				|| (name.startsWith("java.time.") && method.equals("now")));
-		if (readsClock || name.equals("java.time.Clock")) {
-			throw new Rejection(where, NO_CLOCK);
+		if (ClientLimits.readsClock(name, method)) {
+			throw new Rejection(where, ClientLimits.NO_CLOCK);
 		}
 		TypeMirror declared = type.asType();
-		boolean concurrent = name.equals("java.lang.Thread") || name.equals("java.util.Timer")
-				|| name.equals("java.util.TimerTask") || name.equals("javax.swing.Timer")
-				|| name.equals("java.util.concurrent.Executors")
-				|| types().isSubtype(declared, "java.util.concurrent.Executor")
-				|| types().isSubtype(declared, "java.util.concurrent.Future")
-				|| types().isSubtype(declared, "java.util.concurrent.CompletionStage");
+		boolean concurrent = ClientLimits.isConcurrent(name) || ClientLimits.CONCURRENT_SUPERTYPES.stream()
+				.anyMatch(supertype -> types().isSubtype(declared, supertype));
 		if (concurrent) {
-			throw new Rejection(where, NO_THREADS);
+			throw new Rejection(where, ClientLimits.NO_THREADS);
 		}
 	}
 

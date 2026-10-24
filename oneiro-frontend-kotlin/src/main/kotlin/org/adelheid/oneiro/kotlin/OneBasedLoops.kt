@@ -42,7 +42,8 @@ internal class CountingRange(
 		/** The loop's range, or null when it loops over something else. */
 		fun of(loop: KtForExpression): CountingRange? = loop.loopRange?.let(::of)
 
-		private fun of(range: KtExpression): CountingRange? {
+		/** The range an expression is, or null when it is no range of integers. */
+		fun of(range: KtExpression): CountingRange? {
 			if (range is KtParenthesizedExpression) {
 				return range.expression?.let(::of)
 			}

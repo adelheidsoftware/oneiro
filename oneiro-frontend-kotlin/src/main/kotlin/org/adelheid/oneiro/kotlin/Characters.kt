@@ -65,7 +65,10 @@ internal class Characters(private val body: BodyLowering) {
 			return Expression.binary(found, BinaryOperator.NOT_EQUAL, Expression.Nil())
 		}
 		return when (name) {
-			"code" -> byte(value)
+			"code" -> {
+				checkOneByte(receiver)
+				byte(value)
+			}
 			"uppercaseChar", "uppercase" -> Expression.methodCall(value, "upper")
 			"lowercaseChar", "lowercase" -> Expression.methodCall(value, "lower")
 			"digitToInt" -> call("tonumber", value)
@@ -75,8 +78,22 @@ internal class Characters(private val body: BodyLowering) {
 	}
 
 	/** A value as the number Kotlin reads: a char's, `string.byte(c)`, or an integer as it is. */
-	fun number(value: KtExpression): Expression =
-		if (isChar(value)) byte(body.expression(value)) else body.expression(value)
+	fun number(value: KtExpression): Expression {
+		if (!isChar(value)) {
+			return body.expression(value)
+		}
+		checkOneByte(value)
+		return byte(body.expression(value))
+	}
+
+	/** A char literal read as its number must be one byte in Lua's strings, which hold UTF-8. */
+	private fun checkOneByte(value: KtExpression): Unit = with(unit.session) {
+		val literal = (value as? KtConstantExpression)?.evaluate()?.value as? Char ?: return
+		if (literal.code > 127) {
+			throw Rejection(value, "A Lua string holds bytes, and '$literal' takes several, so Lua has no one number"
+				+ " for it; compare it as a char, or use its number, ${literal.code}, as an Int.")
+		}
+	}
 
 	/** `n.toChar()`, the char of a number: `string.char(n)`. */
 	fun character(number: Expression): Expression =

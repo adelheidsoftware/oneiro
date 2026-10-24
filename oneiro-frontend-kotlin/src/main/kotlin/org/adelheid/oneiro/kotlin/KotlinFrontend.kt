@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.kotlin
 
 import com.intellij.openapi.util.Disposer
+import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.lowering.CompileResult
 import org.adelheid.oneiro.lowering.Diagnostic
 import org.adelheid.oneiro.lowering.LocalNames
@@ -10,7 +11,6 @@ import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.KaDiagnosticCheckerFilter
 import org.jetbrains.kotlin.analysis.api.diagnostics.KaSeverity
-import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtFile
@@ -60,8 +60,10 @@ public object KotlinFrontend {
 					+ " rootPackage = \"com.example.herbs\" }.")
 				return CompileResult(listOf(), listOf(noRoot))
 			}
+			val objectEnums = mutableSetOf<String>()
+			files.forEach { file -> analyze(file) { ObjectEnums.find(this, file, objectEnums) } }
 			val compilation = Compilation(Options(rootPackage, options.classpath, options.plugin), entries,
-				extendedClasses(files))
+				extendedClasses(files), objectEnums)
 			val modules = mutableListOf<LuaModule>()
 			val diagnostics = mutableListOf<Diagnostic>()
 			for (file in files) {
@@ -130,8 +132,14 @@ public object KotlinFrontend {
 	 * What lowering a file needs to know about the whole compilation.
 	 *
 	 * @property extended the classes another class extends, by qualified name, which a type test walks up to
+	 * @property objectEnums the enums whose constants are objects, by qualified name; see [ObjectEnums]
 	 */
-	internal class Compilation(val options: Options, val entries: List<EntryClass>, val extended: Set<String>)
+	internal class Compilation(
+		val options: Options,
+		val entries: List<EntryClass>,
+		val extended: Set<String>,
+		val objectEnums: Set<String>,
+	)
 
 	/**
 	 * A class that extends `Plugin`, or `DevPlugin` when [dev], and so becomes `main.lua` or `dev/main.lua`.

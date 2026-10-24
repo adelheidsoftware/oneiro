@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.symbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
+import org.jetbrains.kotlin.analysis.api.symbols.KaNamedClassSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolOrigin
 import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.lexer.KtTokens
@@ -194,6 +195,9 @@ internal class StringBuilding(private val body: BodyLowering) {
 			return Expression.call(Expression.field(Expression.name("table"), "concat"), body.expression(value))
 		}
 		val symbol = type.expandedSymbol ?: throw Rejection.notYet(value, "Turning this value into text")
+		if (body.api.isApi(symbol) && symbol.classKind == KaClassKind.ENUM_CLASS) {
+			return body.api.enumName(value, body.expression(value), symbol)
+		}
 		if (body.api.isApi(symbol) || body.isThrowable(symbol)) {
 			// The client's objects describe themselves through tostring; a caught error is its value
 			return call("tostring", body.expression(value))
@@ -203,7 +207,7 @@ internal class StringBuilding(private val body: BodyLowering) {
 		}
 		val declaration = symbol.psi as? KtClass
 		if (symbol.classKind == KaClassKind.ENUM_CLASS) {
-			return body.expression(value)
+			return body.enumText(value)!!
 		}
 		if (declaration?.isPlainData() == true) {
 			throw Rejection(value, "A data class of properties alone is a plain Lua table without a toString(); put its"
@@ -211,6 +215,11 @@ internal class StringBuilding(private val body: BodyLowering) {
 		}
 		val ownToString = symbol.memberScope.callables.any {
 			it.callableId?.callableName?.asString() == "toString" && it.origin == KaSymbolOrigin.SOURCE
+		}
+		if (!ownToString && (symbol as? KaNamedClassSymbol)?.isData == true) {
+			throw Rejection(value, "Kotlin generates toString() for a data class, but its Lua table has no such"
+				+ " function; give ${symbol.classId?.shortClassName} a toString() function, or put its properties into"
+				+ " the text instead.")
 		}
 		if (!ownToString) {
 			throw Rejection(value, "${symbol.classId?.shortClassName} has no toString() of its own, so Kotlin would"

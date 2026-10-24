@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.symbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaNamedClassSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolOrigin
+import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
@@ -32,8 +33,7 @@ internal class Operators(private val body: BodyLowering) {
 	fun prefix(prefix: KtPrefixExpression): Expression {
 		val operand = body.expression(prefix.baseExpression ?: throw Rejection(prefix, EMPTY))
 		return when (prefix.operationToken) {
-			// not (a == b) reads better as a ~= b, and always means the same
-			KtTokens.EXCL -> inverted(operand) ?: Expression.Unary(UnaryOperator.NOT, operand)
+			KtTokens.EXCL -> negation(operand)
 			KtTokens.MINUS -> Expression.Unary(UnaryOperator.NEGATE, operand)
 			else -> throw Rejection.notYet(prefix, "The prefix operator ${prefix.operationReference.text}")
 		}
@@ -53,10 +53,7 @@ internal class Operators(private val body: BodyLowering) {
 			}
 			KtTokens.EQEQEQ -> BinaryOperator.EQUAL
 			KtTokens.EXCLEQEQEQ -> BinaryOperator.NOT_EQUAL
-			KtTokens.LT -> BinaryOperator.LESS
-			KtTokens.GT -> BinaryOperator.GREATER
-			KtTokens.LTEQ -> BinaryOperator.LESS_EQUAL
-			KtTokens.GTEQ -> BinaryOperator.GREATER_EQUAL
+			KtTokens.LT, KtTokens.GT, KtTokens.LTEQ, KtTokens.GTEQ -> return comparison(binary, left, right)
 			KtTokens.ANDAND -> BinaryOperator.AND
 			KtTokens.OROR -> BinaryOperator.OR
 			KtTokens.PLUS -> {
@@ -78,14 +75,40 @@ internal class Operators(private val body: BodyLowering) {
 			KtTokens.PERC -> return remainder(left, right)
 			KtTokens.IDENTIFIER -> return infix(binary, left, right)
 			KtTokens.IN_KEYWORD -> return inRange(binary, left, body.expression(left), right)
-			KtTokens.NOT_IN ->
-				return Expression.Unary(UnaryOperator.NOT, inRange(binary, left, body.expression(left), right))
+			KtTokens.NOT_IN -> return negation(inRange(binary, left, body.expression(left), right))
 			KtTokens.ELVIS -> return elvis(binary, left, right)
 			in ASSIGNMENTS -> throw Rejection(binary, "In Lua an assignment is a statement, not a value; assign on a"
 				+ " line of its own.")
 			else -> throw Rejection.notYet(binary, "The operator ${binary.operationReference.text}")
 		}
 		return Expression.Binary(operator, body.expression(left), body.expression(right))
+	}
+
+	/** `<`, `>`, `<=` and `>=`; on an enum's constants, which compare by their place in the enum, on their ordinals. */
+	private fun comparison(binary: KtBinaryExpression, left: KtExpression, right: KtExpression): Expression {
+		val operator = when (binary.operationToken) {
+			KtTokens.LT -> BinaryOperator.LESS
+			KtTokens.GT -> BinaryOperator.GREATER
+			KtTokens.LTEQ -> BinaryOperator.LESS_EQUAL
+			else -> BinaryOperator.GREATER_EQUAL
+		}
+		if (body.pluginEnum(with(unit.session) { left.expressionType }) != null) {
+			return Expression.binary(Expression.field(body.expression(left), "ordinal"), operator,
+				Expression.field(body.expression(right), "ordinal"))
+		}
+		return Expression.binary(body.expression(left), operator, body.expression(right))
+	}
+
+	/**
+	 * A test turned around: `a ~= b` for `a == b`, which reads better than `not (a == b)` and always means the same,
+	 * the test itself for `not test`, and `not test` for any other.
+	 */
+	fun negation(test: Expression): Expression {
+		inverted(test)?.let { return it }
+		if (test is Expression.Unary && test.operator() == UnaryOperator.NOT) {
+			return test.operand()
+		}
+		return Expression.Unary(UnaryOperator.NOT, test)
 	}
 
 	/** `a ~= b` for `a == b`, and `a == b` for `a ~= b`; null for any other expression. */
@@ -123,27 +146,32 @@ internal class Operators(private val body: BodyLowering) {
 		return Expression.binary(above, BinaryOperator.AND, below)
 	}
 
-	/**
-	 * `value ?: default` as `value or default`, unless the value can be `false`, which `or` would replace too; then a
-	 * helper replaces only nil.
-	 */
+	/** `value ?: default`; see [orElse]. */
 	private fun elvis(binary: KtBinaryExpression, left: KtExpression, right: KtExpression): Expression {
 		if (Branches.jumps(right) && right !is KtThrowExpression) {
 			throw Rejection(binary, "In Lua leaving with ?: takes a statement of its own; write it as a local, val x ="
 				+ " value ?: return, or test the value with if.")
 		}
-		val value = body.expression(left)
-		val type = with(unit.session) { left.expressionType }
+		return orElse(body.expression(left), with(unit.session) { left.expressionType }, right)
+	}
+
+	/**
+	 * A value that may be nil, or a default: `value or default`, unless the value can be `false`, which `or` would
+	 * replace too; then a helper replaces only nil.
+	 *
+	 * @param type the value's type
+	 */
+	fun orElse(value: Expression, type: KaType?, default: KtExpression): Expression {
 		if (type != null && types.isBoolean(type)) {
 			// A nullable flag with a fixed default compares with the other value
-			when ((right as? KtConstantExpression)?.text) {
+			when ((default as? KtConstantExpression)?.text) {
 				"true" -> return Expression.binary(value, BinaryOperator.NOT_EQUAL, Expression.BooleanLiteral(false))
 				"false" -> return Expression.binary(value, BinaryOperator.EQUAL, Expression.BooleanLiteral(true))
 			}
 			unit.use(Helper.VALUE_OR)
-			return Helper.VALUE_OR.invoke(value, body.expression(right))
+			return Helper.VALUE_OR.invoke(value, body.expression(default))
 		}
-		return Expression.binary(value, BinaryOperator.OR, body.expression(right))
+		return Expression.binary(value, BinaryOperator.OR, body.expression(default))
 	}
 
 	/**

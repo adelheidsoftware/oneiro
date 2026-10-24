@@ -8,6 +8,7 @@ import com.sun.source.util.TreePath;
 import java.util.Arrays;
 import javax.lang.model.element.Element;
 import org.adelheid.oneiro.lowering.ReviewAreas;
+import org.adelheid.oneiro.lowering.SourceLanguage;
 
 /**
  * Warnings at uses of the API that Jagex's moderators review closely, which the bindings mark {@code @LuaReview} with
@@ -35,7 +36,7 @@ final class ReviewWarnings {
 		if (area == null || unit.plugin.dev() || isSuppressed(where, area)) {
 			return;
 		}
-		unit.warning(unit.start(where), ReviewAreas.warning(use, area, "@SuppressWarnings"));
+		unit.warning(unit.start(where), ReviewAreas.warning(use, area, SourceLanguage.JAVA));
 	}
 
 	/** Whether a method, class or variable declaration around the use carries {@code @SuppressWarnings} for it. */

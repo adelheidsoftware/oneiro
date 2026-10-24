@@ -1,0 +1,39 @@
+plugin/Lookups.kt:15: warning: PlayerList.All finds other players, which Jagex's moderators review closely: information about other players must never be exported, nor used to scout, target or track opponents in PvP. Once the plugin meets this, @Suppress("oneiro:other-players") on the function, class or file silences this warning.
+		return PlayerList.All().size
+		       ^
+
+plugin/Lookups.kt:24: warning: Player.GetTrackingID reads the character's tracking ID, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses trackingAccess for. Once the plugin meets this, @Suppress("oneiro:tracking") on the function, class or file silences this warning.
+		return Player.GetTrackingID()
+		       ^
+
+plugin/Lookups.kt:28: warning: HTTPRequest(...) connects to a server outside the game, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses httpAccess for, what it sends where, and which data protection case applies; information about other players must never be sent. Once the plugin meets this, @Suppress("oneiro:http") on the function, class or file silences this warning.
+		HTTPRequest("https://example.org", "/ping").Get { request -> log(request.responseCode) }
+		^
+
+plugin/Lookups.kt:34: warning: Chat.AddMessage uses the chat, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about them, which a plugin must never export. Once the plugin meets this, @Suppress("oneiro:chat") on the function, class or file silences this warning.
+		HTTPRequest("https://example.org").Get { request -> Chat.AddMessage(request.data) }
+		                                                    ^
+
+plugin/Lookups.kt:38: warning: Subscribing to ChatMessage uses the chat, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about them, which a plugin must never export. Once the plugin meets this, @Suppress("oneiro:chat") on the function, class or file silences this warning.
+		Event.ChatMessage.Subscribe("watcher.echo") { message -> log(message.chatMessage) }
+		^
+
+plugin/Watcher.kt:12: warning: Subscribing to ChatMessage uses the chat, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about them, which a plugin must never export. Once the plugin meets this, @Suppress("oneiro:chat") on the function, class or file silences this warning.
+	@Subscribe
+	^
+
+plugin/Watcher.kt:21: warning: MiniMenu.Swap changes the right-click menu, which Jagex's moderators review closely as input customisation: a change must not reduce the game's intended difficulty. Once the plugin meets this, @Suppress("oneiro:mini-menu") on the function, class or file silences this warning.
+		menu.Swap(1, 2)
+		^
+
+plugin/Watcher.kt:22: warning: MiniMenu.Add changes the right-click menu, which Jagex's moderators review closely as input customisation: a change must not reduce the game's intended difficulty. Once the plugin meets this, @Suppress("oneiro:mini-menu") on the function, class or file silences this warning.
+		menu.Add("Note", { Chat.AddMessage("Noted") })
+		^
+
+plugin/Watcher.kt:22: warning: Chat.AddMessage uses the chat, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about them, which a plugin must never export. Once the plugin meets this, @Suppress("oneiro:chat") on the function, class or file silences this warning.
+		menu.Add("Note", { Chat.AddMessage("Noted") })
+		                   ^
+
+plugin/Watcher.kt:26: warning: MiniMenuEntry.overrideText changes the right-click menu, which Jagex's moderators review closely as input customisation: a change must not reduce the game's intended difficulty. Once the plugin meets this, @Suppress("oneiro:mini-menu") on the function, class or file silences this warning.
+				entry.overrideText = entry.fullText + "!"
+				^

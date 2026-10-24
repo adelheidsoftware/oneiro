@@ -3,7 +3,9 @@ package org.adelheid.oneiro.kotlin
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
+import org.adelheid.oneiro.lowering.ClientLimits
 import org.adelheid.oneiro.lowering.IndexArithmetic
+import org.adelheid.oneiro.lowering.TableFolding
 import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
@@ -22,27 +24,33 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaJavaFieldSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaLocalVariableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaNamedFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaSamConstructorSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolModality
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolOrigin
 import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.psi.KtAnonymousInitializer
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
-import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtBreakExpression
+import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
-import org.jetbrains.kotlin.psi.KtContinueExpression
-import org.jetbrains.kotlin.psi.KtDeclarationWithBody
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassBody
+import org.jetbrains.kotlin.psi.KtClassLiteralExpression
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstantExpression
+import org.jetbrains.kotlin.psi.KtContinueExpression
+import org.jetbrains.kotlin.psi.KtDeclarationWithBody
+import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
-import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtElement
+import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
@@ -51,17 +59,21 @@ import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.psi.KtIfExpression
 import org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel
 import org.jetbrains.kotlin.psi.KtIsExpression
+import org.jetbrains.kotlin.psi.KtLabeledExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtObjectDeclaration
+import org.jetbrains.kotlin.psi.KtObjectLiteralExpression
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 import org.jetbrains.kotlin.psi.KtPostfixExpression
 import org.jetbrains.kotlin.psi.KtPrefixExpression
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPropertyAccessor
+import org.jetbrains.kotlin.psi.KtPsiUtil
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtReturnExpression
 import org.jetbrains.kotlin.psi.KtSafeQualifiedExpression
@@ -92,7 +104,7 @@ internal class BodyLowering(
 	val types = unit.types
 	val api = ApiCalls(unit)
 	val library = LibraryCalls(this)
-	private val loops = Loops(this)
+	val loops = Loops(this)
 	private val branches = Branches(this)
 	val operators = Operators(this)
 	private val exceptions = Exceptions(this)
@@ -103,6 +115,10 @@ internal class BodyLowering(
 	/** Whether a type is an exception's, which in Lua is only its message. */
 	fun isThrowable(type: KaClassSymbol): Boolean = exceptions.isThrowable(type)
 	val typeTests = TypeTests(this)
+	val objects = ObjectExpressions(this)
+	val returnValues = ReturnValues(this)
+	val comparators = Comparators(this)
+	private val chains = CollectionLoops(this)
 
 	/** A lowering for code nested in this one's, such as a lambda's, which runs on the same object. */
 	fun nested(): BodyLowering = BodyLowering(unit, owner, instance)
@@ -110,13 +126,18 @@ internal class BodyLowering(
 	/**
 	 * A block's statements, each with the comments above it and after it, and the comments that close the block. With
 	 * [last], the final statement is lowered by it instead, as a branch that gives a value hands its last expression
-	 * on.
+	 * on. A statement Oneiro rejects is reported, and the statements after it are still checked.
 	 */
 	fun block(block: KtBlockExpression, last: ((KtExpression) -> List<Statement>)? = null): Block {
 		val entries = mutableListOf<Block.Entry>()
 		val statements = block.statements
 		for ((index, statement) in statements.withIndex()) {
-			entries += entries(statement, if (index == statements.lastIndex && last != null) lowerBy(last) else null)
+			val lower = if (index == statements.lastIndex && last != null) lowerBy(last) else null
+			try {
+				entries += entries(statement, lower)
+			} catch (rejection: Rejection) {
+				unit.reject(rejection)
+			}
 		}
 		// Comments after the last statement, before the closing brace, close the block
 		val closing = generateSequence(block.rBrace?.prevSibling) { it.prevSibling }
@@ -125,7 +146,7 @@ internal class BodyLowering(
 			.toList()
 			.reversed()
 			.flatMap(source::closing)
-		return Block(entries, closing)
+		return Block(TableFolding.fold(entries), closing)
 	}
 
 	/**
@@ -168,8 +189,11 @@ internal class BodyLowering(
 			statement(statement).map(Block.Entry::of)
 		}
 
-	private fun statement(statement: KtExpression): List<Statement> = when (statement) {
+	fun statement(statement: KtExpression): List<Statement> = when (statement) {
 		is KtProperty -> local(statement)
+		is KtDestructuringDeclaration -> listOf(returnValues.destructured(statement))
+		is KtClass -> objects.localClass(statement)
+		is KtLabeledExpression -> statement(statement.baseExpression ?: throw Rejection(statement, EMPTY))
 		is KtIfExpression -> listOf(branches.ifStatement(statement))
 		is KtWhenExpression -> branches.whenStatement(statement)
 		is KtReturnExpression -> returnStatement(statement)
@@ -206,6 +230,10 @@ internal class BodyLowering(
 		if (value is KtTryExpression) {
 			return exceptions.tryStatement(value, Exceptions.TryValue(::returned, true)).map { it.statement() }
 		}
+		if (returnValues.components(with(unit.session) { value.expressionType }) != null) {
+			return listOf(Statement.Return(returnValues.returned(value)))
+		}
+		chains.chain(value)?.let { return chains.lower(it, CollectionLoops.Destination.Returned) }
 		return delivered(value) { Statement.Return(listOf(it)) } ?: listOf(Statement.Return(listOf(expression(value))))
 	}
 
@@ -217,6 +245,7 @@ internal class BodyLowering(
 		if (value is KtIfExpression && isSafeConditional(value)) {
 			return null
 		}
+		chains.chain(value)?.let { return chains.lower(it, CollectionLoops.Destination.Sink(sink)) }
 		if (isUse(value)) {
 			return exceptions.use(value as KtQualifiedExpression, sink)
 		}
@@ -253,6 +282,33 @@ internal class BodyLowering(
 		return Statement.Do(block(literal.bodyBlockExpression ?: throw Rejection(lambda, EMPTY)))
 	}
 
+	/** Whether an expression is Kotlin's `require(condition)` or `check(condition)`. */
+	private fun isPrecondition(expression: KtExpression): Boolean = with(unit.session) {
+		val call = expression as? KtCallExpression ?: return false
+		val id = call.resolveToCall()?.successfulFunctionCallOrNull()?.symbol?.callableId ?: return false
+		id.packageName.asString() == "kotlin" && id.classId == null && id.callableName.asString() in PRECONDITIONS
+	}
+
+	/**
+	 * `require(condition) { message }` and `check(condition) { message }` as
+	 * `if not condition then error(message) end`; without a message, the one Kotlin gives.
+	 */
+	private fun precondition(call: KtCallExpression): Statement {
+		val arguments = call.valueArguments.mapNotNull { it.getArgumentExpression() }
+		val condition = arguments.firstOrNull() ?: throw Rejection(call, EMPTY)
+		val lambda = arguments.getOrNull(1) as? KtLambdaExpression
+		val message = if (lambda != null) {
+			strings.asText(lambdas.value(lambda, "A message becomes the value of Lua's error; write it as one"
+				+ " expression, { \"...\" }."))
+		} else {
+			Expression.string(PRECONDITIONS.getValue((call.calleeExpression as KtNameReferenceExpression)
+				.getReferencedName()))
+		}
+		unit.useGlobal("error")
+		val raised = Statement.CallStatement(Expression.call(Expression.name("error"), message))
+		return Statement.ifThen(operators.negation(expression(condition)), Block.of(raised))
+	}
+
 	/** Whether an expression is `resource.use { ... }`, which closes the resource after the lambda's code. */
 	private fun isUse(expression: KtExpression): Boolean = with(unit.session) {
 		val call = (expression as? KtQualifiedExpression)?.selectorExpression as? KtCallExpression ?: return false
@@ -276,6 +332,16 @@ internal class BodyLowering(
 		return name
 	}
 
+	/**
+	 * The declaration a local's or a parameter's name belongs to: its own, or for a lambda's implicit `it`, the
+	 * lambda's, the innermost around the name that takes it.
+	 */
+	fun declarationOf(symbol: KaSymbol, reference: KtElement): PsiElement? = with(unit.session) {
+		symbol.psi ?: generateSequence(PsiTreeUtil.getParentOfType(reference, KtFunctionLiteral::class.java)) {
+			PsiTreeUtil.getParentOfType(it, KtFunctionLiteral::class.java)
+		}.firstOrNull { !it.hasParameterSpecification() && it.symbol.valueParameters.isNotEmpty() }
+	}
+
 	/** Whether code names a declaration, such as a catch's parameter. */
 	fun uses(code: PsiElement?, declaration: PsiElement): Boolean = code != null &&
 		PsiTreeUtil.collectElementsOfType(code, KtNameReferenceExpression::class.java).any {
@@ -295,7 +361,10 @@ internal class BodyLowering(
 		expression is KtSafeQualifiedExpression -> safeStatement(expression)
 		isUse(expression) -> exceptions.use(expression as KtQualifiedExpression, null)
 		isRun(expression) -> listOf(scoped(expression as KtCallExpression))
-		else -> strings.appends(expression) ?: collectionStatement(expression) ?: listOf(callStatement(expression))
+		isPrecondition(expression) -> listOf(precondition(expression as KtCallExpression))
+		else -> strings.appends(expression)
+			?: chains.chain(expression)?.let { chains.lower(it, CollectionLoops.Destination.Effect) }
+			?: collectionStatement(expression) ?: listOf(callStatement(expression))
 	}
 
 	/** An expression whose value goes nowhere, which Lua takes as a statement only when it is a call. */
@@ -321,9 +390,13 @@ internal class BodyLowering(
 	 * `val x = value ?: return` leaves when the value is null.
 	 */
 	private fun local(property: KtProperty): List<Statement> {
-		val name = unit.names.luaName(property.name!!)
+		val name = unit.localName(property, property.name!!)
 		val local = Expression.name(name)
 		val initializer = property.initializer ?: return listOf(Statement.Local(listOf(name), listOf()))
+		returnValues.components(with(unit.session) { initializer.expressionType })?.let { components ->
+			return returnValues.local(property, initializer, components)
+		}
+		chains.chain(initializer)?.let { return chains.lower(it, CollectionLoops.Destination.Local(name)) }
 		delivered(initializer) { Statement.assignment(local, it) }?.let {
 			return listOf(Statement.Local(listOf(name), listOf())) + it
 		}
@@ -345,6 +418,13 @@ internal class BodyLowering(
 	private fun assignment(assignment: KtBinaryExpression): List<Statement> {
 		val targetTree = assignment.left ?: throw Rejection(assignment, EMPTY)
 		val valueTree = assignment.right ?: throw Rejection(assignment, EMPTY)
+		val assigned = with(unit.session) {
+			((targetTree as? KtDotQualifiedExpression)?.selectorExpression ?: targetTree)
+				.let { it as? KtNameReferenceExpression }?.resolveSymbol()?.psi
+		}
+		if (assigned is KtProperty && unit.isSettingsProperty(assigned)) {
+			throw Rejection(targetTree, PluginClass.SETTINGS_VALUE + "assignment.")
+		}
 		checkAssigned(targetTree)
 		val target = expression(targetTree)
 		if (assignment.operationToken == KtTokens.EQ) {
@@ -372,10 +452,19 @@ internal class BodyLowering(
 		return listOf(Statement.assignment(target, Expression.binary(target, operator, value)))
 	}
 
-	/** Assigning a field of the RS3 bindings that moderation reviews, such as a menu entry's `overrideText`. */
+	/**
+	 * Assigning a field of the RS3 bindings that moderation reviews, such as a menu entry's `overrideText`, or a field
+	 * of a value the client hands out as a copy.
+	 */
 	private fun checkAssigned(target: KtExpression): Unit = with(unit.session) {
 		val name = (if (target is KtDotQualifiedExpression) target.selectorExpression else target)
 			as? KtNameReferenceExpression ?: return
+		val holder = (target as? KtDotQualifiedExpression)?.receiverExpression?.let(KtPsiUtil::safeDeparenthesize)
+		val holderName = (holder as? KtDotQualifiedExpression)?.selectorExpression ?: holder
+		val copied = (holderName as? KtNameReferenceExpression)?.resolveSymbol() as? KaJavaFieldSymbol
+		if (holder != null && copied != null) {
+			api.checkNotIntoCopy(holder, copied, name.getReferencedName(), target)
+		}
 		val field = name.resolveSymbol() as? KaJavaFieldSymbol ?: return
 		val owner = api.owner(field) ?: return
 		if (api.isApi(owner)) {
@@ -423,7 +512,9 @@ internal class BodyLowering(
 		is KtIsExpression -> typeTests.isExpression(expression)
 		is KtPostfixExpression -> postfix(expression)
 		is KtLambdaExpression -> lambdas.lambda(expression)
+		is KtObjectLiteralExpression -> objects.literal(expression)
 		is KtCallableReferenceExpression -> lambdas.reference(expression)
+		is KtClassLiteralExpression -> throw Rejection(expression, NO_CLASSES)
 		is KtSafeQualifiedExpression -> safeCall(expression)
 		is KtThrowExpression -> exceptions.errorCall(expression.thrownExpression ?: throw Rejection(expression, EMPTY))
 		is KtWhenExpression -> throw Rejection(expression, "In Lua when is a statement, not a value; give its value to"
@@ -549,7 +640,7 @@ internal class BodyLowering(
 			if (parameter?.destructuringDeclaration != null) {
 				throw Rejection.notYet(parameter, "A lambda parameter that destructures")
 			}
-			val name = unit.names.luaName(parameter?.name ?: "it")
+			val name = unit.localName(parameter ?: lambda.functionLiteral, parameter?.name ?: "it")
 			val value = Expression.name(name)
 			val code = lambda.bodyExpression ?: throw Rejection(lambda, EMPTY)
 			val present = Expression.binary(value, BinaryOperator.NOT_EQUAL, Expression.Nil())
@@ -571,6 +662,14 @@ internal class BodyLowering(
 	/** `receiver.member` or `receiver.member(...)`. */
 	private fun qualified(qualified: KtQualifiedExpression): Expression {
 		val receiver = qualified.receiverExpression
+		if (KtPsiUtil.safeDeparenthesize(receiver) is KtClassLiteralExpression || isJavaClass(qualified)) {
+			throw Rejection(qualified, NO_CLASSES)
+		}
+		// ground.height() or span.low: the local its component was read into
+		val selector = qualified.selectorExpression
+		val member = (selector as? KtNameReferenceExpression)?.getReferencedName()
+			?: ((selector as? KtCallExpression)?.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+		member?.let { returnValues.component(receiver, it, qualified) }?.let { return it }
 		return when (val selector = qualified.selectorExpression) {
 			is KtCallExpression -> call(selector, receiver, qualified)
 			is KtNameReferenceExpression -> reference(selector, receiver, qualified)
@@ -589,8 +688,14 @@ internal class BodyLowering(
 		where: KtExpression = reference): Expression =
 		with(unit.session) {
 			when (val symbol = reference.resolveSymbol()) {
-				is KaLocalVariableSymbol, is KaValueParameterSymbol ->
-					Expression.name(unit.names.luaName(reference.getReferencedName()))
+				is KaLocalVariableSymbol, is KaValueParameterSymbol -> {
+					if (returnValues.isSplit(reference)) {
+						val example = returnValues.componentExample(reference)?.let { ", such as $it" }.orEmpty()
+						throw Rejection(reference, "The values a Lua function returns exist only at its call; read them"
+							+ " through ${reference.getReferencedName()}'s components$example.")
+					}
+					Expression.name(unit.localName(declarationOf(symbol, reference), reference.getReferencedName()))
+				}
 				is KaJavaFieldSymbol -> {
 					val owner = api.owner(symbol)
 					if (owner == null || !api.isApi(owner)) {
@@ -638,7 +743,7 @@ internal class BodyLowering(
 		val name = reference.getReferencedName()
 		if (receiver == null && declaration is KtParameter && inInitializer(reference)) {
 			// In an init block or a property's value, the name of a constructor's property is its parameter
-			return Expression.name(unit.names.luaName(name))
+			return Expression.name(unit.localName(declaration, name))
 		}
 		if (declaration is KtProperty && declaration.parent is KtFile) {
 			if (declaration.containingFile != unit.file) {
@@ -646,7 +751,7 @@ internal class BodyLowering(
 			}
 			return Expression.name(unit.names.luaName(name))
 		}
-		val ownerClass = classId?.let { findClass(it) } ?: throw Rejection.notYet(where, "Reading $name")
+		val ownerClass = api.owner(symbol) ?: throw Rejection.notYet(where, "Reading $name")
 		val ownerDeclaration = ownerClass.psi as? KtClassOrObject
 		val entry = unit.entry
 		if (entry != null && (ownerDeclaration == entry || ownerDeclaration?.parent?.parent == entry)) {
@@ -669,8 +774,8 @@ internal class BodyLowering(
 	}
 
 	/**
-	 * The members Kotlin gives a simple enum of the plugin's: `Mode.entries`, its constants in a list, and a constant's
-	 * `name`, which in Lua is the constant itself.
+	 * The members Kotlin gives an enum of the plugin's: `Mode.entries`, its constants in a list, and a constant's
+	 * `name`, which in Lua is a simple enum's constant itself, and an object enum's field, as its `ordinal` is.
 	 */
 	private fun enumProperty(where: KtExpression, symbol: KaPropertySymbol, receiver: KtExpression?): Expression? =
 		with(unit.session) {
@@ -680,16 +785,46 @@ internal class BodyLowering(
 			if (name == "entries" && pluginEnum) {
 				return constants(owner)
 			}
-			if (receiver == null || pluginEnum(receiver.expressionType) == null) {
+			if ((symbol.containingSymbol as? KaClassSymbol)?.classId != StandardClassIds.Enum) {
 				return null
 			}
-			when (name) {
-				"name" -> expression(receiver)
-				"ordinal" -> throw Rejection(where, "In Lua a simple enum's constants are the strings of their names,"
-					+ " which have no ordinal; give the enum a property for what the ordinal stands for.")
-				else -> null
+			// A client enum's value is the client's number
+			val apiEnum = receiver?.expressionType?.expandedSymbol?.takeIf {
+				it.classKind == KaClassKind.ENUM_CLASS && api.isApi(it)
 			}
+			if (apiEnum != null) {
+				if (name != "name") {
+					throw Rejection(where, "A client enum's value is the client's number, which has no $name; compare"
+						+ " it with the enum's constants instead.")
+				}
+				return api.enumName(where, expression(receiver), apiEnum)
+			}
+			// Inside an object enum, its own name and ordinal
+			val enumType = if (receiver == null) ownEnum() else pluginEnum(receiver.expressionType)
+			if (enumType == null || name != "name" && name != "ordinal") {
+				return null
+			}
+			if (unit.isObjectEnum(enumType)) {
+				return Expression.field(receiverOrSelf(receiver, where), name)
+			}
+			if (name == "ordinal") {
+				throw Rejection(where, "In Lua a simple enum's constants are the strings of their names, which have no"
+					+ " ordinal; give the enum a property for what the ordinal stands for.")
+			}
+			expression(receiver!!)
 		}
+
+	/** The enum whose code this is, a constant's body among it; null outside an enum. */
+	private fun ownEnum(): KaClassSymbol? = with(unit.session) {
+		val declaration = (owner as? KtEnumEntry)?.containingClassOrObject ?: owner
+		(declaration as? KtClass)?.takeIf { it.isEnum() }?.classSymbol
+	}
+
+	/** A constant of an enum of the plugin's as text: a simple enum's is its string, an object enum's its name. */
+	fun enumText(value: KtExpression): Expression? = with(unit.session) {
+		val type = pluginEnum(value.expressionType) ?: return null
+		if (unit.isObjectEnum(type)) Expression.field(expression(value), "name") else expression(value)
+	}
 
 	/** The constants of an enum of the plugin's, in order, as a list: `{ Volume.QUIET, Volume.LOUD }`. */
 	private fun constants(enumClass: KaClassSymbol): Expression {
@@ -699,7 +834,7 @@ internal class BodyLowering(
 	}
 
 	/** The enum of the plugin's that a type is, or null for any other type. */
-	private fun pluginEnum(type: KaType?): KaClassSymbol? = with(unit.session) {
+	fun pluginEnum(type: KaType?): KaClassSymbol? = with(unit.session) {
 		val symbol = type?.expandedSymbol ?: return null
 		if (symbol.classKind == KaClassKind.ENUM_CLASS && unit.isPluginType(symbol)) symbol else null
 	}
@@ -744,6 +879,10 @@ internal class BodyLowering(
 			target = Expression.field(target, "outer")
 			current = current.containingClassOrObject
 		}
+		if (memberOwner != null && current is KtObjectDeclaration && current.isObjectLiteral() &&
+			!isOrExtends(current, memberOwner)) {
+			throw Rejection.notYet(where, "Reading a member of the class around an object expression")
+		}
 		return target
 	}
 
@@ -765,12 +904,21 @@ internal class BodyLowering(
 		val resolved = call.resolveToCall()?.successfulFunctionCallOrNull()
 			?: throw Rejection(where, "This call does not resolve to one function.")
 		val symbol = resolved.symbol
+		checkClientHasIt(where, symbol, receiver)
 		if (symbol is KaConstructorSymbol) {
 			// A type alias's constructor, such as HashMap's, belongs to no class; it makes the class the alias names
 			val type = symbol.containingClassId?.let { findClass(it) } ?: symbol.returnType.expandedSymbol
 				?: throw IllegalStateException("a constructor outside a class: ${call.text}")
 			if (api.isApi(type)) {
 				return api.construct(where, symbol, type, arguments(resolved, call))
+			}
+			if (unit.isEntryClass(type)) {
+				throw Rejection(where, "The client creates the plugin class, once, when the plugin starts; use its"
+					+ " members directly instead of creating another.")
+			}
+			if (unit.annotations.has(type, Annotations.LUA_RETURN_VALUES)) {
+				throw Rejection(where, "${type.classId?.shortClassName} stands for several Lua values, which only a"
+					+ " return makes; return it as it is made, or pass its values one by one.")
 			}
 			if (unit.isPluginType(type) && (type.psi as? KtClass)?.isPlainData() == true) {
 				return plainData(resolved, call)
@@ -790,7 +938,15 @@ internal class BodyLowering(
 			}
 			return library.construct(where, type.classId!!, libraryArguments(resolved, call))
 		}
+		if (symbol is KaSamConstructorSymbol) {
+			// Predicate { ... } makes a functional interface's value of a lambda, which in Lua is the function itself
+			return expression(argumentTrees(resolved, call).single())
+		}
 		enumCall(symbol, receiver, resolved, call)?.let { return it }
+		if (receiver != null && isFunctionalMethod(symbol)) {
+			// A value of a functional interface of the library is a Lua function, which has no methods to call
+			return Expression.Call(expression(receiver), arguments(resolved, call))
+		}
 		if (isFunctionInvoke(symbol)) {
 			// A value of a function type, called: f(x) or f.invoke(x)
 			val function = receiver ?: call.calleeExpression ?: throw Rejection(call, EMPTY)
@@ -806,8 +962,15 @@ internal class BodyLowering(
 			throw Rejection(where, "Kotlin generates ${symbol.name}() for a data class, but its Lua table has no such"
 				+ " function; use the class's properties instead.")
 		}
-		val arguments = arguments(resolved, call)
 		val ownerClass = api.owner(symbol) ?: throw Rejection.notYet(where, "Calling a function outside a class")
+		val name = symbol.name.asString()
+		if (unit.isEntryClass(ownerClass) && (name == "startUp" || name == "shutDown") &&
+			symbol.valueParameters.isEmpty()) {
+			val moment = if (name == "startUp") "starts" else "stops"
+			throw Rejection(where, "$name() runs once, when the plugin $moment; move what it shares into a function of"
+				+ " its own and call that.")
+		}
+		val arguments = arguments(resolved, call)
 		if (api.isApi(ownerClass)) {
 			checkSubscription(symbol, receiver, where)
 			val target = if (symbol.isStatic) null else receiverOrSelf(receiver, where)
@@ -818,6 +981,32 @@ internal class BodyLowering(
 		}
 		return pluginCall(where, symbol, ownerClass, receiver, arguments)
 	}
+
+	/**
+	 * Rejects what the client has nothing for, a clock and threads, in a call or in the calls its receiver is made of;
+	 * see [ClientLimits].
+	 */
+	private fun checkClientHasIt(where: KtExpression, symbol: KaCallableSymbol, receiver: KtExpression?): Unit =
+		with(unit.session) {
+			val inner = receiver as? KtCallExpression ?: (receiver as? KtDotQualifiedExpression)?.selectorExpression
+				as? KtCallExpression
+			val innerSymbol = inner?.resolveToCall()?.successfulFunctionCallOrNull()?.symbol
+			if (receiver != null && innerSymbol != null) {
+				checkClientHasIt(receiver, innerSymbol, (receiver as? KtDotQualifiedExpression)?.receiverExpression)
+			}
+			val id = symbol.callableId ?: return
+			val owner = (symbol as? KaConstructorSymbol)?.containingClassId ?: id.classId
+			val ownerName = owner?.asFqNameString() ?: id.packageName.asString()
+			val member = if (symbol is KaConstructorSymbol) null else id.callableName.asString()
+			if (ClientLimits.readsClock(ownerName, member)) {
+				throw Rejection(where, ClientLimits.NO_CLOCK)
+			}
+			val supertypes = owner?.let { findClass(it) }?.defaultType?.allSupertypes.orEmpty()
+				.mapNotNull { it.expandedSymbol?.classId?.asFqNameString() }
+			if (ClientLimits.isConcurrent(ownerName) || supertypes.any { it in ClientLimits.CONCURRENT_SUPERTYPES }) {
+				throw Rejection(where, ClientLimits.NO_THREADS)
+			}
+		}
 
 	/**
 	 * A data class of properties alone is a plain table, built where the constructor is called:
@@ -848,10 +1037,39 @@ internal class BodyLowering(
 				"values" -> return constants(owner)
 			}
 		}
-		if (receiver != null && pluginEnum(receiver.expressionType) != null && name == "toString") {
-			return expression(receiver)
+		if (receiver != null && name == "toString") {
+			enumText(receiver)?.let { return it }
+		}
+		// An object enum's constants compare by their place in the enum
+		if (receiver != null && name == "compareTo" && pluginEnum(receiver.expressionType) != null) {
+			val other = argumentTrees(resolved, call).single()
+			return Expression.binary(Expression.field(expression(receiver), "ordinal"), BinaryOperator.SUBTRACT,
+				Expression.field(expression(other), "ordinal"))
 		}
 		null
+	}
+
+	/** Whether a function is the one function of a functional interface of the library, such as `Runnable.run`. */
+	private fun isFunctionalMethod(function: KaCallableSymbol): Boolean = with(unit.session) {
+		val owner = api.owner(function) ?: return false
+		val id = owner.classId?.asFqNameString() ?: return false
+		id.startsWith("java.") && owner.classKind == KaClassKind.INTERFACE &&
+			function.modality == KaSymbolModality.ABSTRACT &&
+			owner.annotations.any { it.classId?.asFqNameString() == "java.lang.FunctionalInterface" }
+	}
+
+	/** Whether an expression reads `value.javaClass`, the class of a value at run time. */
+	private fun isJavaClass(qualified: KtQualifiedExpression): Boolean = with(unit.session) {
+		val selector = qualified.selectorExpression as? KtNameReferenceExpression ?: return false
+		val id = (selector.resolveSymbol() as? KaPropertySymbol)?.callableId
+		id?.packageName?.asString() == "kotlin.jvm" && id.callableName.asString() == "javaClass"
+	}
+
+	/** Whether a function's receiver is a value of the type itself, or `this` inside it, rather than of a subclass. */
+	private fun isValueOf(receiver: KtExpression?, type: KaClassSymbol): Boolean = with(unit.session) {
+		val receiverType = if (receiver == null || receiver is KtThisExpression) owner?.classSymbol
+		else receiver.expressionType?.expandedSymbol
+		receiverType == null || receiverType == type
 	}
 
 	/** Whether a function is a function type's `invoke`, which calling a value of that type calls. */
@@ -894,13 +1112,23 @@ internal class BodyLowering(
 		val isPrivate = declaration is KtNamedFunction && declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) &&
 			declaration.containingFile == unit.file
 		return when {
+			// An object expression that is a Lua function has no methods to call
+			ownerDeclaration is KtObjectDeclaration && ownerDeclaration.isObjectLiteral() &&
+				objects.isFunction(ownerDeclaration) -> Expression.Call(receiverOrSelf(receiver, call), arguments)
 			// super.f(): the superclass's function, called on this object
 			receiver is KtSuperExpression ->
 				Expression.Call(Expression.field(unit.moduleReference(ownerClass), name), listOf(self(receiver)) +
 					arguments)
 			// A value of a plugin's fun interface is a Lua function, which has no methods to call
-			(ownerDeclaration as? KtClass)?.hasModifier(KtTokens.FUN_KEYWORD) == true ->
+			(ownerDeclaration as? KtClass)?.hasModifier(KtTokens.FUN_KEYWORD) == true &&
+				isValueOf(receiver, ownerClass) -> {
+				if (function.modality != KaSymbolModality.ABSTRACT) {
+					val type = ownerClass.classId?.shortClassName
+					throw Rejection(call, "A value of $type is a Lua function, which carries no methods; make"
+						+ " ${function.name}() a function outside the interface that takes the $type.")
+				}
 				Expression.Call(receiverOrSelf(receiver, call, ownerClass), arguments)
+			}
 			unit.annotations.has(ownerClass, Annotations.CONFIG_GROUP) ->
 				Expression.Call(Expression.field(unit.moduleReference(ownerClass), name), arguments)
 			ownerDeclaration != null && ownerDeclaration == unit.entry ->
@@ -1019,6 +1247,12 @@ internal class BodyLowering(
 
 	private companion object {
 		const val EMPTY = "This expression is incomplete and does not compile."
+
+		/** Kotlin's preconditions, with the message each throws when the call gives none. */
+		private val PRECONDITIONS = mapOf("require" to "Failed requirement.", "check" to "Check failed.")
+
+		const val NO_CLASSES = "Lua has no runtime type information, so a value has no class to read; test it with" +
+			" is instead."
 		val FUNCTION_TYPE = Regex("kotlin\\.(jvm\\.functions\\.)?Function\\d+|kotlin\\.reflect\\.KFunction\\d*")
 		val ASSIGNMENTS = setOf(KtTokens.EQ, KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ,
 			KtTokens.PERCEQ)

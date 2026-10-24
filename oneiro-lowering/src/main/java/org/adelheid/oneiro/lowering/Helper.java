@@ -223,6 +223,12 @@ public enum Helper {
 			    map[key] = value
 			end
 			return map"""),
+	PUT_ENTRIES("putEntries", "Puts the keys and values the list holds in turn into the map, in order, and gives the"
+			+ " map.", "map, list", """
+			for i = 1, #list, 2 do
+			    map[list[i]] = list[i + 1]
+			end
+			return map"""),
 	FIRST_KEY("firstKey", "The first key pairs gives, as a TreeMap's firstKey() or a TreeSet's first(); nil for an"
 			+ " empty table, where Java throws.", "t", """
 			for key in pairs(t) do
@@ -338,9 +344,20 @@ public enum Helper {
 					+ " they share a name, and returns it.";
 			case IS_INSTANCE -> "Whether the value is an object of the class, or of a class that extends it, as"
 					+ " Kotlin's is.";
+			case KEYS_OF -> "The table's keys as a list, in the order pairs gives them, as Kotlin copies a set or a"
+					+ " map's keys into a list.";
+			case VALUES_OF -> "The table's values as a list, in the order pairs gives them, as Kotlin copies a map's"
+					+ " values into a list.";
+			case ADD_ELEMENTS, ADD_KEYS, COPY_ENTRIES, PUT_ENTRIES -> comment;
+			case FIRST_KEY -> "The first key pairs gives, as a sorted set's first() or a sorted map's firstKey(); nil"
+					+ " for an empty table, where Kotlin throws.";
+			case LAST_KEY -> "The last key pairs gives, as a sorted set's last() or a sorted map's lastKey(); nil for"
+					+ " an empty table, where Kotlin throws.";
+			case SORTED_TABLE -> "A table whose pairs walks its keys in sorted order, as a TreeMap and a TreeSet do in"
+					+ " Kotlin; comesBefore orders them, and Lua's < when it is nil.";
 			case ORDERED_TABLE -> "A table whose pairs walks its keys in the order they were first added, as"
-					+ " Kotlin's mutableMapOf and mutableSetOf do. It holds its entries itself; its metatable keeps"
-					+ " their order.";
+					+ " Kotlin's maps and sets do, but for its hash maps and hash sets. It holds its entries itself;"
+					+ " its metatable keeps their order.";
 			default -> throw new IllegalStateException("the Kotlin front end does not use " + this);
 		};
 	}

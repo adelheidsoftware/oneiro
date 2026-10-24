@@ -55,6 +55,9 @@ import org.junit.jupiter.api.TestFactory;
  *       reads or behaves differently.
  * </ul>
  *
+ * <p>A case for what only Kotlin has keeps its sources in {@code kotlin/} alone, without {@code input/}, and its
+ * {@code expected/} and {@code check.lua} are the Kotlin's.
+ *
  * <p>Lua is the bundled Lua 5.4.8 unless {@code oneiro.luaExecutable} names an installed one. Every expected file must
  * also be laid out as StyLua lays it out.
  */
@@ -66,12 +69,15 @@ class ConformanceTest {
 	@TestFactory
 	Stream<DynamicTest> cases() throws IOException {
 		try (Stream<Path> folders = Files.list(resource("cases"))) {
-			return folders.filter(Files::isDirectory).sorted().toList().stream()
+			return folders.filter(folder -> Files.isDirectory(folder.resolve("input"))).sorted().toList().stream()
 					.map(folder -> DynamicTest.dynamicTest(folder.getFileName().toString(), () -> run(folder)));
 		}
 	}
 
-	/** Every case's Kotlin twin, where it has one: the same plugin in Kotlin, which must give the same Lua. */
+	/**
+	 * Every case's Kotlin sources, where it has them: a twin of the Java input, which must give the same Lua, or a case
+	 * of what only Kotlin has.
+	 */
 	@TestFactory
 	Stream<DynamicTest> kotlinTwins() throws IOException {
 		try (Stream<Path> folders = Files.list(resource("cases"))) {

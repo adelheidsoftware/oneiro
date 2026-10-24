@@ -1,5 +1,6 @@
 package org.adelheid.oneiro.kotlin
 
+import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Comment
@@ -8,7 +9,6 @@ import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.Trivia
 import org.adelheid.oneiro.lua.UnaryOperator
 import org.jetbrains.kotlin.psi.KtBlockExpression
-import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtBreakExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtContinueExpression
@@ -90,7 +90,7 @@ internal class Branches(private val body: BodyLowering) {
 		// The subject as Lua reads it, and the expression whose type it has
 		val subject: Pair<Expression, KtExpression>? = when {
 			declared != null -> {
-				val name = unit.names.luaName(declared.name!!)
+				val name = unit.localName(declared, declared.name!!)
 				val value = declared.initializer ?: throw Rejection(declared, "A when's subject needs a value.")
 				before += Statement.Local(listOf(name), listOf(body.expression(value)))
 				Expression.name(name) to value

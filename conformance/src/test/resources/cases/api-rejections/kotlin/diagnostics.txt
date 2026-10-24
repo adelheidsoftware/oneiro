@@ -1,0 +1,63 @@
+plugin/Copies.kt:10: error: npc.coordGrid hands out a copy of the client's value, so changing coordGrid.x here changes nothing in the client; change a local copy instead: val coordGrid = npc.coordGrid; coordGrid.x = ...
+		npc.coordGrid.x = 5
+		^
+
+plugin/Keys.kt:12: error: The client hands out a new NPCType object each time one is read, and Lua compares table keys by identity, so the map or set would not find it again; key it by a number or string the value carries, such as its id or uid.
+		return counts[npc.config] ?: 0
+		              ^
+
+plugin/Keys.kt:16: error: The client hands out a new InvType object each time one is read, and Lua compares table keys by identity, so the map or set would not find it again; key it by a number or string the value carries, such as its id or uid.
+		inventories.add(config.Inv.RS3_INV)
+		                ^
+
+plugin/Keys.kt:20: error: The client hands out a new InvType object each time one is read, and Lua compares table keys by identity, so the map or set would not find it again; key it by a number or string the value carries, such as its id or uid.
+		return mapOf(config.Inv.RS3_INV to "backpack")
+		             ^
+
+plugin/Misuse.kt:12: error: Chat.AddMessage needs the chatAccess permission, which the manifest does not declare; add it to the build, oneiro { plugin { permissions { optional(chatAccess) } } }, and check CurrentPlugin.HasPermission(PluginPermissions.chatAccess) before using it.
+		Chat.AddMessage("hello")
+		^
+
+plugin/Misuse.kt:16: error: ExecuteConsoleCommand is for development only and must never ship; move the code that uses it into the dev source set (src/dev/kotlin), whose Lua stays out of the zip.
+		ExecuteConsoleCommand("!tele 3200 3200")
+		^
+
+plugin/Misuse.kt:24: error: Lua errors carry a value, not a class, so one catch takes every error; catch Exception once, and tell the errors apart inside it.
+		} catch (e: RuntimeException) {
+		  ^
+
+plugin/Misuse.kt:32: error: Lua errors carry a value, not a class, so a catch cannot tell exception classes apart; catch Exception or Throwable, and tell the errors apart inside it.
+		} catch (e: IllegalStateException) {
+		         ^
+
+plugin/Misuse.kt:38: error: In Lua the try block is a function that pcall runs, and Lua cannot tell a function that returned nothing from one that ran to its end; make every path through the try block return, or none.
+		try {
+		^
+
+plugin/Misuse.kt:53: error: Lua runs the try block as a function, which a break or continue cannot leave; set a flag and act on it after the try.
+					break
+					^
+
+plugin/Misuse.kt:63: error: The values a Lua function returns exist only at its call; read them through ground's components, such as ground.height().
+		return kept(ground)
+		            ^
+
+plugin/Misuse.kt:66: error: GroundHeight stands for several Lua values, which only a local can receive, from a call; pass its components one by one instead.
+	private fun kept(ground: World.GroundHeight): Int {
+	                 ^
+
+plugin/Misuse.kt:71: error: The values a Lua function returns exist only at its call; initialise stored with the call itself.
+		val stored = World.GroundHeight(1, true)
+		             ^
+
+plugin/Misuse.kt:72: error: Several Lua values are returned as they are made: return GroundHeight(...), or the call that returns them.
+		return stored
+		       ^
+
+plugin/Names.kt:9: error: The client's PluginPermissions table has no FromID to give a value's name; compare the value with PluginPermissions's constants instead.
+		return permission.name
+		       ^
+
+plugin/Ticks.kt:9: error: The ServerLogic event passes nothing, so its payload has nothing to read; leave tick unused.
+		Event.ServerLogic.Subscribe("ticks.tick") { tick -> println(tick) }
+		                                            ^

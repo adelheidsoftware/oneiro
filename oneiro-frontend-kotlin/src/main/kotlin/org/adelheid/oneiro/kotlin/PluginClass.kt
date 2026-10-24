@@ -9,14 +9,14 @@ import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.Trivia
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KaJavaFieldSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtAnonymousInitializer
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 
 /**
  * The plugin class as `main.lua`, a chunk of locals: the file's constants, the class's properties and functions,
@@ -42,8 +42,14 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 		for (member in type.declarations) {
 			try {
 				when {
-					member is KtProperty -> if (!unit.isSettingsProperty(member)) {
-						members += local(member, members.size == fileConstants && fileConstants > 0)
+					member is KtProperty && unit.isSettingsProperty(member) -> member.initializer?.let {
+						throw Rejection(it, SETTINGS_VALUE + "initializer.")
+					}
+					member is KtProperty -> members += local(member, members.size == fileConstants && fileConstants > 0)
+					member is KtAnonymousInitializer || member is KtSecondaryConstructor -> {
+						val instead = if (member is KtAnonymousInitializer) "an init block" else "a constructor"
+						throw Rejection(member, "The client creates the plugin class, and main.lua runs once; put"
+							+ " start-up code in startUp() instead of $instead.")
 					}
 					member is KtNamedFunction && isLifecycle(member) -> {}
 					member is KtNamedFunction && unit.hasAnnotation(member, Annotations.SUBSCRIBE) -> {
@@ -119,10 +125,8 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 		}
 		checkEventAllowed(payload, event, function)
 		unit.reviews.check(payload, "Subscribing to $event", function)
-		val passesNothing = payload.declaredMemberScope.callables
-			.none { it is KaJavaFieldSymbol || it is KaPropertySymbol }
-		if (!passesNothing) {
-			return Subscription(function, event, listOf(unit.names.luaName(parameter.name!!)))
+		if (unit.eventWithoutPayload(parameter.symbol.returnType) == null) {
+			return Subscription(function, event, listOf(unit.localName(parameter, parameter.name!!)))
 		}
 		val uses = PsiTreeUtil.collectElementsOfType(function.bodyExpression, KtNameReferenceExpression::class.java)
 			.any { it.resolveSymbol()?.psi == parameter }
@@ -210,6 +214,13 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 				listOf(), References.of(unit, shutDown))
 		}
 		return members
+	}
+
+	companion object {
+
+		/** The start of the error at a value given to a property of settings, which ends with what to remove. */
+		const val SETTINGS_VALUE = "A property of settings needs no value: every call through it calls the settings " +
+			"module, so remove the "
 	}
 
 	private fun lifecycleFunction(name: String): KtNamedFunction? =
