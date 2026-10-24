@@ -189,3 +189,23 @@ plugin/Store.java:9: error: A @LuaModule declaration's fields take their values 
 plugin/Store.java:11: error: Every method of a @LuaModule declaration is native: it stands for a function the Lua module defines.
 	public static int count() {
 	^
+
+plugin/Waiting.java:15: error: The client gives plugins no clock to read; to measure time, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		return System.currentTimeMillis();
+		       ^
+
+plugin/Waiting.java:19: error: The client gives plugins no clock to read; to measure time, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		return Instant.now().toEpochMilli();
+		       ^
+
+plugin/Waiting.java:23: error: Plugins run on the client's one thread and cannot start threads or schedule work of their own; do the work in an event callback, and to do it later, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		new Thread(work).start();
+		^
+
+plugin/Waiting.java:27: error: Plugins run on the client's one thread and cannot start threads or schedule work of their own; do the work in an event callback, and to do it later, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+		                                    ^
+
+plugin/Waiting.java:28: error: Plugins run on the client's one thread and cannot start threads or schedule work of their own; do the work in an event callback, and to do it later, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.
+		executor.scheduleAtFixedRate(work, 0, 1, TimeUnit.SECONDS);
+		^

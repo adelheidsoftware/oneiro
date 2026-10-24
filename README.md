@@ -6,8 +6,7 @@ Write RuneScape 3 plugins in Java, the way you would write a RuneLite plugin, an
 Named after the Oneiromancer of Lunar Isle.
 
 > **Status:** early development; 0.1.0 is the first release. Plugins written in Java compile to Lua and build into the
-> folder and zip that go to Mod.io ([what is supported](docs/java-subset.md)). Kotlin support and a guide from RuneLite
-> to RS3 are planned.
+> folder and zip that go to Mod.io ([what is supported](docs/java-subset.md)). Kotlin support is planned.
 
 ## What it does
 
@@ -176,6 +175,8 @@ In the client's console, `prf` finds the newly linked plugin and `pon coin-watch
 
 ## Documentation
 
+- [From RuneLite to RS3](docs/from-runelite.md): what a RuneLite plugin's events, getters, settings, overlays,
+  notifiers and timers become, and how the rules differ between the games.
 - [The plugin model and the build](docs/plugin-model.md): the project layout, the `oneiro { }` block, the tasks and
   the checks.
 - [Supported Java](docs/java-subset.md): every construct Oneiro accepts, the Lua it becomes, and what it rejects.

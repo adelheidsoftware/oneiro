@@ -14,9 +14,14 @@ All notable changes to Oneiro are listed here. The format follows
 - Compliance warnings: a use that Jagex's moderators review closely (the chat, HTTP requests, the tracking ID,
   changes to the right-click menu, finding other players) compiles with a warning that names what they look at.
   `@SuppressWarnings("oneiro:<area>")` silences an area's warnings once the plugin meets them.
+- [From RuneLite to RS3](docs/from-runelite.md), a guide for RuneLite developers: what a RuneLite plugin's events,
+  getters, settings, overlays, notifiers and timers become, and how the rules differ between the games.
 
 ### Changed
 
+- Threads, executors, futures and timers, and reading the current time, fail with an error that says what to write
+  instead, counting the ticks of `Event.ServerLogic` or `Event.Logic`, rather than as not supported yet: the client
+  runs plugins on one thread and gives them no clock.
 - Every Lua file starts with its path inside the plugin, `-- src/core/row.lua`, before its description. The client
   names a file in its errors only by the file's first line, so its errors now say which file they come from.
 

@@ -39,8 +39,9 @@ import org.jspecify.annotations.Nullable;
  * the form by the receiver's type and handles the calls that become statements, {@code Optional}, enum values,
  * {@code StringBuilder}, {@code System.out} and the constructors of the collections. {@link StringMethods},
  * {@link NumberMethods} and {@link CollectionMethods} hold the methods of strings, numbers and collections. Lists,
- * maps and sets are plain Lua tables, so they pass to and from the RS3 API unchanged. Anything else is rejected as
- * not supported yet.
+ * maps and sets are plain Lua tables, so they pass to and from the RS3 API unchanged. Threads, executors, timers and
+ * the current time have no Lua at all, and are rejected with what to write instead; anything else is rejected as not
+ * supported yet.
  */
 final class LibraryCalls {
 
@@ -51,6 +52,11 @@ final class LibraryCalls {
 			+ " text.toCharArray(), which walks the text itself.";
 	static final String STREAM_IN_STATEMENT = "In Lua a stream is a loop, which runs as statements; make the"
 			+ " stream the whole value of a local, an assignment or a return, or a forEach statement of its own.";
+	private static final String COUNT_TICKS = "count the ticks of Event.ServerLogic, about every 0.6 seconds, or of"
+			+ " Event.Logic, 50 a second.";
+	private static final String NO_THREADS = "Plugins run on the client's one thread and cannot start threads or"
+			+ " schedule work of their own; do the work in an event callback, and to do it later, " + COUNT_TICKS;
+	private static final String NO_CLOCK = "The client gives plugins no clock to read; to measure time, " + COUNT_TICKS;
 
 	final BodyLowering body;
 	private final StringMethods stringMethods;
@@ -567,6 +573,7 @@ final class LibraryCalls {
 		List<? extends ExpressionTree> arguments = call.getArguments();
 		boolean isStatic = method.getModifiers().contains(Modifier.STATIC);
 		String owner = JavaTypes.owner(method).getQualifiedName().toString();
+		checkClientHasIt(call, JavaTypes.owner(method), name);
 		if (types().isStream(unit().type(call)) && !name.equals("chars") && !name.equals("codePoints")) {
 			throw new Rejection(call, STREAM_IN_STATEMENT);
 		}
@@ -675,6 +682,33 @@ final class LibraryCalls {
 		throw Rejection.notYet(tree, construct);
 	}
 
+	/**
+	 * Rejects what the client has nothing for, which RuneLite plugins reach for: plugins run on the client's one
+	 * thread, so threads, executors, futures and timers have nothing to run on, and Lua's {@code os} library, with its
+	 * clock, is not there (checked in the client, 2026-10-23).
+	 *
+	 * @param method the method called on the class, or null for a constructor
+	 */
+	private void checkClientHasIt(Tree where, TypeElement type, @Nullable String method) {
+		String name = type.getQualifiedName().toString();
+		boolean readsClock = method != null && ((name.equals("java.lang.System")
+				&& (method.equals("currentTimeMillis") || method.equals("nanoTime")))
+				|| (name.startsWith("java.time.") && method.equals("now")));
+		if (readsClock || name.equals("java.time.Clock")) {
+			throw new Rejection(where, NO_CLOCK);
+		}
+		TypeMirror declared = type.asType();
+		boolean concurrent = name.equals("java.lang.Thread") || name.equals("java.util.Timer")
+				|| name.equals("java.util.TimerTask") || name.equals("javax.swing.Timer")
+				|| name.equals("java.util.concurrent.Executors")
+				|| types().isSubtype(declared, "java.util.concurrent.Executor")
+				|| types().isSubtype(declared, "java.util.concurrent.Future")
+				|| types().isSubtype(declared, "java.util.concurrent.CompletionStage");
+		if (concurrent) {
+			throw new Rejection(where, NO_THREADS);
+		}
+	}
+
 	/** A type as a message names it: {@code Stream} rather than {@code java.util.stream.Stream<java.lang.String>}. */
 	static String simpleName(TypeMirror type) {
 		return type instanceof DeclaredType declared
@@ -779,6 +813,7 @@ final class LibraryCalls {
 
 	/** {@code new ArrayList<>()}, {@code new HashMap<>()}, {@code new HashSet<>()} and {@code new StringBuilder()}. */
 	Expression construct(NewClassTree creation, TypeElement type) {
+		checkClientHasIt(creation, type, null);
 		String name = type.getQualifiedName().toString();
 		List<? extends ExpressionTree> arguments = creation.getArguments();
 		// new StringBuilder('a') takes the char as its number, a capacity, as Java does
