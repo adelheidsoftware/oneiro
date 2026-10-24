@@ -11,7 +11,7 @@ The credentials stay outside the repository, in `~/.gradle/gradle.properties` or
 | Property | What it is |
 | --- | --- |
 | `mavenCentralUsername`, `mavenCentralPassword` | A user token from the [Central Portal](https://central.sonatype.com/) (Account, Generate User Token), for an account that owns the `org.adelheid` namespace. |
-| `signingInMemoryKey`, `signingInMemoryKeyId`, `signingInMemoryKeyPassword` | The PGP key that signs the artifacts: the ASCII-armoured secret key (`gpg --export-secret-keys --armor <key id>`), the last eight characters of its ID, and its passphrase. Its public key must be on a public key server, such as `keys.openpgp.org`. |
+| `signing.keyId`, `signing.password`, `signing.secretKeyRingFile` | The PGP key that signs the artifacts: the last eight characters of its ID, its passphrase, and a file holding the secret key (`gpg --export-secret-keys -o secring.gpg <key id>`). On a CI service, give the ASCII-armoured key itself instead, in the environment variables `ORG_GRADLE_PROJECT_signingInMemoryKey`, `ORG_GRADLE_PROJECT_signingInMemoryKeyId` and `ORG_GRADLE_PROJECT_signingInMemoryKeyPassword`. The public key must be on a key server Maven Central reads, such as `keyserver.ubuntu.com`. |
 | `gradle.publish.key`, `gradle.publish.secret` | An API key from the [Gradle Plugin Portal](https://plugins.gradle.org/) (environment variables `GRADLE_PUBLISH_KEY` and `GRADLE_PUBLISH_SECRET`). |
 
 The build signs publications only when a signing key is configured, so that anyone can publish to a local repository.
