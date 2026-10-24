@@ -38,7 +38,9 @@ function Cleanup.counted(task)
     local ok, failure = pcall(function()
         task()
     end)
+    -- A failed run counts too
     Cleanup.runs = Cleanup.runs + 1
+    -- The task's error, if any, goes on to the caller
     if not ok then
         error(failure, 0)
     end

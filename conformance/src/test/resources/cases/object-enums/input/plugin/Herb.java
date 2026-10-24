@@ -6,8 +6,10 @@ public enum Herb {
 	GUAM(5291, 9),
 	MARRENTILL(5292, 14), // a little later
 	RANARR(5295, 32) {
+		// Only Ranarr has a note
 		private final String note = "the prayer herb";
 
+		// Ranarr is known for prayer, not for its seed
 		@Override
 		public String describe() {
 			return note;

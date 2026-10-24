@@ -40,7 +40,9 @@ public final class Cleanup {
 		try {
 			task.run();
 		} finally {
+			// A failed run counts too
 			runs++;
+			// The task's error, if any, goes on to the caller
 		}
 	}
 

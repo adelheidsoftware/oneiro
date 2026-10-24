@@ -11,4 +11,6 @@ assert(Loops.skipOdd({ 1, 2, 3, 4 }) == 6)
 assert(Loops.pairs(3) == 8)
 assert(Loops.halvings(8) == 3)
 assert(Loops.keySum({ a = 1, bb = 2 }, { a = true }) == 2)
+-- Only the cells whose column is their own row count
+assert(Loops.diagonal({ a = { a = 1, b = 2 }, b = { b = 3 }, c = { a = 4 } }) == 4)
 assert(Loops.drain(3) == 0)

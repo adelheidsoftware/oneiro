@@ -18,13 +18,15 @@ dependencyResolutionManagement {
 
 rootProject.name = "oneiro"
 
+// Each published module's folder is named after its artifact, org.adelheid:<folder>, so that a build that includes
+// this one resolves Oneiro's modules from it
 include(
-	"api",
-	"lua-tree",
-	"lua-runner",
-	"bindings-gen",
-	"plugin-model",
-	"gradle-plugin",
-	"frontend-java",
+	"oneiro-api",
+	"oneiro-lua-tree",
+	"oneiro-lua-runner",
+	"oneiro-bindings-gen",
+	"oneiro-plugin-model",
+	"oneiro-gradle-plugin",
+	"oneiro-frontend-java",
 	"conformance",
 )

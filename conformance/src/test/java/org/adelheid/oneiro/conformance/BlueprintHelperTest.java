@@ -18,14 +18,16 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Oneiro on a real plugin. Blueprint-Helper's core modules {@code row}, {@code permutations},
- * {@code scoring}, {@code prototyping} and {@code search}, rewritten in Java in
- * {@code src/test/resources/blueprint-helper/input}, must compile to the hand-written Lua in {@code expected/} and pass
- * all of Blueprint-Helper's own tests in place of the plugin's hand-written modules: the tests of those five, and those
- * of the hand-written modules that use them ({@code seeds}, {@code deduce}, {@code session} and the rest).
- * {@code search} calls the hand-written {@code seeds} through a {@code @LuaModule} declaration whose functions return
- * several values, and catches its own error through {@code pcall}. Blueprint-Helper is a separate repository, read
- * from {@code oneiro.blueprintHelper}; without it the test is skipped.
+ * Oneiro on a real plugin, Blueprint-Helper. Five of its core modules, {@code row}, {@code permutations},
+ * {@code scoring}, {@code prototyping} and {@code search}, are rewritten in Java in
+ * {@code src/test/resources/blueprint-helper/input}. They must compile to the hand-written Lua in {@code expected/},
+ * and the result must pass all of Blueprint-Helper's own tests in place of the plugin's modules: the tests of those
+ * five, and those of the hand-written modules that use them ({@code seeds}, {@code deduce}, {@code session} and the
+ * rest). {@code search} calls the hand-written {@code seeds} through a {@code @LuaModule} declaration whose functions
+ * return several values, and catches its own error through {@code pcall}.
+ *
+ * <p>Blueprint-Helper is a separate repository, found through {@code oneiro.blueprintHelper}, which the build points at
+ * a checkout next to Oneiro's; without it the test is skipped.
  */
 class BlueprintHelperTest {
 
@@ -41,7 +43,7 @@ class BlueprintHelperTest {
 		String location = System.getProperty("oneiro.blueprintHelper", "");
 		Path plugin = Path.of(location);
 		Assumptions.assumeTrue(!location.isEmpty() && Files.isDirectory(plugin.resolve("tests")),
-				"Blueprint-Helper is not checked out next to Oneiro, so the exit test cannot run its tests.");
+				"Blueprint-Helper is not checked out next to Oneiro, so its tests cannot run.");
 
 		Map<String, String> modules = ConformanceTest.compileAndCompare(ConformanceTest.resource("blueprint-helper"));
 		Path root = Path.of("build", "blueprint-helper").toAbsolutePath();

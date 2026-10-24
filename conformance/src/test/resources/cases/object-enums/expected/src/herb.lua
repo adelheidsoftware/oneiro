@@ -18,8 +18,10 @@ end
 Herb.GUAM = Herb.new("GUAM", 0, 5291, 9)
 Herb.MARRENTILL = Herb.new("MARRENTILL", 1, 5292, 14) -- a little later
 Herb.RANARR = Herb.new("RANARR", 2, 5295, 32)
+-- Only Ranarr has a note
 Herb.RANARR.note = "the prayer herb"
 
+-- Ranarr is known for prayer, not for its seed
 function Herb.RANARR:describe()
     return self.note
 end

@@ -105,6 +105,18 @@ function Loops.keySum(scores, names)
     return total
 end
 
+function Loops.diagonal(rows)
+    local total = 0
+    for key, value in pairs(rows) do
+        for cellKey, cellValue in pairs(value) do
+            if cellKey == key then
+                total = total + cellValue
+            end
+        end
+    end
+    return total
+end
+
 function Loops.drain(start)
     local value = start
     repeat

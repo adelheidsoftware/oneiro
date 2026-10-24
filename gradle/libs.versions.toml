@@ -1,6 +1,4 @@
 [versions]
-# Kotlin is used only by the Kotlin front end; everything else is Java 25.
-kotlin = "2.4.21"
 junit = "6.1.3"
 jspecify = "1.0.1"
 errorprone = "2.50.0"
@@ -9,6 +7,8 @@ nullaway = "0.14.2"
 checkstyle = "14.3.0"
 # Lua 5.4.8, the version the RS3 client embeds, as native libraries for Windows, Linux and macOS
 luajava = "4.1.0"
+maven-publish = "0.37.0"
+plugin-publish = "2.2.1"
 
 # junit-jupiter and junit-platform-launcher take their versions from junit-bom.
 [libraries]
@@ -22,5 +22,8 @@ luajava-lua54 = { module = "party.iroiro.luajava:lua54", version.ref = "luajava"
 luajava-lua54-platform = { module = "party.iroiro.luajava:lua54-platform", version.ref = "luajava" }
 
 [plugins]
-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 errorprone = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }
+# Publishes the modules to Maven Central, signed, with sources and Javadoc
+maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "maven-publish" }
+# Publishes the Gradle plugin to the Gradle Plugin Portal
+plugin-publish = { id = "com.gradle.plugin-publish", version.ref = "plugin-publish" }

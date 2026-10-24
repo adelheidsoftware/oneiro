@@ -25,9 +25,12 @@ function Bank.new(owner)
     local self = setmetatable({}, Bank)
     self.tabs = {}
 
+    -- The first tab is made here, before the constructor runs
     -- Every bank starts with its first tab
-    self.tabs[#self.tabs + 1] = Tab.new(self, "main")
+    self.tabs[#self.tabs + 1] = Tab.new(self, "main") -- named as the client names it
+    -- More tabs open as the player adds them
     self.owner = owner
+    -- The tabs are ready by now
     return self
 end
 

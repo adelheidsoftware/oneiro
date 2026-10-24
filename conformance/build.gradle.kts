@@ -1,25 +1,27 @@
-// The conformance suite: Java inputs with hand-written expected Lua, one case per row of docs/java-subset.md. Tests
-// only; nothing here is published.
+// The conformance suite: Java inputs with hand-written expected Lua, a case for each row of docs/java-subset.md.
+// Tests only; nothing here is published.
 
 dependencies {
-	testImplementation(project(":frontend-java"))
-	testImplementation(project(":lua-runner"))
-	testImplementation(project(":api"))
-	testImplementation(project(":bindings-gen"))
-	testImplementation(project(":plugin-model"))
+	testImplementation(project(":oneiro-frontend-java"))
+	testImplementation(project(":oneiro-lua-runner"))
+	testImplementation(project(":oneiro-api"))
+	testImplementation(project(":oneiro-bindings-gen"))
+	testImplementation(project(":oneiro-plugin-model"))
 }
 
 tasks.test {
 	// Lua runs on the bundled Lua 5.4.8 unless oneiro.luaExecutable names an installed one. StyLua checks the
-	// expected files when oneiro.styluaExecutable names it; CI must name it, locally the check is skipped without.
+	// expected files when oneiro.styluaExecutable names it. Without it the check is skipped, unless the CI
+	// environment variable is set, as on most CI services: then a missing StyLua fails the suite.
 	listOf("oneiro.luaExecutable", "oneiro.styluaExecutable").forEach { property ->
 		providers.gradleProperty(property).orNull?.let { systemProperty(property, it) }
 	}
 	providers.environmentVariable("CI").orNull?.let { systemProperty("oneiro.ci", it) }
 	systemProperty("oneiro.styluaConfig", rootProject.file("stylua.toml").absolutePath)
 	inputs.file(rootProject.file("stylua.toml"))
-	// Cases compile against bindings generated from bindings-gen's stubs fixture, so they need no stubs checkout
-	val stubsFixture = project(":bindings-gen").file("src/test/stubs")
+	// Cases compile against bindings generated from the bindings generator's stubs fixture, so they need no checkout of
+	// the stubs
+	val stubsFixture = project(":oneiro-bindings-gen").file("src/test/stubs")
 	systemProperty("oneiro.stubsFixture", stubsFixture.absolutePath)
 	inputs.dir(stubsFixture).withPropertyName("stubsFixture")
 	// BlueprintHelperTest runs Blueprint-Helper's own tests, when that repository sits next to Oneiro's

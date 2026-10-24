@@ -99,6 +99,18 @@ public final class Loops {
 		return total;
 	}
 
+	public static int diagonal(Map<String, Map<String, Integer>> rows) {
+		int total = 0;
+		for (Map.Entry<String, Map<String, Integer>> row : rows.entrySet()) {
+			for (Map.Entry<String, Integer> cell : row.getValue().entrySet()) {
+				if (cell.getKey().equals(row.getKey())) {
+					total += cell.getValue();
+				}
+			}
+		}
+		return total;
+	}
+
 	public static int drain(int start) {
 		int value = start;
 		do {

@@ -37,11 +37,21 @@ import org.junit.jupiter.api.TestFactory;
 
 /**
  * Runs every case under {@code src/test/resources/cases}. A case is a folder with the Java sources of a small plugin in
- * {@code input/} (root package {@code plugin}) and any of: {@code expected/}, the Lua Oneiro must write, at the paths
- * it must write it, by hand in the house style; {@code diagnostics.txt}, the errors and warnings it must report; and
- * {@code check.lua}, assertions run under Lua 5.4 against the generated modules; and {@code lua/}, hand-written Lua the
- * generated modules use, such as a module the Java declares with {@code @LuaModule}. Lua is the bundled Lua 5.4.8
- * unless {@code oneiro.luaExecutable} names an installed one. Every expected file must also be StyLua-formatted.
+ * {@code input/}, in the root package {@code plugin}, and any of:
+ *
+ * <ul>
+ *   <li>{@code expected/}: the Lua Oneiro must write, at the paths it must write it, written by hand in the house
+ *       style;
+ *   <li>{@code diagnostics.txt}: the errors and warnings it must report;
+ *   <li>{@code check.lua}: assertions run under Lua 5.4 against the generated modules;
+ *   <li>{@code lua/}: hand-written Lua the generated modules use, such as a module the Java declares with
+ *       {@code @LuaModule};
+ *   <li>{@code case.properties}: the plugin's {@code id}, {@code permissions} and {@code flags}, and whether the
+ *       sources are the {@code dev} source set.
+ * </ul>
+ *
+ * <p>Lua is the bundled Lua 5.4.8 unless {@code oneiro.luaExecutable} names an installed one. Every expected file must
+ * also be laid out as StyLua lays it out.
  */
 class ConformanceTest {
 
@@ -189,8 +199,8 @@ class ConformanceTest {
 	}
 
 	/**
-	 * The plugin facts a case's {@code case.properties} gives: {@code id}, and comma-separated {@code permissions} and
-	 * {@code flags}; the defaults without one.
+	 * The plugin facts a case's {@code case.properties} gives: {@code id}, comma-separated {@code permissions} and
+	 * {@code flags}, and {@code dev}; the defaults without one.
 	 */
 	private static PluginFacts facts(Path properties) throws IOException {
 		if (!Files.exists(properties)) {
@@ -210,12 +220,12 @@ class ConformanceTest {
 				.collect(Collectors.toSet());
 	}
 
-	/** The jar of the bindings generated from bindings-gen's stubs fixture, once per run. */
+	/** The jar of the bindings generated from the bindings generator's stubs fixture, once per run. */
 	static Path fixtureBindings() {
 		return FixtureBindings.JAR;
 	}
 
-	/** The bindings generated once per run from bindings-gen's stubs fixture, which the cases compile against. */
+	/** The bindings that the cases compile against, generated once per run from the bindings generator's fixture. */
 	private static final class FixtureBindings {
 
 		static final Path JAR = generate();

@@ -22,4 +22,8 @@ public final class Misuse {
 	public static Object create() {
 		return new Store();
 	}
+
+	public static int hashOf(Integer count) {
+		return count.hashCode();
+	}
 }

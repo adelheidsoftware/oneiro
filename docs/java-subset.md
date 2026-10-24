@@ -4,10 +4,10 @@ What Oneiro accepts in a plugin's Java source and the Lua it produces. Every row
 covers plain Java, the RS3 API, `try`/`catch`, several return values, and the plugin class and its settings. How a
 plugin is built, packaged and linked into the client is in [plugin-model.md](plugin-model.md).
 
-**Status:** every row not marked *Never* works, and the
-conformance suite has a case for each. Rows marked *Never* are genuine gaps between Java and Lua and fail with the
-message shown, a compile-time error that fails the build. A library method or class these tables do not list fails the
-same way with "not supported yet"; the Java library is large, and the tables list what plugins use.
+Every row not marked *Never* works, and the conformance suite has a case for each. Rows marked *Never* are genuine
+gaps between Java and Lua: they fail with the message shown, a compile-time error that fails the build. A library
+method or class these tables do not list fails the same way, with a message that it is "not supported yet"; the Java
+library is large, and the tables list what plugins use.
 
 Two rules decide every row:
 
@@ -78,7 +78,7 @@ only when it uses them. Each one is listed in [Helpers](#helpers).
 | `instanceof` a plain record, a client type, a list, map or array | *Never*: "A record with only its components is a plain Lua table, which Lua cannot tell from other tables; ..." and "Lua cannot tell the client's objects, or lists, maps and other tables, apart by type; test what the value holds instead." | |
 | Record patterns, `x instanceof Point(int a, int b)` | *Never*: "Lua has no patterns that take a record apart; test the type, then read the record's components." | |
 | Overloads that form a default chain: each shorter one only calls the next longer one, passing its own parameters first and constants for the rest (`Point() { this(0, 0); }`, `add(x) { add(x, STEP); }`) | One function that fills in the missing arguments: `y = y or 0`, or for a boolean `if flag == nil then flag = false end` | The idiomatic Lua form of optional arguments; `---@param y? integer` marks them optional. Constants are literals, enum constants and static final fields; a `null` constant leaves the parameter nil. A filled-in parameter must not accept `null`, since a passed `nil` would get the default. The overloads are all static or all instance, all private or none; comments above the shorter ones go above the function. |
-| Any other overloaded methods or constructors | *Never*: "Lua functions have no parameter types, so two methods cannot share a name; rename one (for example addAll, addOne), or make the shorter ones a default chain (see docs/java-subset.md)." | For constructors: "...so a class has one constructor; turn the others into static methods with names of their own, or make the shorter ones a default chain". |
+| Any other overloaded methods or constructors | *Never*: "Lua functions have no parameter types, so two methods cannot share a name; rename one (for example addAll, addOne), or make the shorter ones a default chain (see https://github.com/adelheidsoftware/oneiro/blob/main/docs/java-subset.md)." | For constructors: "...so a class has one constructor; turn the others into static methods with names of their own, or make the shorter ones a default chain". |
 | A method or constructor with varargs, `int total(int... numbers)` | `function Grids.total(...)` with `local numbers = { ... }` | `---@param ... integer`. A call passes its values one by one; an array passed for them is spread, `Grids.total(table.unpack(more))`. |
 | A field and a public method with the same name (`count` and `count()`) | *Never*: "The field count and the method count() would share one slot in the Lua table; rename one." | An object's fields and its class's methods are looked up in the same Lua table. |
 | Inner (non-static) class | A class whose objects keep their outer object, `function Tab.new(outer, name)` with `self.outer = outer` | The outer object's members are read through it, `self.outer.owner`, `self.outer:tabCount()`, and `Bank.this` is `self.outer`. `new Tab(name)` passes the object making it, `Tab.new(self, name)`, and `bank.new Tab(name)` passes `bank`. |
@@ -416,7 +416,7 @@ plugin's Java needs no annotations of its own.
 
 ## Calling existing Lua
 
-Plugins mix generated and hand-written Lua, and use library plugins. Four features from the `api` artifact cover
+Plugins mix generated and hand-written Lua, and use library plugins. Four features from the `oneiro-api` artifact cover
 where they meet: `@LuaName`, `@LuaModule` declarations, records, and `@LuaReturnValues` for several return values.
 
 | Java | Lua | Notes |
@@ -511,8 +511,8 @@ These are documented differences, not errors:
 
 ## Client findings
 
-`formatStr` is documented only as "`{}` placeholders, `{0}` positional, fmtlib option syntax". A probe plugin recorded its
-behaviour on client 951-1 (2026-10-21):
+`formatStr` is documented only as "`{}` placeholders, `{0}` positional, fmtlib option syntax". Tested on client 951-1
+(2026-10-21), it behaves as follows:
 
 - **Every number arrives as a double.** `{}` prints `2` for both `2` and `2.0`, `0.30000000000000004` for
   `0.1 + 0.2`, and `9.223372036854776e+18` for `math.maxinteger`; `2^53 + 1` prints as `9007199254740992`. Integer
@@ -528,8 +528,8 @@ behaviour on client 951-1 (2026-10-21):
   `[ERROR] ... invalid format string` (or a similar message), and `formatStr` returns `nil`. Extra arguments are
   ignored. Oneiro checks every format string when it compiles, so generated code never reaches these cases.
 
-An API probe plugin recorded what the client does where the docs and the stubs leave it open (client 951-1,
-2026-10-22 and 23). What shapes the Java above:
+Where the docs and the stubs leave the client's behaviour open, it was tested on client 951-1 (2026-10-22 and 23).
+These findings shape the Java above:
 
 - **No `io`, `os`, `debug` or `utf8`.** The client gives plugins Lua's `string`, `table` and `math` (with
   `math.type`), so generated code uses nothing else.

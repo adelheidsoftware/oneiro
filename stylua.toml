@@ -1,5 +1,5 @@
-# StyLua settings matching the plugin house style (docs/04-lua-style.md in the workspace). StyLua checks Oneiro's
-# expected and generated Lua in the conformance suite; it is never shipped.
+# StyLua settings for the Lua Oneiro writes (see "The Lua style" in CONTRIBUTING.md). The conformance suite checks its
+# expected Lua with StyLua 2.6.0 and these settings; StyLua is not part of Oneiro.
 syntax = "Lua54"
 column_width = 120
 line_endings = "Unix"

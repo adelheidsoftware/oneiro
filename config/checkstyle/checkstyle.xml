@@ -20,6 +20,14 @@
 		<property name="format" value="\s+$"/>
 		<property name="message" value="Line has trailing whitespace."/>
 	</module>
+	<module name="RegexpMultiline">
+		<property name="format" value="\n[ \t]*\n[ \t]*\n"/>
+		<property name="message" value="Two blank lines in a row."/>
+	</module>
+	<module name="RegexpMultiline">
+		<property name="format" value="\n[ \t]*\n[ \t]*\}"/>
+		<property name="message" value="Blank line before a closing brace."/>
+	</module>
 
 	<module name="TreeWalker">
 		<module name="AvoidStarImport"/>

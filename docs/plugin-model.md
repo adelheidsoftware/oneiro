@@ -16,8 +16,8 @@ src/test/lua/              optional *_test.lua files, run against the plugin as 
 ```
 
 The Oneiro Gradle plugin applies the `java` plugin, sets the Java toolchain to 25 (Gradle finds an installed JDK 25 or,
-with the foojay resolver, downloads one), and adds the RS3 bindings, Oneiro's `api` and JSpecify to the compile
-classpath. The Gradle that runs the build only needs Java 17.
+with the foojay resolver, downloads one), and adds the RS3 bindings, Oneiro's API (`oneiro-api`) and JSpecify to the
+compile classpath. The Gradle that runs the build only needs Java 17.
 
 ## The `oneiro { }` block
 

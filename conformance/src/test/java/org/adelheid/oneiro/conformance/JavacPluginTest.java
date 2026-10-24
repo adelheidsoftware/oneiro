@@ -44,8 +44,8 @@ class JavacPluginTest {
 		}
 		Path settings = OUTPUT.resolve(id + ".properties");
 		new CompilerSettings("", id, Set.of(), Set.of(), false, lua, false).write(settings);
-		List<String> classpath = new ArrayList<>(List.of(System.getProperty("java.class.path")
-				.split(File.pathSeparator)));
+		List<String> classpath =
+				new ArrayList<>(List.of(System.getProperty("java.class.path").split(File.pathSeparator)));
 		classpath.add(ConformanceTest.fixtureBindings().toString());
 		String path = String.join(File.pathSeparator, classpath);
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();

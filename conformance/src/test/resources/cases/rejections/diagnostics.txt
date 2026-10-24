@@ -146,11 +146,15 @@ plugin/Misuse.java:23: error: A @LuaModule declaration has no Java constructor; 
 		return new Store();
 		       ^
 
+plugin/Misuse.java:27: error: Calling hashCode on a boxed value is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/java-subset.md lists the Java that is.
+		return count.hashCode();
+		       ^
+
 plugin/Pair.java:11: error: Lua has one module per file; move Second into a file of its own.
 final class Second {
 ^
 
-plugin/Rejected.java:13: error: Lua functions have no parameter types, so two methods cannot share a name; rename one (for example sumAll, sumOne), or make the shorter ones a default chain (see docs/java-subset.md).
+plugin/Rejected.java:13: error: Lua functions have no parameter types, so two methods cannot share a name; rename one (for example sumAll, sumOne), or make the shorter ones a default chain (see https://github.com/adelheidsoftware/oneiro/blob/main/docs/java-subset.md).
 	public static int sum(int a, int b, int c) {
 	^
 

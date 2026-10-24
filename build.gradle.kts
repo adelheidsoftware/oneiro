@@ -1,14 +1,16 @@
+import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
 
-// Root of the Oneiro build: settings every module shares. Each module applies its own `java-library` or `java`
-// plugin; this file adds the Java 25 toolchain, JSpecify, Error Prone with NullAway, Checkstyle, and JUnit to all of
-// them.
+// Settings every module shares: the Java 25 toolchain, JSpecify, Error Prone with NullAway, Checkstyle and JUnit, and
+// the publishing of every module but the conformance suite. The group and version are in gradle.properties.
 
 plugins {
 	// Lifecycle tasks (build, check, clean) at the root, so `./gradlew build` works with or without modules
 	base
 	alias(libs.plugins.errorprone) apply false
+	alias(libs.plugins.maven.publish) apply false
+	alias(libs.plugins.plugin.publish) apply false
 }
 
 // The type-safe `libs` accessor resolves against the project being configured, so inside subprojects it would target
@@ -20,11 +22,6 @@ val junitBom = libs.junit.bom
 val junitJupiter = libs.junit.jupiter
 val junitPlatformLauncher = libs.junit.platform.launcher
 val checkstyleVersion = libs.versions.checkstyle.get()
-
-allprojects {
-	group = "org.adelheid"
-	version = "0.1.0-SNAPSHOT"
-}
 
 subprojects {
 	apply(plugin = "java")
@@ -53,6 +50,19 @@ subprojects {
 			check("NullAway", CheckSeverity.ERROR)
 			option("NullAway:OnlyNullMarked", "true")
 			option("NullAway:JSpecifyMode", "true")
+			// Unlike Checkstyle's check, this one sees a static import whose name is also a local's
+			check("RemoveUnusedImports", CheckSeverity.ERROR)
+		}
+	}
+
+	tasks.withType<Javadoc>().configureEach {
+		(options as StandardJavadocDocletOptions).apply {
+			encoding = "UTF-8"
+			// Every check but the one that wants @param and @return where the description already says it; a warning
+			// fails the build
+			addBooleanOption("Xdoclint:all,-missing", true)
+			addBooleanOption("Werror", true)
+			quiet()
 		}
 	}
 
@@ -67,30 +77,62 @@ subprojects {
 	tasks.withType<Test>().configureEach {
 		useJUnitPlatform()
 	}
+
+	// Every jar, sources and Javadoc included, carries the licence
+	tasks.withType<Jar>().configureEach {
+		from(rootProject.file("LICENSE")) {
+			into("META-INF")
+		}
+	}
 }
 
-// What a plugin build uses, published to a repository inside this build for the Gradle plugin's functional test,
-// which builds a plugin against it as a plugin author would. Nothing is published to Maven Central yet.
-val publishedModules = listOf("api", "lua-tree", "lua-runner", "bindings-gen", "plugin-model", "frontend-java",
-	"gradle-plugin")
+// Every module but the conformance suite is published to Maven Central as org.adelheid:<module>, with sources and
+// Javadoc; RELEASING.md has the steps. The Gradle plugin's functional test publishes them to a repository inside this
+// build instead, and builds a plugin against it as a plugin author would.
 val functionalTestRepository = layout.buildDirectory.dir("functional-test-repository")
 subprojects {
-	if (name in publishedModules) {
-		apply(plugin = "maven-publish")
-		extensions.configure<PublishingExtension> {
-			repositories {
-				maven {
-					name = "functionalTest"
-					url = uri(functionalTestRepository)
+	if (name == "conformance") {
+		return@subprojects
+	}
+	apply(plugin = "com.vanniktech.maven.publish")
+	extensions.configure<MavenPublishBaseExtension> {
+		publishToMavenCentral()
+		// Maven Central takes only signed artifacts, but a local repository needs no key, so sign when there is one
+		if (providers.gradleProperty("signingInMemoryKey").isPresent ||
+			providers.gradleProperty("signing.keyId").isPresent) {
+			signAllPublications()
+		}
+		pom {
+			name = project.name
+			description = provider { project.description }
+			inceptionYear = "2026"
+			url = "https://github.com/adelheidsoftware/oneiro"
+			licenses {
+				license {
+					name = "MIT License"
+					url = "https://opensource.org/license/mit"
+					distribution = "repo"
 				}
 			}
-			// java-gradle-plugin publishes the Gradle plugin and its marker on its own
-			if (name != "gradle-plugin") {
-				publications {
-					create<MavenPublication>("maven") {
-						from(components["java"])
-					}
+			developers {
+				developer {
+					id = "adelheidsoftware"
+					name = "Adelheid Software"
+					url = "https://github.com/adelheidsoftware"
 				}
+			}
+			scm {
+				url = "https://github.com/adelheidsoftware/oneiro"
+				connection = "scm:git:https://github.com/adelheidsoftware/oneiro.git"
+				developerConnection = "scm:git:ssh://git@github.com/adelheidsoftware/oneiro.git"
+			}
+		}
+	}
+	extensions.configure<PublishingExtension> {
+		repositories {
+			maven {
+				name = "functionalTest"
+				url = uri(functionalTestRepository)
 			}
 		}
 	}

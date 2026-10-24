@@ -9,13 +9,16 @@ public class Bank {
 	private final String owner;
 	private final List<Tab> tabs = new ArrayList<>();
 
+	// The first tab is made here, before the constructor runs
 	{
 		// Every bank starts with its first tab
-		tabs.add(new Tab("main"));
+		tabs.add(new Tab("main")); // named as the client names it
+		// More tabs open as the player adds them
 	}
 
 	public Bank(String owner) {
 		this.owner = owner;
+		// The tabs are ready by now
 	}
 
 	/** Opens a new tab with the name. */
