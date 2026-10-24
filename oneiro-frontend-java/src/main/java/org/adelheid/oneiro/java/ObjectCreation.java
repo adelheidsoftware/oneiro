@@ -20,6 +20,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
+import org.adelheid.oneiro.lowering.Helper;
 import org.adelheid.oneiro.lua.Expression;
 import org.adelheid.oneiro.lua.FunctionBody;
 

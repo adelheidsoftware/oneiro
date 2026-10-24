@@ -1,10 +1,5 @@
 package org.adelheid.oneiro.java;
 
-import static org.adelheid.oneiro.lua.Expression.binary;
-import static org.adelheid.oneiro.lua.Expression.call;
-import static org.adelheid.oneiro.lua.Expression.field;
-import static org.adelheid.oneiro.lua.Expression.name;
-
 import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.IdentifierTree;
@@ -25,11 +20,9 @@ import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
-import org.adelheid.oneiro.lua.BinaryOperator;
+import org.adelheid.oneiro.lowering.PluginLifecycle;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Comment;
-import org.adelheid.oneiro.lua.Expression;
-import org.adelheid.oneiro.lua.FunctionBody;
 import org.adelheid.oneiro.lua.Statement;
 import org.adelheid.oneiro.lua.Trivia;
 import org.jspecify.annotations.Nullable;
@@ -184,9 +177,10 @@ final class PluginEntry {
 			List<Block.Entry> entries = new ArrayList<>();
 			Set<Element> referenced = new HashSet<>();
 			for (Subscription subscription : subscriptions) {
-				Expression subscribe = call(eventMember(subscription.event(), "Subscribe"),
-						Expression.string(prefix + subscription.method().getName()), name(subscription.local()));
-				entries.add(new Block.Entry(new Statement.CallStatement(subscribe),
+				unit.useGlobal("Event");
+				Statement subscribe = PluginLifecycle.subscribe(subscription.event(),
+						prefix + subscription.method().getName(), subscription.local());
+				entries.add(new Block.Entry(subscribe,
 						new Trivia(entries.isEmpty(), List.of(), null), unit.origin(subscription.method())));
 				referenced.add(unit.element(subscription.method()));
 			}
@@ -194,15 +188,10 @@ final class PluginEntry {
 		}
 		if (!subscriptions.isEmpty() || shutDown != null || dev) {
 			List<Block.Entry> body = new ArrayList<>();
-			if (dev) {
-				Expression defined = binary(name("pluginShutdown"), BinaryOperator.NOT_EQUAL, new Expression.Nil());
-				Statement shutDownFirst = new Statement.CallStatement(call(name("pluginShutdown")));
-				body.add(Block.Entry.of(Statement.ifThen(defined, Block.of(shutDownFirst))));
-			}
 			for (Subscription subscription : subscriptions) {
-				Expression unsubscribe = call(eventMember(subscription.event(), "Unsubscribe"),
-						Expression.string(prefix + subscription.method().getName()));
-				body.add(Block.Entry.of(new Statement.CallStatement(unsubscribe)));
+				unit.useGlobal("Event");
+				body.add(Block.Entry.of(PluginLifecycle.unsubscribe(subscription.event(),
+						prefix + subscription.method().getName())));
 			}
 			List<Comment> closing = List.of();
 			Set<Element> referenced = new HashSet<>();
@@ -212,28 +201,12 @@ final class PluginEntry {
 				closing = lowered.closingComments();
 				referenced.addAll(unit.assembly().references(shutDown));
 			}
-			Statement function = new Statement.FunctionDeclaration(List.of("PluginShutdown"), null,
-					FunctionBody.of(List.of(), new Block(body, closing)));
-			List<Block.Entry> entries = new ArrayList<>();
-			if (dev) {
-				Statement saved = new Statement.Local(List.of("pluginShutdown"), List.of(name("PluginShutdown")));
-				Comment note = Comment.line("The plugin's own shutdown, which runs first.");
-				entries.add(new Block.Entry(saved, new Trivia(true, List.of(note), null), null));
-			}
-			Comment global = Comment.line(
-					"The client calls PluginShutdown when the plugin is disabled, and requires it to be global.");
-			entries.add(new Block.Entry(function, new Trivia(!dev, List.of(global), null),
-					shutDown == null ? null : unit.origin(shutDown)));
+			List<Block.Entry> entries = PluginLifecycle.shutdown(body, closing, dev,
+					shutDown == null ? null : unit.origin(shutDown));
 			List<Element> declared = shutDown == null ? List.of() : List.of(unit.element(shutDown));
 			members.add(new UnitLowering.Member(declared, true, null, entries, List.of(), referenced, Set.of()));
 		}
 		return members;
-	}
-
-	/** {@code Event.Name.Subscribe}, a member of an event's subscription. */
-	private Expression eventMember(String event, String member) {
-		unit.useGlobal("Event");
-		return field(field(name("Event"), event), member);
 	}
 
 	private static @Nullable MethodTree lifecycleMethod(ClassTree type, String name) {

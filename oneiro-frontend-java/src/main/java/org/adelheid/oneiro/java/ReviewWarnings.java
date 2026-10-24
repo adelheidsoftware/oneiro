@@ -7,6 +7,7 @@ import com.sun.source.tree.VariableTree;
 import com.sun.source.util.TreePath;
 import java.util.Arrays;
 import javax.lang.model.element.Element;
+import org.adelheid.oneiro.lowering.ReviewAreas;
 
 /**
  * Warnings at uses of the API that Jagex's moderators review closely, which the bindings mark {@code @LuaReview} with
@@ -34,32 +35,12 @@ final class ReviewWarnings {
 		if (area == null || unit.plugin.dev() || isSuppressed(where, area)) {
 			return;
 		}
-		unit.warning(unit.start(where), use + " " + lookedAt(area) + " Once the plugin meets this,"
-				+ " @SuppressWarnings(\"oneiro:" + area + "\") on the method or class silences this warning.");
-	}
-
-	/** What a use in the area does, and what moderation looks at there. */
-	private static String lookedAt(String area) {
-		return switch (area) {
-			case "chat" -> "uses the chat, which Jagex's moderators review closely: the Mod.io description must say"
-					+ " what the plugin uses chatAccess for, and other players' messages are information about them,"
-					+ " which a plugin must never export.";
-			case "http" -> "connects to a server outside the game, which Jagex's moderators review closely: the"
-					+ " Mod.io description must say what the plugin uses httpAccess for, what it sends where, and which"
-					+ " data protection case applies; information about other players must never be sent.";
-			case "tracking" -> "reads the character's tracking ID, which Jagex's moderators review closely: the Mod.io"
-					+ " description must say what the plugin uses trackingAccess for.";
-			case "mini-menu" -> "changes the right-click menu, which Jagex's moderators review closely as input"
-					+ " customisation: a change must not reduce the game's intended difficulty.";
-			case "other-players" -> "finds other players, which Jagex's moderators review closely: information about"
-					+ " other players must never be exported, nor used to scout, target or track opponents in PvP.";
-			default -> throw new IllegalStateException("a review area the bindings should not give: " + area);
-		};
+		unit.warning(unit.start(where), ReviewAreas.warning(use, area, "@SuppressWarnings"));
 	}
 
 	/** Whether a method, class or variable declaration around the use carries {@code @SuppressWarnings} for it. */
 	private boolean isSuppressed(Tree where, String area) {
-		String key = "oneiro:" + area;
+		String key = ReviewAreas.key(area);
 		for (TreePath path = unit.path(where); path != null; path = path.getParentPath()) {
 			Tree tree = path.getLeaf();
 			if (tree instanceof ClassTree || tree instanceof MethodTree || tree instanceof VariableTree) {

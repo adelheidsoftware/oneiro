@@ -37,7 +37,8 @@ import org.jspecify.annotations.Nullable;
 public abstract class GenerateSources extends DefaultTask {
 
 	private static final Pattern PLUGIN_CLASS = Pattern.compile("\\bclass\\s+\\w+\\s+extends\\s+Plugin\\b");
-	private static final Pattern PACKAGE = Pattern.compile("^\\s*package\\s+([\\w.]+)\\s*;", Pattern.MULTILINE);
+	private static final Pattern KOTLIN_PLUGIN_CLASS = Pattern.compile("\\bclass\\s+\\w+\\s*:\\s*Plugin\\s*\\(");
+	private static final Pattern PACKAGE = Pattern.compile("^\\s*package\\s+([\\w.]+)\\s*;?\\s*$", Pattern.MULTILINE);
 
 	/** The files under {@code src/main/resources/}. */
 	@InputFiles
@@ -54,10 +55,10 @@ public abstract class GenerateSources extends DefaultTask {
 	@Input
 	public abstract Property<String> getRootPackage();
 
-	/** The plugin's Java sources, read to find the plugin class's package when the build does not name one. */
+	/** The plugin's Java and Kotlin sources, read to find the plugin class's package when the build names none. */
 	@InputFiles
 	@PathSensitive(PathSensitivity.RELATIVE)
-	public abstract ConfigurableFileCollection getJavaSources();
+	public abstract ConfigurableFileCollection getPluginSources();
 
 	@OutputDirectory
 	public abstract DirectoryProperty getOutputDirectory();
@@ -95,9 +96,10 @@ public abstract class GenerateSources extends DefaultTask {
 		if (!configured.isEmpty()) {
 			return configured;
 		}
-		for (File source : getJavaSources().getFiles()) {
+		for (File source : getPluginSources().getFiles()) {
 			String text = Files.readString(source.toPath(), StandardCharsets.UTF_8);
-			if (text.contains("extends Plugin") && PLUGIN_CLASS.matcher(text).find()) {
+			Pattern pluginClass = source.getName().endsWith(".kt") ? KOTLIN_PLUGIN_CLASS : PLUGIN_CLASS;
+			if (text.contains("Plugin") && pluginClass.matcher(text).find()) {
 				String found = packageOf(text);
 				if (found != null) {
 					return found;

@@ -1,0 +1,155 @@
+package org.adelheid.oneiro.kotlin
+
+import com.intellij.psi.PsiElement
+import org.adelheid.oneiro.api.LuaConstants
+import org.adelheid.oneiro.lua.Expression
+import org.adelheid.oneiro.lua.LuaNames
+import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaEnumEntrySymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaJavaFieldSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaNamedFunctionSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
+
+/**
+ * Calls into Lua that the client provides, declared by classes annotated `@LuaGlobal` (a global table, such as
+ * `Player` or `ui.Text`) or `@LuaType` (values the client hands out, such as `NPCEntity`): the RS3 bindings, and the
+ * plugin's generated `Resources` and `Urls`. Each member's annotations give its Lua shape, as in the Java front end: a
+ * static method is `Table.Name(...)`, or `Table:Name(...)` with `@LuaColon`; an instance method is
+ * `object:Name(...)`, or `object.Name(...)` with `@LuaDot`; a constructor is `Table.new(...)`, or `{}` for a
+ * `@LuaType` table the plugin fills in. Members that need a permission the manifest does not declare, or that must
+ * never ship, are rejected here, and members moderation reviews closely are warned about.
+ */
+internal class ApiCalls(private val unit: FileLowering) {
+
+	private val annotations = unit.annotations
+
+	/** Whether a class stands for Lua the client provides. */
+	fun isApi(owner: KaClassSymbol): Boolean =
+		annotations.has(owner, Annotations.LUA_GLOBAL) || annotations.has(owner, Annotations.LUA_TYPE)
+
+	/** The class that declares a member; null for a function outside any class. */
+	fun owner(member: KaCallableSymbol): KaClassSymbol? = with(unit.session) {
+		member.callableId?.classId?.let { findClass(it) }
+	}
+
+	/** A call of a method: on the global table for a static one, or on the object. */
+	fun call(where: PsiElement, method: KaNamedFunctionSymbol, owner: KaClassSymbol, receiver: Expression?,
+		arguments: List<Expression>): Expression {
+		checkUse(method, owner, where)
+		val name = memberName(method, owner)
+		if (method.isStatic) {
+			val global = global(owner, where)
+			if (global.isEmpty()) {
+				unit.useGlobal(name)
+				return Expression.Call(Expression.name(name), arguments)
+			}
+			val table = table(global)
+			return if (annotations.has(method, Annotations.LUA_COLON)) Expression.MethodCall(table, name, arguments)
+			else Expression.Call(Expression.field(table, name), arguments)
+		}
+		val target = receiver ?: throw IllegalStateException("an API method without a receiver: ${where.text}")
+		return if (annotations.has(method, Annotations.LUA_DOT)) {
+			Expression.Call(Expression.field(target, name), arguments)
+		} else {
+			Expression.MethodCall(target, name, arguments)
+		}
+	}
+
+	/** A field: of the global table for a static one, `Player.x`, or of the object, `npc.coordGrid`. */
+	fun field(where: PsiElement, field: KaJavaFieldSymbol, owner: KaClassSymbol, receiver: Expression?): Expression {
+		checkUse(field, owner, where)
+		val name = memberName(field, owner)
+		if (field.isStatic) {
+			val global = global(owner, where)
+			if (global.isEmpty()) {
+				unit.useGlobal(name)
+				return Expression.name(name)
+			}
+			return member(table(global), name)
+		}
+		val target = receiver ?: throw IllegalStateException("an API field without a receiver: ${where.text}")
+		return member(target, name)
+	}
+
+	/** A constant of an API enum, `GameState.GAME`, whose value is the client's own number or string. */
+	fun enumConstant(where: PsiElement, constant: KaEnumEntrySymbol, owner: KaClassSymbol): Expression {
+		checkUse(constant, owner, where)
+		return member(table(global(owner, where)), constant.name.asString())
+	}
+
+	/** `ui.Text(parent)` as the table's constructor, `ui.Text.new(parent)`; a `@LuaType` as a table to fill in. */
+	fun construct(where: PsiElement, constructor: KaConstructorSymbol, owner: KaClassSymbol,
+		arguments: List<Expression>): Expression {
+		checkUse(constructor, owner, where)
+		val global = annotations.value(owner, Annotations.LUA_GLOBAL) ?: return Expression.Table(listOf())
+		return Expression.Call(Expression.field(table(global), "new"), arguments)
+	}
+
+	/** The name a member has in the Lua: its `@LuaName`, or its own; a constant table's names lose their prefix. */
+	private fun memberName(member: KaCallableSymbol, owner: KaClassSymbol): String {
+		annotations.value(member, Annotations.LUA_NAME)?.let { return it }
+		val name = member.callableId!!.callableName.asString()
+		return if (annotations.has(owner, Annotations.LUA_CONSTANTS) && name.startsWith(LuaConstants.PREFIX)) {
+			name.removePrefix(LuaConstants.PREFIX)
+		} else {
+			name
+		}
+	}
+
+	/** The Lua path of a class's global table; a `@LuaType` has none, and so no static members. */
+	private fun global(owner: KaClassSymbol, where: PsiElement): String =
+		annotations.value(owner, Annotations.LUA_GLOBAL)
+		?: throw IllegalStateException("a static member of a @LuaType at ${where.text}")
+
+	/** A global table as an expression: `ui.Text` is the field `Text` of the global `ui`. */
+	private fun table(global: String): Expression {
+		val segments = global.split(".")
+		unit.useGlobal(segments.first())
+		return segments.drop(1).fold(Expression.name(segments.first()) as Expression, ::member)
+	}
+
+	/** `table.name`, or `table["name"]` for a key that is not a Lua name, such as an enum's. */
+	private fun member(table: Expression, name: String): Expression =
+		if (LuaNames.isName(name)) Expression.field(table, name) else Expression.Index(table, Expression.string(name))
+
+	/**
+	 * Rejects what the build does not allow: a member that needs a permission the manifest does not declare, and a
+	 * development-only member outside the dev source set.
+	 */
+	private fun checkUse(member: KaSymbol, owner: KaClassSymbol, where: PsiElement) {
+		val display = display(member, owner)
+		val devOnly = annotations.has(member, Annotations.LUA_DEV_ONLY) ||
+			annotations.has(owner, Annotations.LUA_DEV_ONLY)
+		if (devOnly && !unit.options.plugin.dev()) {
+			throw Rejection(where, "$display is for development only and must never ship; move the code that uses it"
+				+ " into the dev source set (src/dev/kotlin), whose Lua stays out of the zip.")
+		}
+		val permission = annotations.value(member, Annotations.LUA_PERMISSION)
+			?: annotations.value(owner, Annotations.LUA_PERMISSION)
+		if (permission != null && permission !in unit.options.plugin.permissions()) {
+			throw Rejection(where, "$display needs the $permission permission, which the manifest does not declare; add"
+				+ " it to the build, oneiro { plugin { permissions { optional($permission) } } }, and check"
+				+ " CurrentPlugin.HasPermission(PluginPermissions.$permission) before using it.")
+		}
+		if (member !is KaJavaFieldSymbol) {
+			unit.reviews.check(member, display, where)
+		}
+	}
+
+	/** An API field being assigned, such as a menu entry's `overrideText`, which moderation may review. */
+	fun assigned(field: KaJavaFieldSymbol, owner: KaClassSymbol, where: PsiElement) {
+		unit.reviews.check(field, display(field, owner), where)
+	}
+
+	/** `Chat.AddMessage`, `ui.Text(...)`, `log`: a member as the developer wrote it. */
+	private fun display(member: KaSymbol, owner: KaClassSymbol): String {
+		val ownerName = owner.classId?.shortClassName?.asString().orEmpty()
+		if (member is KaConstructorSymbol) {
+			return "$ownerName(...)"
+		}
+		val name = (member as? KaCallableSymbol)?.let { memberName(it, owner) } ?: ownerName
+		return if (annotations.value(owner, Annotations.LUA_GLOBAL)?.isEmpty() == true) name else "$ownerName.$name"
+	}
+}

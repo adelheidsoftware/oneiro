@@ -14,8 +14,9 @@ import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
 
 /**
- * Writes the settings Oneiro's javac plugin reads inside {@code compileJava}: the root package, the plugin's
- * identifier, the permissions and flags its manifest declares, and where the Lua and its line map go.
+ * Writes the settings Oneiro compiles a source set with, which its javac plugin reads inside {@code compileJava} and
+ * its Kotlin front end in {@code oneiroKotlin}: the root package, the plugin's identifier, the permissions and flags
+ * its manifest declares, and where the Lua and its line map go.
  */
 @CacheableTask
 public abstract class WriteCompilerSettings extends DefaultTask {

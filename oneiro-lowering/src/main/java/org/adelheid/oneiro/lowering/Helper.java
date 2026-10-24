@@ -1,4 +1,4 @@
-package org.adelheid.oneiro.java;
+package org.adelheid.oneiro.lowering;
 
 import static org.adelheid.oneiro.lua.Expression.binary;
 import static org.adelheid.oneiro.lua.Expression.call;
@@ -21,7 +21,7 @@ import org.adelheid.oneiro.lua.UnaryOperator;
  * Small Lua functions for translations that no single expression can say, such as Java's integer division. A module
  * defines only the helpers it uses, near its top, each with a comment naming the Java behaviour it reproduces.
  */
-enum Helper {
+public enum Helper {
 
 	QUOTIENT("quotient", "Integer division that rounds toward zero, as Java's / does; Lua's // rounds down."),
 	TO_INTEGER("toInteger", "Java's (int) cast of a double: drops the fraction, rounding toward zero."),
@@ -281,12 +281,12 @@ enum Helper {
 		this.body = body;
 	}
 
-	String luaName() {
+	public String luaName() {
 		return luaName;
 	}
 
 	/** The comment above the helper, wrapped to stay within 120 columns as a line comment at the top of a file. */
-	List<Comment> comment() {
+	public List<Comment> comment() {
 		List<Comment> lines = new ArrayList<>();
 		StringBuilder line = new StringBuilder();
 		for (String word : comment.split(" ", -1)) {
@@ -301,12 +301,12 @@ enum Helper {
 	}
 
 	/** A call of the helper. */
-	Expression invoke(Expression... arguments) {
+	public Expression invoke(Expression... arguments) {
 		return call(Expression.name(luaName), arguments);
 	}
 
 	/** The helper's definition, {@code local function name(...) ... end}. */
-	Statement definition() {
+	public Statement definition() {
 		if (!body.isEmpty()) {
 			List<String> names = new ArrayList<>(parameters.isEmpty() ? List.of() : List.of(parameters.split(", ")));
 			// A last parameter ... takes the rest of the arguments

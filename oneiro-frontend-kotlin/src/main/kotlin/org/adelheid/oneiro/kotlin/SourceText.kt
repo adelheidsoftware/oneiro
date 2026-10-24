@@ -120,11 +120,6 @@ internal class SourceText(private val file: KtFile) {
 		.filter { it !in claimed && it.textRange.endOffset <= offset }
 		.flatMap(::claim)
 
-	/** The comments between an element's start and its end that nothing has claimed, claimed now. */
-	fun remainingIn(element: PsiElement): List<Comment> = comments
-		.filter { it !in claimed && element.textRange.contains(it.textRange) }
-		.flatMap(::claim)
-
 	/** The comments nothing claimed, which could not be placed in the Lua. */
 	fun unclaimed(): List<PsiComment> = comments.filter { it !in claimed }
 

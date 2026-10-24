@@ -1,13 +1,11 @@
 package org.adelheid.oneiro.java;
 
-import static org.adelheid.oneiro.lua.Expression.binary;
 import static org.adelheid.oneiro.lua.Expression.field;
 import static org.adelheid.oneiro.lua.Expression.name;
 
 import com.sun.source.doctree.DocCommentTree;
 import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
-import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.ReturnTree;
 import com.sun.source.tree.Tree;
@@ -21,7 +19,7 @@ import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import org.adelheid.oneiro.lowering.Diagnostic;
 import org.adelheid.oneiro.lowering.LuaModule;
-import org.adelheid.oneiro.lua.BinaryOperator;
+import org.adelheid.oneiro.lowering.SettingsFunctions;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Comment;
 import org.adelheid.oneiro.lua.Expression;
@@ -64,7 +62,7 @@ final class SettingsModule {
 		if (!header.isEmpty()) {
 			header.add(Comment.line(""));
 		}
-		header.add(Comment.line("Each setting is kept in PersistentDB under \"" + group + ".\" and its key."));
+		header.add(SettingsFunctions.storageNote(group));
 		unit.useGlobal("PersistentDB");
 		List<UnitLowering.Member> members = new ArrayList<>();
 		int cursor = unit.start(type);
@@ -101,7 +99,7 @@ final class SettingsModule {
 		}
 		String key = group + "." + item.keyName();
 		List<Comment> lines = new ArrayList<>(BodyLowering.comments(leading));
-		lines.add(Comment.line(item.description().isEmpty() ? item.name() : item.name() + ": " + item.description()));
+		lines.add(SettingsFunctions.itemComment(item.name(), item.description()));
 		DocCommentTree doc = unit.trees.getDocCommentTree(unit.path(method));
 		if (doc != null) {
 			DocText.lines(doc.getFullBody()).forEach(line -> lines.add(Comment.line(line)));
@@ -119,7 +117,10 @@ final class SettingsModule {
 			TypeMirror type = element.getReturnType();
 			Accessor accessor = accessor(type, method);
 			lines.add(Comment.annotation("@return " + types.luaType(type, false)));
-			function = FunctionBody.of(List.of(), getter(key, accessor, returned.getExpression(), lowering));
+			TypeElement enumType = accessor.enumType();
+			function = FunctionBody.of(List.of(), SettingsFunctions.getter(key, accessor.kind(),
+					lowering.expression(returned.getExpression()),
+					enumType == null ? null : unit.moduleReference(enumType)));
 		} else {
 			if (element.getReturnType().getKind() != TypeKind.VOID || method.getParameters().size() != 1) {
 				throw new Rejection(method, "A setting's setter is an abstract void method with one parameter, the new"
@@ -134,9 +135,7 @@ final class SettingsModule {
 			Expression stored = accessor.enumType() != null && types.isObjectEnum(accessor.enumType().asType())
 					? field(name(local), "name")
 					: name(local);
-			Expression store = Expression.methodCall(name("PersistentDB"), "Set" + accessor.suffix(),
-					Expression.string(key), stored);
-			function = FunctionBody.of(List.of(local), Block.of(new Statement.CallStatement(store)));
+			function = FunctionBody.of(List.of(local), SettingsFunctions.setter(key, accessor.kind(), stored));
 		}
 		Statement declaration = new Statement.FunctionDeclaration(List.of(unit.moduleName, types.memberName(element)),
 				null, function);
@@ -145,52 +144,27 @@ final class SettingsModule {
 				unit.assembly().references(method), Set.of());
 	}
 
-	/** How a setting of a type is kept: the typed accessor's suffix, and the enum whose constants it holds, if any. */
-	private record Accessor(String suffix, @Nullable TypeElement enumType) {
+	/** How a setting of a type is kept: the kind of its typed accessors, and the enum whose constants it holds. */
+	private record Accessor(SettingsFunctions.Kind kind, @Nullable TypeElement enumType) {
 	}
 
 	private Accessor accessor(TypeMirror type, Tree where) {
 		if (types.isBoolean(type)) {
-			return new Accessor("Bool", null);
+			return new Accessor(SettingsFunctions.Kind.BOOL, null);
 		}
 		if (types.isIntegral(type)) {
-			return new Accessor("Int", null);
+			return new Accessor(SettingsFunctions.Kind.INT, null);
 		}
 		if (types.isFloating(type)) {
-			return new Accessor("Float", null);
+			return new Accessor(SettingsFunctions.Kind.FLOAT, null);
 		}
 		if (types.isString(type)) {
-			return new Accessor("String", null);
+			return new Accessor(SettingsFunctions.Kind.STRING, null);
 		}
 		if (types.isPluginEnum(type)) {
-			return new Accessor("String", types.pluginType(type));
+			return new Accessor(SettingsFunctions.Kind.STRING, types.pluginType(type));
 		}
 		throw new Rejection(where, "A setting is a boolean, an int or long, a double, a String or an enum of the"
 				+ " plugin's; PersistentDB keeps those with typed accessors.");
-	}
-
-	/**
-	 * A getter's body: the stored value, or the default where none is stored. A boolean defaulting to anything but
-	 * {@code false} needs an {@code if}, because {@code or} would turn a stored {@code false} into the default.
-	 */
-	private Block getter(String key, Accessor accessor, ExpressionTree defaultTree, BodyLowering lowering) {
-		Expression stored = Expression.methodCall(name("PersistentDB"), "Get" + accessor.suffix(),
-				Expression.string(key));
-		Expression fallback = lowering.expression(defaultTree);
-		TypeElement enumType = accessor.enumType();
-		if (enumType != null) {
-			// Only a name that is one of the enum's constants reads back as a value
-			Expression constant = new Expression.Index(unit.moduleReference(enumType), stored);
-			return Block.of(new Statement.Return(List.of(binary(constant, BinaryOperator.OR, fallback))));
-		}
-		boolean falseDefault = fallback instanceof Expression.BooleanLiteral literal && !literal.value();
-		if (!accessor.suffix().equals("Bool") || falseDefault) {
-			return Block.of(new Statement.Return(List.of(binary(stored, BinaryOperator.OR, fallback))));
-		}
-		Expression unset = binary(name("stored"), BinaryOperator.EQUAL, new Expression.Nil());
-		return Block.of(
-				new Statement.Local(List.of("stored"), List.of(stored)),
-				Statement.ifThen(unset, Block.of(new Statement.Return(List.of(fallback)))),
-				new Statement.Return(List.of(name("stored"))));
 	}
 }

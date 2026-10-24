@@ -46,8 +46,10 @@ import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import org.adelheid.oneiro.lowering.Diagnostic;
+import org.adelheid.oneiro.lowering.Helper;
 import org.adelheid.oneiro.lowering.LocalNames;
 import org.adelheid.oneiro.lowering.LuaModule;
+import org.adelheid.oneiro.lowering.ModuleMember;
 import org.adelheid.oneiro.lowering.ModulePaths;
 import org.adelheid.oneiro.lowering.PluginFacts;
 import org.adelheid.oneiro.lua.Block;
@@ -471,7 +473,8 @@ final class UnitLowering {
 	 * @param after the declarations whose members must come first, such as the table of the member's own class
 	 */
 	record Member(List<Element> elements, boolean function, @Nullable String localName,
-			List<Block.Entry> entries, List<Block.Entry> assignForm, Set<Element> references, Set<Element> after) {
+			List<Block.Entry> entries, List<Block.Entry> assignForm, Set<Element> references, Set<Element> after)
+			implements ModuleMember<Element> {
 	}
 
 	/**

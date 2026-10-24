@@ -10,8 +10,10 @@ each Java construct becomes is in [java-subset.md](java-subset.md).
 build.gradle.kts           plugins { id("org.adelheid.oneiro") }, the version, and the oneiro { } block
 settings.gradle.kts        rootProject.name, which is the plugin's identifier unless the build names another
 src/main/java/             the plugin: one class that extends Plugin, settings interfaces, modules of its own
+src/main/kotlin/           or the same in Kotlin, with the Kotlin JVM plugin applied; one language per plugin
 src/main/resources/        PNG images and Ogg Vorbis sounds, shipped as resources/
 src/dev/java/              optional development helpers, which never ship: one class may extend DevPlugin
+src/dev/kotlin/            or the same in Kotlin
 src/test/lua/              optional *_test.lua files, run against the plugin as it ships
 ```
 
@@ -73,6 +75,7 @@ overrides Oneiro applies to them may no longer match.
 | `oneiroBindings` | Generates the RS3 bindings from the stubs, in a worker process on JDK 25, and compiles them | `build/oneiro/bindings/rs3-bindings.jar`, and a sources jar for the IDE |
 | `oneiroSources` | Writes the typed `Resources` class from `src/main/resources/` and the `Urls` class from the manifest's URLs | `build/generated/sources/oneiro/java/main` |
 | `compileJava` | javac, with Oneiro as a javac plugin: once javac has analysed the sources without errors, Oneiro checks them and writes the Lua | `build/oneiro/lua/main/` |
+| `oneiroKotlin` | For a plugin written in Kotlin, after Kotlin's own `compileKotlin`: Oneiro's Kotlin front end checks the sources and writes the Lua, in a worker process on JDK 25 | `build/oneiro/lua/main/` |
 | `pluginManifest` | Writes `plugin.json` from the `plugin { }` block, with every rule of the manifest checked | `build/oneiro/manifest/plugin.json` |
 | `assemblePlugin` | The plugin exactly as it ships | `build/oneiro/plugin/`: `main.lua`, `plugin.json`, `src/`, `resources/` |
 | `checkPlugin` | Checks that folder; part of `check` | `build/oneiro/check-plugin.txt` |
@@ -80,13 +83,13 @@ overrides Oneiro applies to them may no longer match.
 | `assembleDevPlugin` | The shipped folder plus the dev source set's Lua under `dev/` | `build/oneiro/dev-plugin/` |
 | `linkDevPlugin` | Links the plugin into the client's `dev_plugins` folder under its identifier: the dev folder when there is a dev source set, the shipped folder otherwise | A junction on Windows, a symbolic link elsewhere |
 | `testLua` | Runs each `*_test.lua` under `src/test/lua/` against the shipped folder, in a worker process; part of `check` | `build/oneiro/test-lua.txt` |
-| `explainError` | Shows the plugin's errors in text copied from the client's console as the Java lines they came from: `./gradlew explainError --input=console.txt` | Printed; it reads the line maps `compileJava` writes to `build/oneiro/line-maps/` |
+| `explainError` | Shows the plugin's errors in text copied from the client's console as the source lines they came from: `./gradlew explainError --input=console.txt` | Printed; it reads the line maps the compile writes to `build/oneiro/line-maps/` |
 
 `./gradlew build` compiles, checks, tests and zips; `./gradlew linkDevPlugin` links the plugin into the client once,
 after which each build updates what the client loads. In the client console, `prf` finds a newly linked plugin,
 `pon <id>` enables it and `prl <id>` reloads it after a build.
 
-The Lua of every file depends on the others, so `compileJava` is not incremental: it compiles every file each time.
+The Lua of every file depends on the others, so the compile is not incremental: it compiles every file each time.
 The zip is reproducible: fixed timestamps and sorted entries, so the same sources give the same bytes.
 
 ## Compiling
@@ -121,8 +124,28 @@ or class silences this warning.
 ```
 
 Once the plugin meets what a warning names, `@SuppressWarnings("oneiro:<area>")` on a method or class around the
-use silences that area's warnings there, as it silences javac's own. The dev source set is never warned about, since
+use silences that area's warnings there, as it silences javac's own; in Kotlin, `@Suppress("oneiro:<area>")` on a
+function, class or file does. The dev source set is never warned about, since
 it never ships. With `warningsAsErrors`, a warning nobody has silenced fails the build.
+
+## A plugin written in Kotlin
+
+Apply the Kotlin JVM plugin beside Oneiro's, and put the sources in `src/main/kotlin/`:
+
+```kotlin
+plugins {
+    kotlin("jvm") version "2.4.21"
+    id("org.adelheid.oneiro") version "0.2.0"
+}
+```
+
+The plugin keeps the same shape: a class that extends `Plugin`, with `@Subscribe` functions and `startUp()` and
+`shutDown()`, an interface of settings, and classes and objects of its own. Kotlin's own `compileKotlin` runs first, so
+a type error is reported as Kotlin reports it; then `oneiroKotlin` lowers the sources with Oneiro's Kotlin front end,
+which runs on the Kotlin Analysis API in a worker process of its own on JDK 25, and reports each rejection as kotlinc
+reports an error, `e: file:///.../HerbPlugin.kt:12:5 message`, which IDEs link to the line. A plugin is written in one
+language: one with both Java and Kotlin sources fails to build. The Kotlin front end is in progress, and
+[kotlin-subset.md](kotlin-subset.md) lists what it accepts so far.
 
 ## The plugin class, events and settings
 

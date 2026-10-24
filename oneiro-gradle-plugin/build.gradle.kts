@@ -54,13 +54,15 @@ tasks.test {
 	// The functional test builds a plugin as its author would, resolving Oneiro from the repository the published
 	// modules go to, against the bindings generator's stubs fixture
 	val publishedModules = listOf("api", "lua-tree", "lua-runner", "bindings-gen", "plugin-model", "lowering",
-		"frontend-java", "gradle-plugin").map { ":oneiro-$it" }
+		"frontend-java", "frontend-kotlin", "gradle-plugin").map { ":oneiro-$it" }
 	dependsOn(publishedModules.map { "$it:publishAllPublicationsToFunctionalTestRepository" })
 	// The published modules are what the test builds with, so a change to any of them must rerun it
 	inputs.files(publishedModules.map { project(it).tasks.named("jar") }).withPropertyName("publishedJars")
 	systemProperty("oneiro.repository",
 		rootProject.layout.buildDirectory.dir("functional-test-repository").get().asFile.absolutePath)
 	systemProperty("oneiro.version", project.version.toString())
+	// The Kotlin JVM plugin the Kotlin plugin under test applies, at the version Oneiro's own Kotlin builds with
+	systemProperty("oneiro.kotlinVersion", libs.versions.kotlin.get())
 	val stubsFixture = project(":oneiro-bindings-gen").file("src/test/stubs")
 	systemProperty("oneiro.stubsFixture", stubsFixture.absolutePath)
 	inputs.dir(stubsFixture).withPropertyName("stubsFixture")

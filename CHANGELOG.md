@@ -16,6 +16,10 @@ All notable changes to Oneiro are listed here. The format follows
   `@SuppressWarnings("oneiro:<area>")` silences an area's warnings once the plugin meets them.
 - [From RuneLite to RS3](docs/from-runelite.md), a guide for RuneLite developers: what a RuneLite plugin's events,
   getters, settings, overlays, notifiers and timers become, and how the rules differ between the games.
+- Plugins written in Kotlin: apply the Kotlin JVM plugin beside Oneiro's and put the sources in `src/main/kotlin/`.
+  `oneiroKotlin` compiles them to Lua with Oneiro's Kotlin front end, in a worker process, and reports a rejection as
+  kotlinc reports an error. The front end is in progress; [kotlin-subset.md](docs/kotlin-subset.md) lists the Kotlin
+  it accepts so far. Its jar bundles the Kotlin Analysis API, so a plugin's build needs only Maven Central.
 
 ### Changed
 

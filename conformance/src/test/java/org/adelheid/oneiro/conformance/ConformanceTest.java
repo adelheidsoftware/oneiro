@@ -31,6 +31,7 @@ import org.adelheid.oneiro.lowering.PluginFacts;
 import org.adelheid.oneiro.lua.LuaPrinter;
 import org.adelheid.oneiro.runner.LuaRunner;
 import org.adelheid.oneiro.runner.LuaTests;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
@@ -108,7 +109,7 @@ class ConformanceTest {
 	private static void run(Path folder) throws IOException {
 		Map<String, String> modules = compileAndCompare(folder);
 		if (Files.exists(folder.resolve("expected"))) {
-			runLua(folder, modules);
+			runLua(folder, modules, folder.getFileName().toString());
 		}
 	}
 
@@ -122,18 +123,24 @@ class ConformanceTest {
 		Path input = folder.resolve("input");
 		CompileResult result = JavaFrontend.compile(sources(input, ".java"),
 				new JavaFrontend.Options(ROOT_PACKAGE, classpath(), facts(folder.resolve("case.properties"))));
-		return compare(folder, input, result, folder.resolve("diagnostics.txt"));
+		return compare(folder, input, result, folder.resolve("diagnostics.txt"), null);
 	}
 
 	/**
-	 * Compiles a case's Kotlin twin, in its {@code kotlin/} folder, and compares the diagnostics with
-	 * {@code kotlin/diagnostics.txt} and the modules with the same hand-written Lua as the Java input's.
+	 * Compiles a case's Kotlin twin, in its {@code kotlin/} folder, compares the diagnostics with
+	 * {@code kotlin/diagnostics.txt} and the modules with the same hand-written Lua as the Java input's, or with the
+	 * twin's own in {@code kotlin/expected/} where idiomatic Kotlin reads differently, and runs them as the Java
+	 * input's are run.
 	 */
 	private static void compileKotlinAndCompare(Path folder) throws IOException {
 		Path input = folder.resolve("kotlin");
 		CompileResult result = KotlinFrontend.compile(sources(input, ".kt"),
 				new KotlinFrontend.Options(ROOT_PACKAGE, kotlinClasspath(), facts(folder.resolve("case.properties"))));
-		compare(folder, input, result, input.resolve("diagnostics.txt"));
+		Map<String, String> modules = compare(folder, input, result, input.resolve("diagnostics.txt"),
+				input.resolve("expected"));
+		if (Files.exists(folder.resolve("expected"))) {
+			runLua(folder, modules, folder.getFileName() + "-kotlin");
+		}
 	}
 
 	private static List<Path> sources(Path input, String extension) throws IOException {
@@ -146,10 +153,11 @@ class ConformanceTest {
 	 * Compares what compiling a case produced with what it must: the diagnostics, and when the case has
 	 * {@code expected/}, the modules.
 	 *
+	 * @param overrides a folder of modules that replace those of {@code expected/} at the same paths, or null
 	 * @return the printed modules by path
 	 */
 	private static Map<String, String> compare(Path folder, Path input, CompileResult result,
-			Path expectedDiagnostics) throws IOException {
+			Path expectedDiagnostics, @Nullable Path overrides) throws IOException {
 		String diagnostics = result.diagnostics().stream()
 				.map(diagnostic -> relativeTo(input, diagnostic).format())
 				.collect(Collectors.joining("\n\n"));
@@ -166,11 +174,9 @@ class ConformanceTest {
 		if (!Files.exists(expectedLua)) {
 			return actual;
 		}
-		Map<String, String> wanted = new TreeMap<>();
-		try (Stream<Path> files = Files.walk(expectedLua)) {
-			for (Path file : files.filter(Files::isRegularFile).toList()) {
-				wanted.put(expectedLua.relativize(file).toString().replace('\\', '/'), read(file));
-			}
+		Map<String, String> wanted = new TreeMap<>(expectedModules(expectedLua));
+		if (overrides != null && Files.exists(overrides)) {
+			wanted.putAll(expectedModules(overrides));
 		}
 		assertEquals(wanted.keySet(), actual.keySet(), "generated modules");
 		for (String path : wanted.keySet()) {
@@ -179,12 +185,23 @@ class ConformanceTest {
 		return actual;
 	}
 
+	/** The hand-written modules under a folder, by their paths in the plugin. */
+	private static Map<String, String> expectedModules(Path folder) throws IOException {
+		Map<String, String> modules = new TreeMap<>();
+		try (Stream<Path> files = Files.walk(folder)) {
+			for (Path file : files.filter(Files::isRegularFile).toList()) {
+				modules.put(folder.relativize(file).toString().replace('\\', '/'), read(file));
+			}
+		}
+		return modules;
+	}
+
 	/**
-	 * Writes the generated modules, with any hand-written Lua the case brings, to a plugin folder, and runs them and
-	 * the case's check.lua under Lua 5.4.
+	 * Writes the generated modules, with any hand-written Lua the case brings, to a plugin folder named
+	 * {@code output}, and runs them and the case's check.lua under Lua 5.4.
 	 */
-	private static void runLua(Path folder, Map<String, String> modules) throws IOException {
-		Path root = OUTPUT.resolve(folder.getFileName().toString()).toAbsolutePath();
+	private static void runLua(Path folder, Map<String, String> modules, String output) throws IOException {
+		Path root = OUTPUT.resolve(output).toAbsolutePath();
 		Path handWritten = folder.resolve("lua");
 		if (Files.exists(handWritten)) {
 			try (Stream<Path> files = Files.walk(handWritten)) {

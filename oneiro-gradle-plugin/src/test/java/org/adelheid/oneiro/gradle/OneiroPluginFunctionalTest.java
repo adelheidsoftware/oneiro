@@ -282,6 +282,124 @@ class OneiroPluginFunctionalTest {
 				result.getOutput());
 	}
 
+	/** The same plugin written in Kotlin, built with the Kotlin JVM plugin applied before Oneiro's. */
+	private void kotlinPlugin() throws IOException {
+		plugin();
+		Files.delete(project.resolve("src/main/java/com/example/herbs/HerbPlugin.java"));
+		Files.delete(project.resolve("src/main/java/com/example/herbs/HerbConfig.java"));
+		Files.delete(project.resolve("src/main/java/com/example/herbs/Tally.java"));
+		Files.delete(project.resolve("src/dev/java/com/example/herbs/Cheats.java"));
+		String build = Files.readString(project.resolve("build.gradle.kts"));
+		write("build.gradle.kts", build.replace("plugins {\n", "plugins {\n    kotlin(\"jvm\") version \"%s\"\n"
+				.formatted(System.getProperty("oneiro.kotlinVersion"))));
+		write("src/main/kotlin/com/example/herbs/HerbPlugin.kt", """
+				package com.example.herbs
+
+				import org.adelheid.oneiro.api.Plugin
+				import org.adelheid.oneiro.api.Subscribe
+				import org.adelheid.oneiro.rs3.ChatMessageEventPayload
+				import org.adelheid.oneiro.rs3.Globals.log
+				import org.adelheid.oneiro.rs3.ServerLogicEventPayload
+
+				/** Counts game ticks while the plugin runs. */
+				class HerbPlugin : Plugin() {
+
+					private lateinit var settings: HerbConfig
+					private val tally = Tally()
+
+					override fun startUp() {
+						Resources.icons.herb.Load()
+						log("Herb tracker started")
+					}
+
+					@Subscribe
+					fun onServerLogic(tick: ServerLogicEventPayload) {
+						tally.add(1)
+					}
+
+					@Subscribe
+					fun onChatMessage(message: ChatMessageEventPayload) {
+						if (settings.echo()) {
+							log("Chat: ${message.chatMessage}")
+						}
+					}
+				}
+				""");
+		write("src/main/kotlin/com/example/herbs/HerbConfig.kt", """
+				package com.example.herbs
+
+				import org.adelheid.oneiro.api.ConfigGroup
+				import org.adelheid.oneiro.api.ConfigItem
+
+				/** The herb tracker's settings. */
+				@ConfigGroup("herbs")
+				interface HerbConfig {
+
+					@ConfigItem(keyName = "echo", name = "Echo chat")
+					fun echo(): Boolean = false
+				}
+				""");
+		write("src/main/kotlin/com/example/herbs/Tally.kt", """
+				package com.example.herbs
+
+				/** A running total. */
+				class Tally {
+
+					private var total = 0
+
+					fun add(amount: Int) {
+						total += amount
+					}
+
+					fun sum(): Int = total
+				}
+				""");
+	}
+
+	@Test
+	void buildsAKotlinPluginAsItShips() throws IOException {
+		kotlinPlugin();
+		BuildResult result = gradle("build").build();
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":oneiroKotlin"));
+		// Moderation reviews the chat, and the warning says so where the plugin subscribes to it, as kotlinc warns
+		String warning = "w: " + project.resolve("src/main/kotlin/com/example/herbs/HerbPlugin.kt").toUri()
+				+ ":25:2 Subscribing to ChatMessage uses the chat,";
+		assertTrue(result.getOutput().contains(warning), result.getOutput());
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":checkPlugin"));
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":testLua"));
+
+		Path shipped = project.resolve("build/oneiro/plugin");
+		String main = Files.readString(shipped.resolve("main.lua"));
+		assertTrue(main.contains("local HerbConfig = require(\"src/herb_config\")"), main);
+		assertTrue(main.contains("Plugin.resources.icons.herb:Load()"), main);
+		assertTrue(main.contains("log(formatStr(\"Chat: {}\", message.chatMessage))"), main);
+		assertTrue(main.contains("Event.ServerLogic.Subscribe(\"herb-tracker.onServerLogic\", onServerLogic)"), main);
+		assertEquals(List.of("main.lua", "plugin.json", "resources/", "resources/icons/", "resources/icons/herb.png",
+				"src/", "src/herb_config.lua", "src/tally.lua"),
+				entries(project.resolve("build/distributions/herb-tracker-1.2.0.zip")));
+		assertTrue(Files.readString(project.resolve("build/oneiro/line-maps/main.txt")).contains("HerbPlugin.kt"));
+	}
+
+	@Test
+	void aKotlinRejectionFailsTheBuildAsKotlincReportsAnError() throws IOException {
+		kotlinPlugin();
+		write("src/main/kotlin/com/example/herbs/Tracking.kt", """
+				package com.example.herbs
+
+				import org.adelheid.oneiro.rs3.Player
+
+				/** Reads the character's tracking ID, which needs a permission the manifest does not declare. */
+				object Tracking {
+
+					fun id(): Long? = Player.GetTrackingID()
+				}
+				""");
+		BuildResult result = gradle("oneiroKotlin").buildAndFail();
+		String output = result.getOutput();
+		assertTrue(output.contains("e: " + project.resolve("src/main/kotlin/com/example/herbs/Tracking.kt").toUri()
+				+ ":8:20 Player.GetTrackingID needs the trackingAccess permission"), output);
+	}
+
 	private static TaskOutcome outcome(BuildResult result, String task) {
 		BuildTask ran = result.task(task);
 		return ran == null ? TaskOutcome.SKIPPED : ran.getOutcome();

@@ -6,7 +6,8 @@ Write RuneScape 3 plugins in Java, the way you would write a RuneLite plugin, an
 Named after the Oneiromancer of Lunar Isle.
 
 > **Status:** early development; 0.1.0 is the first release. Plugins written in Java compile to Lua and build into the
-> folder and zip that go to Mod.io ([what is supported](docs/java-subset.md)). Kotlin support is planned.
+> folder and zip that go to Mod.io ([what is supported](docs/java-subset.md)). Plugins written in Kotlin build the same
+> way, for the part of the language [kotlin-subset.md](docs/kotlin-subset.md) lists so far; the rest is in progress.
 
 ## What it does
 

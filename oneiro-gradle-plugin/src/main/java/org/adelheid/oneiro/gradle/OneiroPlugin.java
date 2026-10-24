@@ -7,23 +7,23 @@ import java.io.UncheckedIOException;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Properties;
-import org.adelheid.oneiro.plugin.Manifest;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.file.Directory;
+import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.file.RegularFile;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
+import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.Sync;
 import org.gradle.api.tasks.TaskContainer;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.bundling.Zip;
-import org.gradle.api.tasks.compile.JavaCompile;
 import org.gradle.jvm.toolchain.JavaLanguageVersion;
 import org.gradle.jvm.toolchain.JavaLauncher;
 import org.gradle.jvm.toolchain.JavaToolchainService;
@@ -35,7 +35,8 @@ import org.gradle.jvm.toolchain.JavaToolchainService;
  * <ul>
  *   <li>{@code oneiroBindings}, the RS3 bindings on the compile classpath;
  *   <li>{@code oneiroSources}, the typed {@code Resources} and {@code Urls} classes;
- *   <li>Oneiro as a javac plugin in {@code compileJava}, which writes the Lua;
+ *   <li>Oneiro as a javac plugin in {@code compileJava}, which writes the Lua of a plugin written in Java, or
+ *       {@code oneiroKotlin}, which writes the Lua of one written in Kotlin, with the Kotlin JVM plugin applied;
  *   <li>{@code pluginManifest}, the {@code plugin.json};
  *   <li>{@code assemblePlugin}, {@code checkPlugin} and {@code packagePlugin}: the folder that ships, its checks and
  *       its zip;
@@ -70,9 +71,17 @@ public final class OneiroPlugin implements Plugin<Project> {
 			configuration.setDescription("Oneiro's bindings generator and Lua runner, which run in worker processes.");
 			configuration.setCanBeConsumed(false);
 		});
+		Configuration kotlinTool = project.getConfigurations().create("oneiroKotlinTool", configuration -> {
+			configuration.setDescription("Oneiro's Kotlin front end, which runs in a worker process of its own.");
+			configuration.setCanBeConsumed(false);
+		});
 		DependencyHandler dependencies = project.getDependencies();
 		dependencies.add(tool.getName(), "org.adelheid:oneiro-bindings-gen:" + version);
 		dependencies.add(tool.getName(), "org.adelheid:oneiro-lua-runner:" + version);
+		dependencies.add(kotlinTool.getName(), "org.adelheid:oneiro-frontend-kotlin:" + version);
+		// A plugin is written in Kotlin when the Kotlin JVM plugin is applied, before or after this one
+		Property<Boolean> kotlin = project.getObjects().property(Boolean.class).convention(false);
+		project.getPluginManager().withPlugin("org.jetbrains.kotlin.jvm", applied -> kotlin.set(true));
 		dependencies.add(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME, "org.adelheid:oneiro-api:" + version);
 		dependencies.add(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME,
 				"org.jspecify:jspecify:" + versions.getProperty("jspecify"));
@@ -92,14 +101,15 @@ public final class OneiroPlugin implements Plugin<Project> {
 			task.getResourcesFolder().set(resources);
 			task.getUrls().set(extension.getPlugin().getUrls());
 			task.getRootPackage().set(extension.getRootPackage());
-			task.getJavaSources().from(layout.getProjectDirectory().dir("src/main/java").getAsFileTree()
-					.matching(pattern -> pattern.include("**/*.java")));
+			task.getPluginSources().from(sourceFiles(layout, "main", "java"), sourceFiles(layout, "main", "kt"));
 			task.getOutputDirectory().set(layout.getBuildDirectory().dir("generated/sources/oneiro/java/main"));
 		});
 		main.getJava().srcDir(sources.flatMap(GenerateSources::getOutputDirectory));
 
 		Provider<Directory> mainLua = layout.getBuildDirectory().dir("oneiro/lua/main");
-		compileWithOneiro(project, extension, JavaPlugin.COMPILE_JAVA_TASK_NAME, "main", false, mainLua);
+		Compilers compilers = new Compilers(project, extension, kotlin, kotlinTool, launcher);
+		Provider<Directory> mainLuaBuilt = compilers.lua(JavaPlugin.COMPILE_JAVA_TASK_NAME, "oneiroKotlin", "main",
+				false, mainLua, main, sources.flatMap(GenerateSources::getOutputDirectory));
 
 		TaskProvider<WriteManifest> manifest = tasks.register("pluginManifest", WriteManifest.class, task -> {
 			task.setGroup(GROUP);
@@ -123,7 +133,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 		TaskProvider<Sync> assemblePlugin = tasks.register("assemblePlugin", Sync.class, sync -> {
 			sync.setGroup(GROUP);
 			sync.setDescription("Assembles the plugin as it ships: main.lua, plugin.json, src/ and resources/.");
-			sync.from(tasks.named(JavaPlugin.COMPILE_JAVA_TASK_NAME).map(compile -> mainLua.get()));
+			sync.from(mainLuaBuilt);
 			sync.from(manifest.flatMap(WriteManifest::getManifestFile));
 			sync.from(layout.getProjectDirectory().dir("src/main/resources"), spec -> spec.into("resources"));
 			sync.into(pluginFolder);
@@ -152,8 +162,9 @@ public final class OneiroPlugin implements Plugin<Project> {
 		});
 		tasks.named("assemble", assemble -> assemble.dependsOn(packagePlugin));
 
-		TaskProvider<Sync> assembleDevPlugin = devSourceSet(project, extension, java, main, assemblePlugin);
-		boolean hasDev = layout.getProjectDirectory().dir("src/dev/java").getAsFile().isDirectory();
+		TaskProvider<Sync> assembleDevPlugin = devSourceSet(project, compilers, java, main, assemblePlugin);
+		boolean hasDev = layout.getProjectDirectory().dir("src/dev/java").getAsFile().isDirectory()
+				|| layout.getProjectDirectory().dir("src/dev/kotlin").getAsFile().isDirectory();
 		TaskProvider<Sync> linked = hasDev ? assembleDevPlugin : assemblePlugin;
 		tasks.register("linkDevPlugin", LinkDevPlugin.class, task -> {
 			task.setGroup(GROUP);
@@ -185,7 +196,9 @@ public final class OneiroPlugin implements Plugin<Project> {
 			task.setDescription("Shows the plugin's errors in text copied from the client's console as Java lines.");
 			task.getPluginName().set(extension.getPlugin().getName());
 			task.getLineMaps().from(lineMap(layout, "main"), lineMap(layout, "dev"));
-			task.getSourceFolders().from(main.getJava().getSourceDirectories(), dev.getJava().getSourceDirectories());
+			task.getSourceFolders().from(main.getJava().getSourceDirectories(), dev.getJava().getSourceDirectories(),
+					layout.getProjectDirectory().dir("src/main/kotlin"),
+					layout.getProjectDirectory().dir("src/dev/kotlin"));
 			task.getProjectFolder().set(layout.getProjectDirectory());
 		});
 	}
@@ -235,42 +248,8 @@ public final class OneiroPlugin implements Plugin<Project> {
 		});
 	}
 
-	/**
-	 * Runs Oneiro inside a compile task, with its settings written first, and declares the Lua and the line map it
-	 * writes.
-	 */
-	private static void compileWithOneiro(Project project, OneiroExtension extension, String compileTask, String name,
-			boolean dev, Provider<Directory> lua) {
-		ProjectLayout layout = project.getLayout();
-		Provider<RegularFile> lineMap = lineMap(layout, name);
-		TaskProvider<WriteCompilerSettings> settings = project.getTasks().register(
-				dev ? "oneiroDevCompilerSettings" : "oneiroCompilerSettings", WriteCompilerSettings.class, task -> {
-					task.setDescription("Writes the settings of Oneiro's javac plugin for " + compileTask + ".");
-					OneiroExtension.PluginManifest plugin = extension.getPlugin();
-					task.getRootPackage().set(extension.getRootPackage());
-					task.getPluginId().set(plugin.getId());
-					task.getPermissions().addAll(plugin.getRequiredPermissions());
-					task.getPermissions().addAll(plugin.getOptionalPermissions());
-					task.getFlags().set(plugin.getSettingsIcon().zip(plugin.getRibbonIcon(), Manifest::flags));
-					task.getDev().set(dev);
-					task.getWarningsAsErrors().set(extension.getWarningsAsErrors());
-					task.getLuaOutput().set(lua.map(folder -> folder.getAsFile().getAbsolutePath()));
-					task.getLineMap().set(lineMap.map(file -> file.getAsFile().getAbsolutePath()));
-					task.getSettingsFile()
-							.set(layout.getBuildDirectory().file("oneiro/compiler/" + name + ".properties"));
-				});
-		project.getTasks().named(compileTask, JavaCompile.class, compile -> {
-			// The Lua of every file depends on the others, so every build compiles them all
-			compile.getOptions().setIncremental(false);
-			compile.getOptions().getCompilerArgumentProviders()
-					.add(new OneiroJavacArguments(settings.flatMap(WriteCompilerSettings::getSettingsFile)));
-			compile.getOutputs().dir(lua).withPropertyName("oneiroLua");
-			compile.getOutputs().file(lineMap).withPropertyName("oneiroLineMap");
-		});
-	}
-
 	/** The line map a source set's compilation writes, which {@code explainError} reads. */
-	private static Provider<RegularFile> lineMap(ProjectLayout layout, String sourceSet) {
+	static Provider<RegularFile> lineMap(ProjectLayout layout, String sourceSet) {
 		return layout.getBuildDirectory().file("oneiro/line-maps/" + sourceSet + ".txt");
 	}
 
@@ -278,7 +257,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 	 * The {@code dev} source set, compiled against the main one, and the development folder: the plugin as it ships,
 	 * with the dev set's Lua under {@code dev/} and a {@code main.lua} that loads its {@code DevPlugin} class.
 	 */
-	private static TaskProvider<Sync> devSourceSet(Project project, OneiroExtension extension, JavaPluginExtension java,
+	private static TaskProvider<Sync> devSourceSet(Project project, Compilers compilers, JavaPluginExtension java,
 			SourceSet main, TaskProvider<Sync> assemblePlugin) {
 		ProjectLayout layout = project.getLayout();
 		SourceSet dev = java.getSourceSets().create("dev", set -> set.setCompileClasspath(
@@ -286,12 +265,13 @@ public final class OneiroPlugin implements Plugin<Project> {
 		project.getConfigurations().getByName(dev.getAnnotationProcessorConfigurationName())
 				.extendsFrom(project.getConfigurations().getByName(JavaPlugin.ANNOTATION_PROCESSOR_CONFIGURATION_NAME));
 		Provider<Directory> devLua = layout.getBuildDirectory().dir("oneiro/lua/dev");
-		compileWithOneiro(project, extension, dev.getCompileJavaTaskName(), "dev", true, devLua);
+		Provider<Directory> devLuaBuilt = compilers.lua(dev.getCompileJavaTaskName(), "oneiroDevKotlin", "dev", true,
+				devLua, dev, null);
 		TaskProvider<WriteDevMain> devMain = project.getTasks().register("oneiroDevMain", WriteDevMain.class, task -> {
 			task.setDescription("Writes the development folder's main.lua, which loads the DevPlugin class.");
 			task.getShippedMain().set(layout.dir(assemblePlugin.map(Sync::getDestinationDir))
 					.map(folder -> folder.file("main.lua")));
-			task.getDevLua().from(project.getTasks().named(dev.getCompileJavaTaskName()).map(compile -> devLua.get()));
+			task.getDevLua().from(devLuaBuilt);
 			task.getDevLuaFolder().set(devLua);
 			task.getDevMain().set(layout.getBuildDirectory().file("oneiro/dev-main/main.lua"));
 		});
@@ -299,10 +279,17 @@ public final class OneiroPlugin implements Plugin<Project> {
 			sync.setGroup(GROUP);
 			sync.setDescription("Assembles the development folder: the plugin as it ships and the dev source set.");
 			sync.from(assemblePlugin, spec -> spec.exclude("main.lua"));
-			sync.from(project.getTasks().named(dev.getCompileJavaTaskName()).map(compile -> devLua.get()));
+			sync.from(devLuaBuilt);
 			sync.from(devMain.flatMap(WriteDevMain::getDevMain));
 			sync.into(layout.getBuildDirectory().dir("oneiro/dev-plugin"));
 		});
+	}
+
+	/** A source set's files with one extension, in its Java or Kotlin folder: {@code src/main/java/**}{@code /*.kt}. */
+	static FileCollection sourceFiles(ProjectLayout layout, String sourceSet, String extension) {
+		return layout.getProjectDirectory().dir("src/" + sourceSet + "/java").getAsFileTree()
+				.plus(layout.getProjectDirectory().dir("src/" + sourceSet + "/kotlin").getAsFileTree())
+				.matching(pattern -> pattern.include("**/*." + extension));
 	}
 
 	/** The versions of Oneiro and JSpecify this plugin was built with. */
