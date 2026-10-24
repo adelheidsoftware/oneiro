@@ -75,9 +75,11 @@ public final class LuaPrinter {
 
 	private Doc entry(Block.Entry entry) {
 		@Nullable SourcePosition outer = enclosing;
-		enclosing = entry.origin();
+		// A statement the translation adds, without a position of its own, belongs to the statement around it
+		@Nullable SourcePosition origin = entry.origin() != null ? entry.origin() : outer;
+		enclosing = origin;
 		List<Doc> parts = new ArrayList<>();
-		parts.add(new Doc.Mark(entry.origin()));
+		parts.add(new Doc.Mark(origin));
 		for (Comment comment : entry.trivia().leading()) {
 			parts.add(text(comment.render()));
 			parts.add(HARD_LINE);

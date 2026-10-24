@@ -21,13 +21,19 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Stream;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic.Kind;
+import org.adelheid.oneiro.lua.LineMap;
 import org.adelheid.oneiro.lua.LuaPrinter;
+import org.adelheid.oneiro.lua.PrintedLua;
+import org.adelheid.oneiro.lua.SourcePosition;
 import org.adelheid.oneiro.plugin.CompilerSettings;
+import org.adelheid.oneiro.plugin.LuaLineMap;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -166,7 +172,10 @@ public final class OneiroJavacPlugin implements Plugin {
 			return best[0];
 		}
 
-		/** Replaces the Lua of an earlier build with this one's; the folder holds only what Oneiro writes there. */
+		/**
+		 * Replaces the Lua of an earlier build with this one's, and its line map. The Lua's folder holds only what
+		 * Oneiro writes there.
+		 */
 		private void write(List<LuaModule> modules) {
 			Path output = settings.luaOutput();
 			try {
@@ -183,14 +192,30 @@ public final class OneiroJavacPlugin implements Plugin {
 						}
 					}
 				}
+				Map<String, Map<Integer, LuaLineMap.Source>> lines = new TreeMap<>();
 				for (LuaModule module : modules) {
 					Path file = output.resolve(module.path());
 					Files.createDirectories(file.getParent());
-					Files.writeString(file, LuaPrinter.print(module.chunk()).text(), StandardCharsets.UTF_8);
+					PrintedLua printed = LuaPrinter.print(module.chunk());
+					Files.writeString(file, printed.text(), StandardCharsets.UTF_8);
+					lines.put(module.path(), sources(printed.lineMap()));
 				}
+				new LuaLineMap(lines).write(settings.lineMap());
 			} catch (IOException e) {
 				throw new UncheckedIOException(e);
 			}
+		}
+
+		/** The Java line of each line of a printed file that has one. */
+		private static Map<Integer, LuaLineMap.Source> sources(LineMap lineMap) {
+			Map<Integer, LuaLineMap.Source> sources = new TreeMap<>();
+			for (int line = 1; line <= lineMap.lineCount(); line++) {
+				SourcePosition origin = lineMap.sourceOf(line);
+				if (origin != null) {
+					sources.put(line, new LuaLineMap.Source(origin.path(), origin.line()));
+				}
+			}
+			return sources;
 		}
 
 		private static boolean isEmpty(Path folder) throws IOException {

@@ -24,6 +24,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.adelheid.oneiro.plugin.CompilerSettings;
+import org.adelheid.oneiro.plugin.LuaLineMap;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -43,7 +44,7 @@ class JavacPluginTest {
 			sources = files.filter(file -> file.toString().endsWith(".java")).sorted().toList();
 		}
 		Path settings = OUTPUT.resolve(id + ".properties");
-		new CompilerSettings("", id, Set.of(), Set.of(), false, lua, false).write(settings);
+		new CompilerSettings("", id, Set.of(), Set.of(), false, lua, lineMap(id), false).write(settings);
 		List<String> classpath =
 				new ArrayList<>(List.of(System.getProperty("java.class.path").split(File.pathSeparator)));
 		classpath.add(ConformanceTest.fixtureBindings().toString());
@@ -59,6 +60,10 @@ class JavacPluginTest {
 					files.getJavaFileObjectsFromPaths(sources)).call();
 			return new Compilation(succeeded, diagnostics.getDiagnostics());
 		}
+	}
+
+	private static Path lineMap(String id) {
+		return OUTPUT.resolve(id + "-line-map.txt");
 	}
 
 	@Test
@@ -81,6 +86,12 @@ class JavacPluginTest {
 			}
 		}
 		assertEquals(expected, written);
+		// The line map names each Lua line's Java line, by the Java file's path in its source folder
+		LuaLineMap lines = LuaLineMap.read(lineMap("herbs"));
+		List<String> main = Files.readAllLines(lua.resolve("main.lua"));
+		int subscription = main.indexOf("Event.ServerLogic.Subscribe(\"herbs.onServerLogic\", onServerLogic)") + 1;
+		assertEquals(new LuaLineMap.Source("plugin/HerbPlugin.java", 39), lines.sourceOf("main.lua", subscription));
+		assertEquals(null, lines.sourceOf("main.lua", 1), "the file's path, which no Java line wrote");
 	}
 
 	@Test

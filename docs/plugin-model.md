@@ -80,6 +80,7 @@ overrides Oneiro applies to them may no longer match.
 | `assembleDevPlugin` | The shipped folder plus the dev source set's Lua under `dev/` | `build/oneiro/dev-plugin/` |
 | `linkDevPlugin` | Links the plugin into the client's `dev_plugins` folder under its identifier: the dev folder when there is a dev source set, the shipped folder otherwise | A junction on Windows, a symbolic link elsewhere |
 | `testLua` | Runs each `*_test.lua` under `src/test/lua/` against the shipped folder, in a worker process; part of `check` | `build/oneiro/test-lua.txt` |
+| `explainError` | Shows the plugin's errors in text copied from the client's console as the Java lines they came from: `./gradlew explainError --input=console.txt` | Printed; it reads the line maps `compileJava` writes to `build/oneiro/line-maps/` |
 
 `./gradlew build` compiles, checks, tests and zips; `./gradlew linkDevPlugin` links the plugin into the client once,
 after which each build updates what the client loads. In the client console, `prf` finds a newly linked plugin,
@@ -181,3 +182,34 @@ folder on `package.path`, so a test loads a module with `require("src/tally")` a
 build. The tests run outside the client, so the client's tables are absent; a test stands
 in for what it needs. `formatStr` is the one exception: a stand-in that reproduces the client's behaviour is defined
 before each test. Tests never ship.
+
+## Explaining a client error
+
+When the plugin runs into an error, the client's console shows it against the Lua, with the calls that led to it:
+
+```text
+[ERROR] in Herb Tracker(-1): [string "-- src/tally.lua..."]:31: attempt to perform arithmetic on a nil value (field 'count')
+stack traceback:
+	[string "-- src/tally.lua..."]:31: in method 'add'
+	[string "-- main.lua..."]:19: in function 
+```
+
+The client names a file by its first line, which is why every Lua file Oneiro writes starts with its path. To see the
+Java instead, copy the console's text into a file, as much of it as you like, and run:
+
+```sh
+./gradlew explainError --input=console.txt
+```
+
+```text
+src/main/java/com/example/herbs/Tally.java:31: attempt to perform arithmetic on a nil value (field 'count')
+	at src/main/java/com/example/herbs/Tally.java:31: count += amount;
+	at src/main/java/com/example/herbs/HerbPlugin.java:25: tally.add(1);
+
+1 error of Herb Tracker, newest first, as the console lists them.
+```
+
+Each place is the Java file and line it came from, with that line's code, in the form IDEs link. The task picks the
+plugin's errors by its name and leaves out everything else, including other plugins' errors, whose files can share
+a path with this plugin's. It reads the line maps of the latest build, so it explains the Lua that build wrote: after
+changing the code, build and reload the plugin, and reproduce the error, before explaining it.

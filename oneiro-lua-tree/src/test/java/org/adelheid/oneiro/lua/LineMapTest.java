@@ -47,7 +47,7 @@ class LineMapTest {
 		assertNull(lines.sourceOf(4), "blank line");
 		assertEquals(DECLARATION, lines.sourceOf(5), "function Row.complete(row)");
 		assertEquals(CHECK, lines.sourceOf(6), "if row == nil then");
-		assertNull(lines.sourceOf(7), "return false, a statement without a source position");
+		assertEquals(CHECK, lines.sourceOf(7), "return false, without a position of its own, takes the if's");
 		assertEquals(CHECK, lines.sourceOf(8), "end of the if");
 		assertEquals(RESULT, lines.sourceOf(9), "return true");
 		assertEquals(DECLARATION, lines.sourceOf(10), "end of the function");

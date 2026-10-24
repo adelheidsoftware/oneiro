@@ -35,7 +35,8 @@ plugin's Java ──► javac ────────────────�
    class without errors, Oneiro lowers each source file into a Lua module. A construct it cannot translate becomes an
    ordinary javac error, so it shows in the IDE and the build log like a type error.
 3. **Printing.** The printer turns each module's tree into text in the house style, at 120 columns, and records the
-   Java line each Lua line came from.
+   Java line each Lua line came from. The compiler writes those line maps into the build, where `explainError` reads
+   them to show a client error in Java terms.
 4. **Packaging.** The Gradle plugin writes `plugin.json` from the build's `oneiro { plugin { } }` block, assembles
    the folder that ships, checks it, zips it, and runs the plugin's Lua tests.
 
@@ -47,7 +48,7 @@ plugin's Java ──► javac ────────────────�
 | `oneiro-lua-tree` | Yes | The Lua tree (`Chunk`, `Statement`, `Expression`), the printer and the line map. It knows nothing about Java. |
 | `oneiro-lua-runner` | Yes | Runs Lua 5.4: the bundled Lua 5.4.8 through LuaJava, or an installed interpreter, and the plugin's Lua tests. |
 | `oneiro-bindings-gen` | Yes | Generates the RS3 bindings from the stubs and `overrides.txt`. |
-| `oneiro-plugin-model` | Yes | The plugin apart from its code: the manifest, the checks of the folder that ships, the typed `Resources` and `Urls` classes, and the compiler's settings. |
+| `oneiro-plugin-model` | Yes | The plugin apart from its code: the manifest, the checks of the folder that ships, the typed `Resources` and `Urls` classes, the compiler's settings, and the line maps and console errors behind `explainError`. |
 | `oneiro-frontend-java` | Yes | The Java front end: javac's trees to the Lua tree, and the javac plugin. |
 | `oneiro-gradle-plugin` | Yes | The Gradle plugin `org.adelheid.oneiro`: the `oneiro { }` block and the tasks. |
 | `conformance` | No | The conformance suite: Java inputs with hand-written expected Lua. |

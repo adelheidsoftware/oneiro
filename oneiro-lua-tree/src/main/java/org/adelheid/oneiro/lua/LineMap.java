@@ -20,7 +20,8 @@ public final class LineMap {
 	 * The source position of a Lua line.
 	 *
 	 * @param luaLine the line number in the printed Lua, starting at 1
-	 * @return the source position, or null for a blank line or a line without a source, such as the file header
+	 * @return the source position, or null for a blank line or a line outside every statement with a source, such as
+	 *     the file header. A line of a statement the translation added has the position of the statement around it.
 	 */
 	public @Nullable SourcePosition sourceOf(int luaLine) {
 		if (luaLine < 1 || luaLine > origins.size()) {

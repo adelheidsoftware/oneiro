@@ -15,7 +15,7 @@ import org.gradle.api.tasks.TaskAction;
 
 /**
  * Writes the settings Oneiro's javac plugin reads inside {@code compileJava}: the root package, the plugin's
- * identifier, the permissions and flags its manifest declares, and where the Lua goes.
+ * identifier, the permissions and flags its manifest declares, and where the Lua and its line map go.
  */
 @CacheableTask
 public abstract class WriteCompilerSettings extends DefaultTask {
@@ -43,15 +43,20 @@ public abstract class WriteCompilerSettings extends DefaultTask {
 	@Input
 	public abstract Property<String> getLuaOutput();
 
+	/** The absolute path of the file the line map goes to. */
+	@Input
+	public abstract Property<String> getLineMap();
+
 	@OutputFile
 	public abstract RegularFileProperty getSettingsFile();
 
 	@TaskAction
 	public void write() {
 		try {
-			new CompilerSettings(getRootPackage().get(), getPluginId().get(), getPermissions().get(), getFlags().get(),
-					getDev().get(), Path.of(getLuaOutput().get()), getWarningsAsErrors().get())
-					.write(getSettingsFile().get().getAsFile().toPath());
+			CompilerSettings settings = new CompilerSettings(getRootPackage().get(), getPluginId().get(),
+					getPermissions().get(), getFlags().get(), getDev().get(), Path.of(getLuaOutput().get()),
+					Path.of(getLineMap().get()), getWarningsAsErrors().get());
+			settings.write(getSettingsFile().get().getAsFile().toPath());
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}

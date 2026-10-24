@@ -6,6 +6,12 @@ All notable changes to Oneiro are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `explainError`: copy errors from the client's console into a file, run `./gradlew explainError --input=<file>`,
+  and each error of the plugin is shown with the Java file, line and code of every place it names. The compiler
+  writes the line maps it reads to `build/oneiro/line-maps/`.
+
 ### Changed
 
 - Every Lua file starts with its path inside the plugin, `-- src/core/row.lua`, before its description. The client

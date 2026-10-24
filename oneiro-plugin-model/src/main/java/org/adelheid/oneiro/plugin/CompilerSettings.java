@@ -23,10 +23,11 @@ import java.util.stream.Stream;
  * @param flags the manifest flags that are set, such as {@code hasSettingsIcon}
  * @param dev whether the sources are the {@code dev} source set
  * @param luaOutput the folder the Lua is written to, replacing what it held
+ * @param lineMap the file the Java line of each Lua line is written to, for {@code explainError}
  * @param warningsAsErrors whether a warning, such as a comment that cannot be placed, fails the build
  */
 public record CompilerSettings(String rootPackage, String id, Set<String> permissions, Set<String> flags, boolean dev,
-		Path luaOutput, boolean warningsAsErrors) {
+		Path luaOutput, Path lineMap, boolean warningsAsErrors) {
 
 	public CompilerSettings {
 		permissions = Set.copyOf(permissions);
@@ -41,6 +42,7 @@ public record CompilerSettings(String rootPackage, String id, Set<String> permis
 		properties.setProperty("flags", String.join(",", new TreeSet<>(flags)));
 		properties.setProperty("dev", Boolean.toString(dev));
 		properties.setProperty("luaOutput", luaOutput.toAbsolutePath().toString());
+		properties.setProperty("lineMap", lineMap.toAbsolutePath().toString());
 		properties.setProperty("warningsAsErrors", Boolean.toString(warningsAsErrors));
 		Files.createDirectories(file.toAbsolutePath().getParent());
 		try (Writer writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
@@ -56,7 +58,7 @@ public record CompilerSettings(String rootPackage, String id, Set<String> permis
 		return new CompilerSettings(properties.getProperty("rootPackage", ""), required(properties, "id", file),
 				list(properties.getProperty("permissions", "")), list(properties.getProperty("flags", "")),
 				Boolean.parseBoolean(properties.getProperty("dev", "false")),
-				Path.of(required(properties, "luaOutput", file)),
+				Path.of(required(properties, "luaOutput", file)), Path.of(required(properties, "lineMap", file)),
 				Boolean.parseBoolean(properties.getProperty("warningsAsErrors", "false")));
 	}
 

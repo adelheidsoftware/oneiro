@@ -1,0 +1,56 @@
+[ERROR] in Oneiro Error Probe(-1): [string "-- src/inner/deep.lua..."]:9: error-probe: thrown from Java while the plugin loads
+stack traceback:
+	[C]: in function 'base.error'
+	[string "-- src/inner/deep.lua..."]:9: in field 'fail'
+	[string "-- src/failures.lua..."]:12: in field 'thrown'
+	[string "-- main.lua..."]:65: in main chunk
+
+Oneiro Error Probe(64): error-probe: raising an error while the plugin loads
+prl error-probe
+
+Oneiro Error Probe(44): error-probe: the next load raises an error; run prl error-probe
+
+[ERROR] in Oneiro Error Probe(-1): Event ServerLogic callback error
+
+[ERROR] in Oneiro Error Probe(-1): [string "-- src/inner/deep.lua..."]:9: error-probe: thrown from Java in a ServerLogic callback
+stack traceback:
+	[C]: in function 'base.error'
+	[string "-- src/inner/deep.lua..."]:9: in field 'fail'
+	[string "-- src/failures.lua..."]:12: in field 'thrown'
+	[string "-- main.lua..."]:19: in function 
+
+Oneiro Error Probe(18): error-probe: raising an error in a ServerLogic callback
+
+Oneiro Error Probe(40): error-probe: the next ServerLogic callback raises an error
+
+[ERROR] in Oneiro Error Probe(-1): [string "-- src/inner/deep.lua..."]:9: error-probe: thrown from Java and caught
+stack traceback:
+	[C]: in function 'base.error'
+	[string "-- src/failures.lua..."]:30: in field 'rethrown'
+	[string "-- main.lua..."]:37: in upvalue 'action'
+	[string "-- main.lua..."]:57: in function 
+
+Oneiro Error Probe(29): error-probe: caught it; raising it again
+
+Oneiro Error Probe(36): error-probe: raising an error, catching it and raising it again
+
+[ERROR] in Oneiro Error Probe(-1): [string "-- src/failures.lua..."]:20: attempt to get length of a nil value (local 'missing')
+stack traceback:
+	[string "-- src/failures.lua..."]:20: in field 'lengthOfNil'
+	[string "-- main.lua..."]:33: in upvalue 'action'
+	[string "-- main.lua..."]:57: in function 
+
+Oneiro Error Probe(32): error-probe: reading the length of nil
+
+[ERROR] in Oneiro Error Probe(-1): [string "-- src/inner/deep.lua..."]:9: error-probe: thrown from Java in a button's callback
+stack traceback:
+	[C]: in function 'base.error'
+	[string "-- src/inner/deep.lua..."]:9: in field 'fail'
+	[string "-- src/failures.lua..."]:12: in field 'thrown'
+	[string "-- main.lua..."]:29: in upvalue 'action'
+	[string "-- main.lua..."]:57: in function 
+
+Oneiro Error Probe(28): error-probe: raising an error in a button's callback
+
+Oneiro Error Probe(67): error-probe: started; open its settings and press the buttons one at a time
+prl error-probe

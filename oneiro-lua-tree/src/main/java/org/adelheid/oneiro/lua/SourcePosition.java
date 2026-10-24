@@ -4,7 +4,8 @@ package org.adelheid.oneiro.lua;
  * A line in a plugin's source file. Statements carry one, so that every printed Lua line can be traced back to the
  * source line it came from.
  *
- * @param path the source file, relative to the plugin's source root
+ * @param path the source file, relative to the source folder that holds it, as its package names it:
+ *     {@code com/example/herbs/HerbPlugin.java}
  * @param line the line number, starting at 1
  */
 public record SourcePosition(String path, int line) {

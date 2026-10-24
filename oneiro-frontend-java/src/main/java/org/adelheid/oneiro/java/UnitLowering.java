@@ -1324,14 +1324,12 @@ final class UnitLowering {
 		return positions.getEndPosition(compilationUnit, tree) == NOPOS;
 	}
 
+	/** Where a tree is in the source: its file, by its path in the source folder as its package names it, and line. */
 	SourcePosition origin(Tree tree) {
 		String file = compilationUnit.getSourceFile().getName().replace('\\', '/').replaceAll(".*/", "");
 		String packageName = compilationUnit.getPackage() == null
 				? "" : compilationUnit.getPackage().getPackageName().toString();
-		String relative = packageName.substring(Math.min(packageName.length(), rootPackage.length() + 1));
-		String folder = packageName.equals(rootPackage) || packageName.isEmpty()
-				? ""
-				: relative.replace('.', '/') + "/";
+		String folder = packageName.isEmpty() ? "" : packageName.replace('.', '/') + "/";
 		return new SourcePosition(folder + file, (int) compilationUnit.getLineMap().getLineNumber(start(tree)));
 	}
 

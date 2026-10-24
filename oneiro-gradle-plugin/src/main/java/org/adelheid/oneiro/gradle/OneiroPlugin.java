@@ -14,6 +14,7 @@ import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.file.Directory;
 import org.gradle.api.file.ProjectLayout;
+import org.gradle.api.file.RegularFile;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.provider.Provider;
@@ -177,6 +178,16 @@ public final class OneiroPlugin implements Plugin<Project> {
 			task.getReport().set(layout.getBuildDirectory().file("oneiro/test-lua.txt"));
 		});
 		tasks.named("check", check -> check.dependsOn(testLua));
+
+		SourceSet dev = java.getSourceSets().getByName("dev");
+		tasks.register("explainError", ExplainError.class, task -> {
+			task.setGroup(GROUP);
+			task.setDescription("Shows the plugin's errors in text copied from the client's console as Java lines.");
+			task.getPluginName().set(extension.getPlugin().getName());
+			task.getLineMaps().from(lineMap(layout, "main"), lineMap(layout, "dev"));
+			task.getSourceFolders().from(main.getJava().getSourceDirectories(), dev.getJava().getSourceDirectories());
+			task.getProjectFolder().set(layout.getProjectDirectory());
+		});
 	}
 
 	private static void conventions(Project project, OneiroExtension extension) {
@@ -224,10 +235,14 @@ public final class OneiroPlugin implements Plugin<Project> {
 		});
 	}
 
-	/** Runs Oneiro inside a compile task, with its settings written first, and declares the Lua it writes. */
+	/**
+	 * Runs Oneiro inside a compile task, with its settings written first, and declares the Lua and the line map it
+	 * writes.
+	 */
 	private static void compileWithOneiro(Project project, OneiroExtension extension, String compileTask, String name,
 			boolean dev, Provider<Directory> lua) {
 		ProjectLayout layout = project.getLayout();
+		Provider<RegularFile> lineMap = lineMap(layout, name);
 		TaskProvider<WriteCompilerSettings> settings = project.getTasks().register(
 				dev ? "oneiroDevCompilerSettings" : "oneiroCompilerSettings", WriteCompilerSettings.class, task -> {
 					task.setDescription("Writes the settings of Oneiro's javac plugin for " + compileTask + ".");
@@ -240,6 +255,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 					task.getDev().set(dev);
 					task.getWarningsAsErrors().set(extension.getWarningsAsErrors());
 					task.getLuaOutput().set(lua.map(folder -> folder.getAsFile().getAbsolutePath()));
+					task.getLineMap().set(lineMap.map(file -> file.getAsFile().getAbsolutePath()));
 					task.getSettingsFile()
 							.set(layout.getBuildDirectory().file("oneiro/compiler/" + name + ".properties"));
 				});
@@ -249,7 +265,13 @@ public final class OneiroPlugin implements Plugin<Project> {
 			compile.getOptions().getCompilerArgumentProviders()
 					.add(new OneiroJavacArguments(settings.flatMap(WriteCompilerSettings::getSettingsFile)));
 			compile.getOutputs().dir(lua).withPropertyName("oneiroLua");
+			compile.getOutputs().file(lineMap).withPropertyName("oneiroLineMap");
 		});
+	}
+
+	/** The line map a source set's compilation writes, which {@code explainError} reads. */
+	private static Provider<RegularFile> lineMap(ProjectLayout layout, String sourceSet) {
+		return layout.getBuildDirectory().file("oneiro/line-maps/" + sourceSet + ".txt");
 	}
 
 	/**

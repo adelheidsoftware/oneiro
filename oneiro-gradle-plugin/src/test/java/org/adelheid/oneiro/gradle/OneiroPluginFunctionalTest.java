@@ -235,6 +235,27 @@ class OneiroPluginFunctionalTest {
 	}
 
 	@Test
+	void explainErrorShowsTheJavaLinesOfAClientError() throws IOException {
+		plugin();
+		gradle("compileJava").build();
+		// An error as the client prints it, at the line of main.lua that HerbPlugin.java's tally.add(1) became
+		List<String> main = Files.readAllLines(project.resolve("build/oneiro/lua/main/main.lua"));
+		int call = main.indexOf("    tally:add(1)") + 1;
+		write("console.txt", """
+				[ERROR] in Herb Tracker(-1): [string "-- main.lua..."]:%d: attempt to index a nil value
+				stack traceback:
+				\t[string "-- main.lua..."]:%d: in function
+				[ERROR] in Coin Watch(-1): [string "-- main.lua..."]:3: attempt to call a nil value
+				""".formatted(call, call));
+		String output = gradle("explainError", "--input=console.txt").build().getOutput();
+		String java = "src/main/java/com/example/herbs/HerbPlugin.java:25: ";
+		assertTrue(output.contains(java + "attempt to index a nil value"), output);
+		assertTrue(output.contains("\tat " + java + "tally.add(1);"), output);
+		assertTrue(output.contains("1 error of Herb Tracker, newest first, as the console lists them."), output);
+		assertTrue(output.contains("Left out 1 error of other plugins."), output);
+	}
+
+	@Test
 	void aRejectionFailsCompileJava() throws IOException {
 		plugin();
 		write("src/main/java/com/example/herbs/Tracking.java", """

@@ -1,0 +1,165 @@
+package org.adelheid.oneiro.plugin;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+/**
+ * Client errors explained in Java terms. The console text is what the client printed for a plugin that raises errors
+ * on purpose, copied as it was (client 951-1, 2026-10-24); the Java files stand in for that plugin's, with its code at
+ * its lines.
+ */
+class ConsoleErrorsTest {
+
+	private static final String PLUGIN = "Oneiro Error Probe";
+	private static final String FOLDER = "src/main/java/org/adelheid/oneiro/errorprobe/";
+
+	@TempDir
+	Path project;
+
+	private LuaLineMap lines;
+
+	@BeforeEach
+	void plugin() throws IOException {
+		javaFile("inner/Deep.java", Map.of(11, "\t\tthrow new IllegalStateException(message);"));
+		javaFile("Failures.java", Map.of(
+				20, "\t\tDeep.fail(\"error-probe: thrown from Java \" + where);",
+				27, "\t\treturn missing.length();",
+				33, "\t\t\tthrown(\"and caught\");",
+				36, "\t\t\tthrow e;"));
+		javaFile("ErrorProbe.java", Map.of(
+				29, "\t\t\tFailures.thrown(\"while the plugin loads\");",
+				39, "\t\t\tFailures.thrown(\"in a ServerLogic callback\");",
+				49, "\t\t\tFailures.thrown(\"in a button's callback\");",
+				53, "\t\t\tFailures.lengthOfNil();",
+				57, "\t\t\tFailures.rethrown();",
+				76, "\t\tbutton.Subscribe(ui.Hook.ONBUTTONPRESSED, (_, _, _) -> action.run());"));
+		String java = "org/adelheid/oneiro/errorprobe/";
+		Map<String, Map<Integer, LuaLineMap.Source>> files = new TreeMap<>();
+		files.put("src/inner/deep.lua", Map.of(9, new LuaLineMap.Source(java + "inner/Deep.java", 11)));
+		files.put("src/failures.lua", Map.of(
+				12, new LuaLineMap.Source(java + "Failures.java", 20),
+				20, new LuaLineMap.Source(java + "Failures.java", 27),
+				26, new LuaLineMap.Source(java + "Failures.java", 33),
+				30, new LuaLineMap.Source(java + "Failures.java", 36)));
+		files.put("main.lua", Map.of(
+				19, new LuaLineMap.Source(java + "ErrorProbe.java", 39),
+				29, new LuaLineMap.Source(java + "ErrorProbe.java", 49),
+				33, new LuaLineMap.Source(java + "ErrorProbe.java", 53),
+				37, new LuaLineMap.Source(java + "ErrorProbe.java", 57),
+				57, new LuaLineMap.Source(java + "ErrorProbe.java", 76),
+				65, new LuaLineMap.Source(java + "ErrorProbe.java", 29)));
+		lines = new LuaLineMap(files);
+	}
+
+	@Test
+	void eachErrorOfThePluginBecomesItsJavaLines() throws IOException {
+		ConsoleErrors.Explanation explanation = explain(console());
+		String deep = FOLDER + "inner/Deep.java:11: ";
+		String failures = FOLDER + "Failures.java:";
+		String probe = FOLDER + "ErrorProbe.java:";
+		String subscribe =
+				"\tat " + probe + "76: button.Subscribe(ui.Hook.ONBUTTONPRESSED, (_, _, _) -> action.run());\n";
+		assertEquals(String.join("",
+				deep + "error-probe: thrown from Java while the plugin loads\n",
+				"\tat " + deep + "throw new IllegalStateException(message);\n",
+				"\tat " + failures + "20: Deep.fail(\"error-probe: thrown from Java \" + where);\n",
+				"\tat " + probe + "29: Failures.thrown(\"while the plugin loads\");\n",
+				"\n",
+				"Event ServerLogic callback error\n",
+				"\n",
+				deep + "error-probe: thrown from Java in a ServerLogic callback\n",
+				"\tat " + deep + "throw new IllegalStateException(message);\n",
+				"\tat " + failures + "20: Deep.fail(\"error-probe: thrown from Java \" + where);\n",
+				"\tat " + probe + "39: Failures.thrown(\"in a ServerLogic callback\");\n",
+				"\n",
+				deep + "error-probe: thrown from Java and caught\n",
+				"\tat " + failures + "36: throw e;\n",
+				"\tat " + probe + "57: Failures.rethrown();\n",
+				subscribe,
+				"\n",
+				failures + "27: attempt to get length of a nil value (local 'missing')\n",
+				"\tat " + failures + "27: return missing.length();\n",
+				"\tat " + probe + "53: Failures.lengthOfNil();\n",
+				subscribe,
+				"\n",
+				deep + "error-probe: thrown from Java in a button's callback\n",
+				"\tat " + deep + "throw new IllegalStateException(message);\n",
+				"\tat " + failures + "20: Deep.fail(\"error-probe: thrown from Java \" + where);\n",
+				"\tat " + probe + "49: Failures.thrown(\"in a button's callback\");\n",
+				subscribe,
+				"\n"), explanation.text());
+		// The client's line after an error in a callback is shown, but is not an error of its own
+		assertEquals(5, explanation.errors());
+		assertEquals(0, explanation.otherPlugins());
+	}
+
+	@Test
+	void errorsOfOtherPluginsAreLeftOut() {
+		// Every plugin has a main.lua, so another plugin's error must not be read as this one's
+		ConsoleErrors.Explanation explanation = explain("""
+				[ERROR] in Coin Watch(-1): [string "-- main.lua..."]:19: attempt to index a nil value
+				stack traceback:
+				\t[string "-- main.lua..."]:19: in main chunk
+				""");
+		assertEquals("", explanation.text());
+		assertEquals(0, explanation.errors());
+		assertEquals(1, explanation.otherPlugins());
+	}
+
+	@Test
+	void filesTheLineMapsDoNotKnowKeepTheirLuaPlaces() {
+		Map<String, Map<Integer, LuaLineMap.Source>> files = new TreeMap<>();
+		files.put("src/notifications/opening_table_entries.lua",
+				Map.of(4, new LuaLineMap.Source("org/adelheid/oneiro/errorprobe/inner/Deep.java", 11)));
+		lines = new LuaLineMap(files);
+		// A path longer than the 42 characters the console shows stands for the one file that starts with it; a file
+		// the maps do not know keeps its Lua place, by its path when its first line is one
+		ConsoleErrors.Explanation explanation = explain("""
+				[ERROR] in Oneiro Error Probe(-1): [string "-- src/notifications/opening_table_entri..."]:4: boom
+				stack traceback:
+				\t[string "-- src/hand_written.lua..."]:7: in field 'call'
+				\t[string "-- The innermost call, in a folder of its own..."]:8: in main chunk
+				""");
+		assertEquals(FOLDER + """
+				inner/Deep.java:11: boom
+				\tat src/hand_written.lua:7
+				\tat [string "-- The innermost call, in a folder of its own..."]:8
+
+				""", explanation.text());
+	}
+
+	private ConsoleErrors.Explanation explain(String console) {
+		return ConsoleErrors.explain(console, PLUGIN, lines, List.of(project.resolve("src/main/java")), project);
+	}
+
+	private void javaFile(String path, Map<Integer, String> code) throws IOException {
+		List<String> text = new ArrayList<>();
+		int last = code.keySet().stream().mapToInt(Integer::intValue).max().orElse(0);
+		for (int line = 1; line <= last; line++) {
+			text.add(code.getOrDefault(line, ""));
+		}
+		Path file = project.resolve(FOLDER + path);
+		Files.createDirectories(file.getParent());
+		Files.write(file, text, StandardCharsets.UTF_8);
+	}
+
+	private static String console() throws IOException {
+		InputStream resource = ConsoleErrorsTest.class.getResourceAsStream("console-951-1.txt");
+		try (InputStream in = Objects.requireNonNull(resource)) {
+			return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+		}
+	}
+}
