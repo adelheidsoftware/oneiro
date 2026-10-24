@@ -30,7 +30,7 @@ local function orderedTable()
                 return
             end
             if added[key] then
-                -- A key removed and added again goes to the end, as in Java
+                -- A key removed and added again goes to the end, as in a LinkedHashMap
                 for i = #keys, 1, -1 do
                     if keys[i] == key then
                         table.remove(keys, i)

@@ -31,4 +31,8 @@ internal class Member(
 	override fun references(): Set<PsiElement> = uses
 
 	override fun after(): Set<PsiElement> = comesAfter
+
+	/** The same member, placed after the declaration's members as well: a nested class's after its table. */
+	fun after(declaration: PsiElement): Member =
+		Member(declarations, isFunction, local, statements, declaredAheadForm, uses, comesAfter + declaration)
 }

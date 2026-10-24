@@ -454,7 +454,8 @@ final class MemberBindings {
 		List<String> written = new ArrayList<>();
 		params.forEach(param -> written.add(param.type().text() + " " + param.name()));
 		if (varargs) {
-			written.add("Object... args");
+			// Lua's ... takes nil as readily as any other value
+			written.add("@Nullable Object... args");
 		}
 		return String.join(", ", written);
 	}

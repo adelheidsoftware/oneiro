@@ -51,7 +51,8 @@ import org.junit.jupiter.api.TestFactory;
  *   <li>{@code case.properties}: the plugin's {@code id}, {@code permissions} and {@code flags}, and whether the
  *       sources are the {@code dev} source set;
  *   <li>{@code kotlin/}: the same plugin in Kotlin, its twin, which must give the same Lua, and its own
- *       {@code diagnostics.txt}.
+ *       {@code diagnostics.txt}; with {@code kotlin/expected/} and {@code kotlin/check.lua} where idiomatic Kotlin
+ *       reads or behaves differently.
  * </ul>
  *
  * <p>Lua is the bundled Lua 5.4.8 unless {@code oneiro.luaExecutable} names an installed one. Every expected file must
@@ -109,7 +110,7 @@ class ConformanceTest {
 	private static void run(Path folder) throws IOException {
 		Map<String, String> modules = compileAndCompare(folder);
 		if (Files.exists(folder.resolve("expected"))) {
-			runLua(folder, modules, folder.getFileName().toString());
+			runLua(folder, modules, folder.getFileName().toString(), folder.resolve("check.lua"));
 		}
 	}
 
@@ -130,7 +131,7 @@ class ConformanceTest {
 	 * Compiles a case's Kotlin twin, in its {@code kotlin/} folder, compares the diagnostics with
 	 * {@code kotlin/diagnostics.txt} and the modules with the same hand-written Lua as the Java input's, or with the
 	 * twin's own in {@code kotlin/expected/} where idiomatic Kotlin reads differently, and runs them as the Java
-	 * input's are run.
+	 * input's are run, against the twin's own {@code check.lua} where Kotlin's library behaves differently from Java's.
 	 */
 	private static void compileKotlinAndCompare(Path folder) throws IOException {
 		Path input = folder.resolve("kotlin");
@@ -139,7 +140,9 @@ class ConformanceTest {
 		Map<String, String> modules = compare(folder, input, result, input.resolve("diagnostics.txt"),
 				input.resolve("expected"));
 		if (Files.exists(folder.resolve("expected"))) {
-			runLua(folder, modules, folder.getFileName() + "-kotlin");
+			Path own = input.resolve("check.lua");
+			Path check = Files.exists(own) ? own : folder.resolve("check.lua");
+			runLua(folder, modules, folder.getFileName() + "-kotlin", check);
 		}
 	}
 
@@ -198,9 +201,10 @@ class ConformanceTest {
 
 	/**
 	 * Writes the generated modules, with any hand-written Lua the case brings, to a plugin folder named
-	 * {@code output}, and runs them and the case's check.lua under Lua 5.4.
+	 * {@code output}, and runs them and the check, when there is one, under Lua 5.4.
 	 */
-	private static void runLua(Path folder, Map<String, String> modules, String output) throws IOException {
+	private static void runLua(Path folder, Map<String, String> modules, String output, Path check)
+			throws IOException {
 		Path root = OUTPUT.resolve(output).toAbsolutePath();
 		Path handWritten = folder.resolve("lua");
 		if (Files.exists(handWritten)) {
@@ -215,7 +219,7 @@ class ConformanceTest {
 		List<String> arguments = new ArrayList<>(List.of(
 				root.toString().replace('\\', '/'),
 				LuaTests.formatStrStandIn(OUTPUT.toAbsolutePath()).toString(),
-				Files.exists(folder.resolve("check.lua")) ? folder.resolve("check.lua").toString() : ""));
+				Files.exists(check) ? check.toString() : ""));
 		for (Map.Entry<String, String> module : modules.entrySet()) {
 			Path file = root.resolve(module.getKey());
 			Files.createDirectories(file.getParent());

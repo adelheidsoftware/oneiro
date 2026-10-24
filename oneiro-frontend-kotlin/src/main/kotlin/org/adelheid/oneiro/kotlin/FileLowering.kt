@@ -10,17 +10,26 @@ import org.adelheid.oneiro.lowering.LocalNames
 import org.adelheid.oneiro.lowering.LuaModule
 import org.adelheid.oneiro.lowering.ModuleLayout
 import org.adelheid.oneiro.lowering.ModulePaths
+import org.adelheid.oneiro.lowering.SourceLanguage
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Comment
 import org.adelheid.oneiro.lua.Expression
 import org.jetbrains.kotlin.analysis.api.KaSession
+import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolOrigin
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
+import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtObjectDeclaration
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
 import java.util.EnumSet
@@ -35,17 +44,34 @@ import java.util.EnumSet
  * the helpers and globals its Lua uses, and the loops that count from 1. The parts of a file have classes of their
  * own: [ClassLowering] for objects, classes and enums, [PluginClass] for the plugin class, [SettingsLowering] for
  * settings, and [References] for what each member uses. The code inside functions is lowered by [BodyLowering].
+ *
+ * @param names the Lua names for the file's locals, which avoid the helpers and globals a first lowering found
  */
-internal class FileLowering(val session: KaSession, val file: KtFile, val options: KotlinFrontend.Options) {
+internal class FileLowering(
+	val session: KaSession,
+	val file: KtFile,
+	val compilation: KotlinFrontend.Compilation,
+	val names: LocalNames,
+) {
+
+	val options = compilation.options
 
 	val source = SourceText(file)
 	val annotations = Annotations(session)
 	val types = KotlinTypes(session, annotations, ::isPluginType)
-	val names = LocalNames(setOf())
 	val reviews = ReviewWarnings(this)
 
 	/** The parameters of the loops that count from 1, decided for the whole file at once. */
 	val oneBased: Set<KtParameter> by lazy { OneBasedLoops.find(this) }
+
+	/** The file's integer values that are never negative. */
+	val nonNegative = NonNegative(this)
+
+	/**
+	 * The lambdas whose code runs in place, in the function they are written in, as a loop's body or a `do` block, so
+	 * that a plain `return` inside one returns from that function, as Kotlin's does.
+	 */
+	val inlinedLambdas: MutableSet<PsiElement> = mutableSetOf()
 
 	/** The classes, objects and interfaces this file declares, at any depth. */
 	val fileClasses: Set<KtClassOrObject> =
@@ -87,6 +113,15 @@ internal class FileLowering(val session: KaSession, val file: KtFile, val option
 			return null
 		}
 		moduleName = main.name!!
+		if (main is KtObjectDeclaration && hasAnnotation(main, Annotations.LUA_MODULE)) {
+			// A declaration of a hand-written module, which produces no Lua
+			checkDeclaration(main)
+			return null
+		}
+		if (main is KtClass && main.isPlainData()) {
+			// A plain table, built where it is constructed, which produces no Lua of its own
+			return null
+		}
 		val header = header(main)
 		val module = try {
 			when {
@@ -102,9 +137,10 @@ internal class FileLowering(val session: KaSession, val file: KtFile, val option
 					LuaModule.of(path(packageName), header, Block(assemble(table, false, listOf()), listOf()))
 				}
 				else -> {
-					val members = ClassLowering(this).members(main)
+					val classes = ClassLowering(this)
+					val members = classes.members(main)
 					val instanceClass = main is KtClass && !main.isInterface()
-					val body = assemble(Expression.Table(listOf()), instanceClass, members)
+					val body = assemble(classes.classTable(main), instanceClass, members)
 					LuaModule.of(path(packageName), header, Block(body, listOf()))
 				}
 			}
@@ -119,9 +155,52 @@ internal class FileLowering(val session: KaSession, val file: KtFile, val option
 		return if (diagnostics.any { it.severity() == Diagnostic.Severity.ERROR }) null else module
 	}
 
+	/**
+	 * A `@LuaModule` declaration's members only stand for what the hand-written module defines: external functions,
+	 * properties with external accessors, and data classes of properties alone, the tables it passes.
+	 */
+	private fun checkDeclaration(declaration: KtObjectDeclaration) {
+		for (member in declaration.declarations) {
+			when {
+				member is KtNamedFunction && !member.hasModifier(KtTokens.EXTERNAL_KEYWORD) -> error(member, "Every"
+					+ " function of a @LuaModule declaration is external: it stands for a function the Lua module"
+					+ " defines.")
+				member is KtNamedFunction -> {}
+				member is KtProperty && !hasExternalAccessors(member) -> error(member, "A @LuaModule declaration's"
+					+ " properties take their values from the Lua module; declare them without a value and with"
+					+ " external accessors: val LEVEL: Int external get.")
+				member is KtProperty -> {}
+				member is KtClass && member.isPlainData() -> {}
+				else -> reject(Rejection.notYet(member, "This member in a @LuaModule declaration"))
+			}
+		}
+	}
+
+	private fun hasExternalAccessors(property: KtProperty): Boolean =
+		property.initializer == null && property.getter?.hasModifier(KtTokens.EXTERNAL_KEYWORD) == true &&
+			(!property.isVar || property.setter?.hasModifier(KtTokens.EXTERNAL_KEYWORD) == true)
+
+	/** A member's name in the Lua: its own, or the one `@LuaName` gives it. */
+	fun memberName(member: KaCallableSymbol): String = with(session) {
+		annotations.value(member, Annotations.LUA_NAME)
+			?: (member as? KaPropertySymbol)?.backingFieldSymbol?.let { annotations.value(it, Annotations.LUA_NAME) }
+			?: member.callableId?.callableName?.asString()
+			?: throw IllegalStateException("a member without a name: $member")
+	}
+
+	/**
+	 * A declared member's name in the Lua: its own, or the one `@LuaName` gives it; for a constructor's parameter, its
+	 * property's.
+	 */
+	fun memberName(member: KtCallableDeclaration): String = with(session) {
+		val symbol = member.symbol
+		val property = (symbol as? KaValueParameterSymbol)?.generatedPrimaryConstructorProperty
+		memberName(property ?: symbol as KaCallableSymbol)
+	}
+
 	/** The module's statements, laid out by [ModuleLayout] with the file's requires and helpers. */
 	fun assemble(table: Expression?, instanceClass: Boolean, members: List<Member>): List<Block.Entry> =
-		ModuleLayout.assemble(moduleName, table, instanceClass, requires, helpers, members)
+		ModuleLayout.assemble(moduleName, table, instanceClass, requires, helpers, SourceLanguage.KOTLIN, members)
 
 	private fun path(packageName: String): String =
 		ModulePaths.requirePath(sourceFolder(), options.rootPackage, packageName, moduleName) + ".lua"
@@ -176,8 +255,9 @@ internal class FileLowering(val session: KaSession, val file: KtFile, val option
 		}
 		val local = classId.shortClassName.asString()
 		val folder = if (type.origin == KaSymbolOrigin.SOURCE) sourceFolder() else "src"
-		requires.putIfAbsent(local,
-			ModulePaths.requirePath(folder, options.rootPackage, classId.packageFqName.asString(), local))
+		// A @LuaModule declaration names the hand-written module it stands for
+		requires.putIfAbsent(local, annotations.value(type, Annotations.LUA_MODULE)
+			?: ModulePaths.requirePath(folder, options.rootPackage, classId.packageFqName.asString(), local))
 		return Expression.name(local)
 	}
 
@@ -194,6 +274,13 @@ internal class FileLowering(val session: KaSession, val file: KtFile, val option
 	fun use(helper: Helper) {
 		helpers += helper
 	}
+
+	/** The names a local must not take: the helpers the module defines and the globals it reads. */
+	fun takenNames(): Set<String> = globals + helpers.map { it.luaName() }
+
+	/** The names of every function, property, parameter and local the file declares. */
+	fun declaredNames(): Set<String> =
+		PsiTreeUtil.collectElementsOfType(file, KtNamedDeclaration::class.java).mapNotNull { it.name }.toSet()
 
 	/** A property of the plugin class whose type is an interface of settings: it holds nothing in the Lua. */
 	fun isSettingsProperty(property: KtProperty): Boolean = with(session) {

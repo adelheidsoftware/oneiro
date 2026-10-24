@@ -31,6 +31,7 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 	private val dev = unit.isDevEntry(type)
 
 	fun lower(header: List<Comment>): LuaModule {
+		checkEntry()
 		val members = mutableListOf<Member>()
 		for (constant in unit.file.declarations.filterIsInstance<KtProperty>()) {
 			members += local(constant)
@@ -50,10 +51,7 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 						subscriptions += subscription
 						members += functions.entryFunction(member, type, subscription.parameters)
 					}
-					member is KtNamedFunction ->
-						members += functions.entryFunction(member, type, member.valueParameters.map {
-							unit.names.luaName(it.name!!)
-						})
+					member is KtNamedFunction -> members += functions.entryFunction(member, type)
 					member is KtObjectDeclaration && member.isCompanion() ->
 						member.declarations.filterIsInstance<KtProperty>().forEach { members += local(it) }
 					else -> throw Rejection.notYet(member, "This member of the plugin class")
@@ -65,6 +63,30 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 		members += lifecycle(subscriptions)
 		val path = if (dev) "dev/main.lua" else "main.lua"
 		return LuaModule.of(path, header, Block(unit.assemble(null, false, members), listOf()))
+	}
+
+	/**
+	 * A plugin has one class that extends `Plugin`, in the main source set, and at most one that extends `DevPlugin`,
+	 * in the dev source set: each becomes a file of its own, `main.lua` or `dev/main.lua`.
+	 */
+	private fun checkEntry() {
+		val name = type.name
+		if (dev && !unit.options.plugin.dev()) {
+			unit.error(type, "$name extends DevPlugin, whose code must never ship; move it into the dev source set,"
+				+ " src/dev/kotlin.")
+		} else if (!dev && unit.options.plugin.dev()) {
+			unit.error(type, "$name extends Plugin, so it becomes the main.lua that ships; keep it in src/main/kotlin,"
+				+ " and extend DevPlugin in the dev source set instead.")
+		}
+		val others = unit.compilation.entries
+			.filter { it.dev == dev && it.qualifiedName != type.fqName?.asString() }
+			.map { it.qualifiedName }
+			.sorted()
+		if (others.isNotEmpty()) {
+			unit.error(type, "Only one class extends ${if (dev) "DevPlugin" else "Plugin"}, because it becomes "
+				+ (if (dev) "dev/main.lua" else "main.lua") + "; " + others.joinToString(" and ")
+				+ if (others.size == 1) " does too." else " do too.")
+		}
 	}
 
 	/** A `@Subscribe` function: the event it subscribes to, and the parameters of its Lua function. */

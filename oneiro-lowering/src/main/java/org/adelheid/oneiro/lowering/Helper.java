@@ -168,7 +168,7 @@ public enum Helper {
 			            return
 			        end
 			        if added[key] then
-			            -- A key removed and added again goes to the end, as in Java
+			            -- A key removed and added again goes to the end, as in a LinkedHashMap
 			            for i = #keys, 1, -1 do
 			                if keys[i] == key then
 			                    table.remove(keys, i)
@@ -285,11 +285,15 @@ public enum Helper {
 		return luaName;
 	}
 
-	/** The comment above the helper, wrapped to stay within 120 columns as a line comment at the top of a file. */
-	public List<Comment> comment() {
+	/**
+	 * The comment above the helper, naming the rule of the plugin's language that it follows, wrapped to stay within
+	 * 120 columns as a line comment at the top of a file.
+	 */
+	public List<Comment> comment(SourceLanguage language) {
+		String text = language == SourceLanguage.KOTLIN ? kotlinComment() : comment;
 		List<Comment> lines = new ArrayList<>();
 		StringBuilder line = new StringBuilder();
-		for (String word : comment.split(" ", -1)) {
+		for (String word : text.split(" ", -1)) {
 			if (!line.isEmpty() && line.length() + 1 + word.length() > WIDTH) {
 				lines.add(Comment.line(line.toString()));
 				line.setLength(0);
@@ -298,6 +302,47 @@ public enum Helper {
 		}
 		lines.add(Comment.line(line.toString()));
 		return lines;
+	}
+
+	/**
+	 * The comment for a Kotlin plugin's Lua. The Kotlin front end uses only the helpers listed here; reaching another
+	 * one is a mistake in the front end, which the conformance cases catch.
+	 */
+	private String kotlinComment() {
+		return switch (this) {
+			case QUOTIENT -> "Integer division that rounds toward zero, as Kotlin's / does; Lua's // rounds down.";
+			case TO_INTEGER -> "Kotlin's toInt() of a Double: drops the fraction, rounding toward zero.";
+			case FILLED -> "A new array of n copies of value, as Kotlin fills a new IntArray with zeros or a"
+					+ " BooleanArray with false.";
+			case LIST_CONTAINS -> "Whether the list holds the value, as Kotlin's List.contains.";
+			case LIST_INDEX_OF -> "The 0-based position of the value in the list, or -1, as Kotlin's List.indexOf.";
+			case STRING_INDEX_OF -> "The 0-based position of the text in the string, or -1, as Kotlin's"
+					+ " String.indexOf.";
+			case ENDS_WITH -> "Whether the string ends with the suffix, as Kotlin's String.endsWith.";
+			case TRIM -> "The string without leading and trailing whitespace, as Kotlin's String.trim.";
+			case COUNT -> "The number of entries in a map or set, as Kotlin's size; a Lua table keeps no count.";
+			case SPLIT -> "The parts of the text between the separators, as Kotlin's String.split with a plain"
+					+ " separator, empty ones among them; the limit is -1 for any number of parts, or the most parts"
+					+ " to make.";
+			case VALUE_OR -> "The value, or the default when it is nil, as Kotlin's ?: does; Lua's or would also"
+					+ " replace a false.";
+			case COMPUTE_IF_ABSENT -> "The value under the key, computed and stored first when there is none, as"
+					+ " Kotlin's getOrPut.";
+			case LIST_TEXT -> "The list as Kotlin writes it: [a, b, c].";
+			case SET_TEXT -> "The set as Kotlin writes it, [a, b], in the order pairs walks it.";
+			case MAP_TEXT -> "The map as Kotlin writes it, {a=1, b=2}, in the order pairs walks it.";
+			case CHARACTERS -> "The text's characters as a list of one-character strings, as Kotlin's toCharArray.";
+			case GRID -> "What Kotlin's Array(rows) { IntArray(columns) } makes: a new array of the sizes, each size an"
+					+ " array of the next, with copies of value innermost.";
+			case WITH_MEMBERS -> "Gives the object the members of an object expression, which replace its class's where"
+					+ " they share a name, and returns it.";
+			case IS_INSTANCE -> "Whether the value is an object of the class, or of a class that extends it, as"
+					+ " Kotlin's is.";
+			case ORDERED_TABLE -> "A table whose pairs walks its keys in the order they were first added, as"
+					+ " Kotlin's mutableMapOf and mutableSetOf do. It holds its entries itself; its metatable keeps"
+					+ " their order.";
+			default -> throw new IllegalStateException("the Kotlin front end does not use " + this);
+		};
 	}
 
 	/** A call of the helper. */

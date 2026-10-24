@@ -1,0 +1,164 @@
+package org.adelheid.oneiro.kotlin
+
+import org.adelheid.oneiro.lowering.Helper
+import org.adelheid.oneiro.lowering.IndexArithmetic
+import org.adelheid.oneiro.lua.BinaryOperator
+import org.adelheid.oneiro.lua.Expression
+import org.adelheid.oneiro.lua.UnaryOperator
+import org.jetbrains.kotlin.psi.KtConstantExpression
+import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+
+/**
+ * A Kotlin string's members on Lua's strings, as in the Java front end: `length` is `#text`, `substring` is `sub`
+ * with Lua's positions, which count from 1, and the tests and searches use Lua's own functions, finding text as it is
+ * written rather than as a pattern.
+ */
+internal class StringMembers(private val body: BodyLowering) {
+
+	private val unit = body.unit
+
+	/** A member of a string, or null when it is none of those this lists. */
+	fun member(where: KtExpression, name: String, receiver: KtExpression, arguments: LibraryArguments): Expression? {
+		val text = body.expression(receiver)
+		if (name == "equals" && arguments.byName.containsKey("ignoreCase")) {
+			return equalsIgnoringCase(where, text, arguments)
+		}
+		if (arguments.byName.containsKey("ignoreCase")) {
+			throw Rejection.notYet(where, "Comparing text with ignoreCase")
+		}
+		return when (name) {
+			"isEmpty" -> Expression.binary(text, BinaryOperator.EQUAL, Expression.string(""))
+			"isNotEmpty" -> Expression.binary(text, BinaryOperator.NOT_EQUAL, Expression.string(""))
+			"equals" -> Expression.binary(text, BinaryOperator.EQUAL, body.expression(arguments[0]))
+			"substring" -> if (arguments.size == 1) {
+				Expression.methodCall(text, "sub", IndexArithmetic.plusOne(body.expression(arguments[0])))
+			} else {
+				Expression.methodCall(text, "sub", IndexArithmetic.plusOne(body.expression(arguments[0])),
+					body.expression(arguments[1]))
+			}
+			"contains" -> contains(text, body.expression(arguments[0]))
+			"indexOf" -> {
+				if (arguments.size != 1) {
+					throw Rejection.notYet(where, "String.indexOf with a start position")
+				}
+				helper(Helper.STRING_INDEX_OF, text, body.expression(arguments[0]))
+			}
+			"startsWith" -> {
+				val prefix = body.expression(arguments[0])
+				val start = Expression.methodCall(text, "sub", Expression.integer(1), byteLength(arguments[0], prefix))
+				Expression.binary(start, BinaryOperator.EQUAL, prefix)
+			}
+			"endsWith" -> {
+				val suffix = body.expression(arguments[0])
+				val literal = literalText(arguments[0])
+				if (literal != null && literal.isNotEmpty()) {
+					val length = Expression.integer(literal.toByteArray(Charsets.UTF_8).size.toLong())
+					val end = Expression.methodCall(text, "sub", Expression.Unary(UnaryOperator.NEGATE, length))
+					Expression.binary(end, BinaryOperator.EQUAL, suffix)
+				} else {
+					helper(Helper.ENDS_WITH, text, suffix)
+				}
+			}
+			"uppercase" -> Expression.methodCall(text, "upper")
+			"lowercase" -> Expression.methodCall(text, "lower")
+			"trim" -> helper(Helper.TRIM, text)
+			"repeat" -> Expression.methodCall(text, "rep", body.expression(arguments[0]))
+			"toString" -> text
+			"trimIndent", "trimMargin" -> trimmed(where, name, receiver, arguments)
+			"reversed" -> Expression.methodCall(text, "reverse")
+			"get" -> body.library.characterAt(text, arguments[0])
+			"first" -> if (arguments.isEmpty()) Expression.methodCall(text, "sub", Expression.integer(1),
+				Expression.integer(1)) else null
+			"last" -> if (arguments.isEmpty()) Expression.methodCall(text, "sub", Expression.integer(-1)) else null
+			// Parsing gives nil for text that is no number, where Kotlin's toInt() throws
+			"toInt", "toIntOrNull", "toLong", "toLongOrNull" -> call("tonumber", text, Expression.integer(10))
+			"toDouble", "toDoubleOrNull" -> call("tonumber", text)
+			"split" -> split(where, text, arguments)
+			else -> null
+		}
+	}
+
+	/**
+	 * `text.split(",")`: the parts between the separators, empty ones among them, as Kotlin splits, through a helper.
+	 * The separator is a string that stands for itself, as Kotlin's is.
+	 */
+	private fun split(where: KtExpression, text: Expression, arguments: LibraryArguments): Expression {
+		val limit = arguments.byName["limit"]
+		if (arguments.size != (if (limit == null) 1 else 2)) {
+			throw Rejection.notYet(where, "split with more than one separator")
+		}
+		val separator = arguments[0]
+		if (literalText(separator) == null) {
+			throw Rejection.notYet(where, "split with a separator that is not a string literal")
+		}
+		// Kotlin's limit of 0 makes any number of parts, which the helper's -1 does
+		val most = limit?.let { value ->
+			if ((value as? KtConstantExpression)?.text == "0") null else body.expression(value)
+		} ?: Expression.integer(-1)
+		return helper(Helper.SPLIT, text, body.expression(separator), most)
+	}
+
+	/**
+	 * A raw string's `trimIndent()` or `trimMargin()`, worked out here: the Lua holds the trimmed text, between long
+	 * brackets when it has several lines.
+	 */
+	private fun trimmed(where: KtExpression, name: String, receiver: KtExpression, arguments: LibraryArguments):
+		Expression {
+		val raw = literalText(receiver)
+		if (raw == null || receiver !is KtStringTemplateExpression || !body.isRaw(receiver)) {
+			throw Rejection.notYet(where, "$name of anything but a raw string without templates")
+		}
+		val text = if (name == "trimIndent") {
+			raw.trimIndent()
+		} else {
+			val prefix = arguments.byName["marginPrefix"]?.let(::literalText)
+			if (arguments.isNotEmpty() && prefix == null) {
+				throw Rejection.notYet(where, "trimMargin with a prefix that is not a literal")
+			}
+			raw.trimMargin(prefix ?: "|")
+		}
+		return Expression.StringLiteral(text, text.contains('\n'))
+	}
+
+	/** `a.equals(b, ignoreCase = true)` as `a:lower() == b:lower()`. */
+	private fun equalsIgnoringCase(where: KtExpression, text: Expression, arguments: LibraryArguments): Expression {
+		val ignoring = arguments.byName["ignoreCase"]
+		if ((ignoring as? KtConstantExpression)?.text != "true") {
+			throw Rejection.notYet(where, "equals with an ignoreCase that is not true")
+		}
+		val other = Expression.methodCall(body.expression(arguments[0]), "lower")
+		return Expression.binary(Expression.methodCall(text, "lower"), BinaryOperator.EQUAL, other)
+	}
+
+	private fun call(function: String, vararg arguments: Expression): Expression {
+		unit.useGlobal(function)
+		return Expression.Call(Expression.name(function), arguments.toList())
+	}
+
+	/** `text in other`, or `other.contains(text)`: Lua's `find` of the text as it is written. */
+	fun contains(text: Expression, sought: Expression): Expression {
+		val found = Expression.methodCall(text, "find", sought, Expression.integer(1), Expression.BooleanLiteral(true))
+		return Expression.binary(found, BinaryOperator.NOT_EQUAL, Expression.Nil())
+	}
+
+	/** `#text`, or the byte count itself when the text is a literal. */
+	private fun byteLength(tree: KtExpression, lowered: Expression): Expression {
+		val literal = literalText(tree) ?: return LibraryCalls.length(lowered)
+		return Expression.integer(literal.toByteArray(Charsets.UTF_8).size.toLong())
+	}
+
+	/** The text of a string literal without templates, or null for any other expression. */
+	private fun literalText(tree: KtExpression): String? {
+		val template = tree as? KtStringTemplateExpression ?: return null
+		if (template.hasInterpolation()) {
+			return null
+		}
+		return with(unit.session) { template.evaluate()?.value as? String }
+	}
+
+	private fun helper(helper: Helper, vararg arguments: Expression): Expression {
+		unit.use(helper)
+		return helper.invoke(*arguments)
+	}
+}

@@ -48,6 +48,7 @@ internal class Annotations(private val session: KaSession) {
 		val LUA_MANIFEST_FLAG = api("LuaManifestFlag")
 		val LUA_DEV_ONLY = api("LuaDevOnly")
 		val LUA_REVIEW = api("LuaReview")
+		val LUA_MODULE = api("LuaModule")
 		val SUBSCRIBE = api("Subscribe")
 		val CONFIG_GROUP = api("ConfigGroup")
 		val CONFIG_ITEM = api("ConfigItem")

@@ -1,0 +1,3 @@
+plugin/Stray.kt:6: error: Stray extends Plugin, so it becomes the main.lua that ships; keep it in src/main/kotlin, and extend DevPlugin in the dev source set instead.
+class Stray : Plugin()
+^

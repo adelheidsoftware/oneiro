@@ -6,28 +6,66 @@ import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtContainerNode
+import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 
 /**
- * A range a `for` loop counts over by one: `start until end` and `start ..< end`, which stop before the end, and
- * `start..end`, which includes it.
+ * A range a `for` loop counts over: `start until end` and `start ..< end`, which stop before the end; `start..end`,
+ * which includes it; `start downTo end`, which counts down to it; any of them with `step`; and `list.indices`, the
+ * positions of a list or an array.
+ *
+ * @property start the first value, or null for `indices`, which start at 0
+ * @property end the end, or null for `indices`, which end before the collection's size
+ * @property indicesOf the collection whose `indices` the loop counts over, or null
+ * @property step the step as written, always positive, or null for 1
  */
-internal class CountingRange(val start: KtExpression, val end: KtExpression, val inclusive: Boolean) {
+internal class CountingRange(
+	val start: KtExpression?,
+	val end: KtExpression?,
+	val inclusive: Boolean,
+	val descending: Boolean,
+	val step: KtExpression?,
+	val indicesOf: KtExpression?,
+) {
+
+	/** Whether the range counts up by one from 0: the loops that may count from 1 in Lua instead. */
+	val countsFromZero: Boolean
+		get() = !descending && step == null &&
+			(indicesOf != null || start is KtConstantExpression && start.text == "0")
 
 	companion object {
 
 		/** The loop's range, or null when it loops over something else. */
-		fun of(loop: KtForExpression): CountingRange? {
-			val range = loop.loopRange as? KtBinaryExpression ?: return null
-			val start = range.left ?: return null
-			val end = range.right ?: return null
+		fun of(loop: KtForExpression): CountingRange? = loop.loopRange?.let(::of)
+
+		private fun of(range: KtExpression): CountingRange? {
+			if (range is KtParenthesizedExpression) {
+				return range.expression?.let(::of)
+			}
+			if (range is KtDotQualifiedExpression) {
+				val selector = range.selectorExpression as? KtNameReferenceExpression ?: return null
+				return if (selector.getReferencedName() == "indices") {
+					CountingRange(null, null, false, false, null, range.receiverExpression)
+				} else {
+					null
+				}
+			}
+			val binary = range as? KtBinaryExpression ?: return null
+			val start = binary.left ?: return null
+			val end = binary.right ?: return null
+			val name = binary.operationReference.getReferencedName()
 			return when {
-				range.operationToken == KtTokens.RANGE -> CountingRange(start, end, true)
-				range.operationToken == KtTokens.RANGE_UNTIL -> CountingRange(start, end, false)
-				range.operationReference.getReferencedName() == "until" -> CountingRange(start, end, false)
+				binary.operationToken == KtTokens.RANGE -> CountingRange(start, end, true, false, null, null)
+				binary.operationToken == KtTokens.RANGE_UNTIL || name == "until" ->
+					CountingRange(start, end, false, false, null, null)
+				name == "downTo" -> CountingRange(start, end, true, true, null, null)
+				name == "step" -> of(start)?.takeIf { it.step == null }?.let {
+					CountingRange(it.start, it.end, it.inclusive, it.descending, end, it.indicesOf)
+				}
 				else -> null
 			}
 		}
@@ -60,7 +98,7 @@ internal object OneBasedLoops {
 	private fun countsFromZero(loop: KtForExpression): Boolean {
 		val range = CountingRange.of(loop) ?: return false
 		return loop.loopParameter?.destructuringDeclaration == null && loop.loopParameter?.name != null &&
-			range.start is KtConstantExpression && range.start.text == "0"
+			range.countsFromZero
 	}
 
 	private fun qualifies(unit: FileLowering, parameter: KtParameter, loop: KtForExpression,
@@ -78,7 +116,8 @@ internal object OneBasedLoops {
 			val access = parent.parent as? KtArrayAccessExpression ?: return false
 			val receiver = access.arrayExpression ?: return false
 			val receiverType = with(unit.session) { receiver.expressionType } ?: return false
-			return access.indexExpressions.singleOrNull() == use && unit.types.isList(receiverType)
+			return access.indexExpressions.singleOrNull() == use &&
+				(unit.types.isSequence(receiverType) || unit.types.isString(receiverType))
 		}
 		if (parent !is KtBinaryExpression) {
 			return false

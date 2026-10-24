@@ -11,9 +11,14 @@ internal object KDocText {
 	 */
 	fun description(doc: KDoc): List<String> = lines(doc.getDefaultSection().getContent())
 
-	/** The text of the `@param` tag for a parameter, on one line; empty without one. */
+	/**
+	 * The text of the `@param` tag for a parameter, or of the `@property` tag a class gives a constructor's property,
+	 * on one line; empty without one.
+	 */
 	fun param(doc: KDoc, parameter: String): String {
-		val tag = doc.getDefaultSection().findTagsByName("param").firstOrNull { it.getSubjectName() == parameter }
+		val section = doc.getDefaultSection()
+		val tag = (section.findTagsByName("param") + section.findTagsByName("property"))
+			.firstOrNull { it.getSubjectName() == parameter }
 		return tag?.let { lines(it.getContent()).joinToString(" ") }.orEmpty()
 	}
 

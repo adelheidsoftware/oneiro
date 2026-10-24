@@ -65,7 +65,8 @@ internal class SourceText(private val file: KtFile) {
 		val found = mutableListOf<PsiComment>()
 		var child = element.firstChild
 		while (child is PsiComment || child is PsiWhiteSpace) {
-			if (child is PsiComment && child !is KDoc) {
+			// One on the line of the code before trails that code, though the tree may hand it to this element
+			if (child is PsiComment && child !is KDoc && child !in claimed && !trailsCode(child)) {
 				found += child
 			}
 			child = child.nextSibling
@@ -107,13 +108,21 @@ internal class SourceText(private val file: KtFile) {
 			while (after is PsiWhiteSpace && !after.textContains('\n')) {
 				after = after.nextSibling
 			}
-			after as? PsiComment
+			// The tree may make the comment the first child of what follows, as it does after an enum constant
+			after as? PsiComment ?: after?.firstChild as? PsiComment
 		}
 		if (candidate == null || candidate is KDoc || candidate in claimed || !trailsCode(candidate)) {
 			return null
 		}
 		return claim(candidate).joinToString(" ") { it.text() }
 	}
+
+	/**
+	 * A comment on a line of its own that closes a block, after its last statement, claimed; nothing for one already
+	 * claimed, as a comment trailing that statement is.
+	 */
+	fun closing(comment: PsiComment): List<Comment> =
+		if (comment is KDoc || comment in claimed || trailsCode(comment)) listOf() else claim(comment)
 
 	/** The comments before an offset that nothing has claimed, claimed now: a file's header, above its declaration. */
 	fun before(offset: Int): List<Comment> = comments

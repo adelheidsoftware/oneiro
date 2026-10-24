@@ -39,10 +39,12 @@ public final class ModuleLayout {
 	 * @param instanceClass whether the table is a class whose objects look their methods up in it
 	 * @param requires the local name of each required module and its require path, in order of first use
 	 * @param helpers the helper functions the module uses
+	 * @param language the language of the plugin, whose rules the helpers' comments name
 	 * @param members the module's members, in source order
 	 */
 	public static <K> List<Block.Entry> assemble(String moduleName, @Nullable Expression table, boolean instanceClass,
-			Map<String, String> requires, Collection<Helper> helpers, List<? extends ModuleMember<K>> members) {
+			Map<String, String> requires, Collection<Helper> helpers, SourceLanguage language,
+			List<? extends ModuleMember<K>> members) {
 		List<ModuleMember<K>> ordered = order(members);
 		Map<ModuleMember<K>, Integer> position = new HashMap<>();
 		for (int index = 0; index < ordered.size(); index++) {
@@ -66,7 +68,7 @@ public final class ModuleLayout {
 			entries.add(Block.Entry.of(new Statement.Local(List.of(require.getKey()), List.of(module))));
 		}
 		for (Helper helper : helpers) {
-			Trivia trivia = new Trivia(!entries.isEmpty(), helper.comment(), null);
+			Trivia trivia = new Trivia(!entries.isEmpty(), helper.comment(language), null);
 			entries.add(new Block.Entry(helper.definition(), trivia, null));
 		}
 		if (table != null) {

@@ -28,6 +28,8 @@ All notable changes to Oneiro are listed here. The format follows
   runs plugins on one thread and gives them no clock.
 - Every Lua file starts with its path inside the plugin, `-- src/core/row.lua`, before its description. The client
   names a file in its errors only by the file's first line, so its errors now say which file they come from.
+- The RS3 bindings declare the values a function takes any number of, such as `log`'s, as nullable, as Lua's `...`
+  takes nil.
 
 ### Fixed
 
