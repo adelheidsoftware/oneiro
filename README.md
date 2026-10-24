@@ -5,9 +5,9 @@ Write RuneScape 3 plugins in Java, the way you would write a RuneLite plugin, an
 
 Named after the Oneiromancer of Lunar Isle.
 
-> **Status:** Oneiro has not had its first release yet. Plugins written in Java compile and build today, from a
-> checkout of this repository (see [Building from source](#building-from-source)). Kotlin support and a guide from
-> RuneLite to RS3 are planned.
+> **Status:** early development; 0.1.0 is the first release. Plugins written in Java compile to Lua and build into the
+> folder and zip that go to Mod.io ([what is supported](docs/java-subset.md)). Kotlin support and a guide from RuneLite
+> to RS3 are planned.
 
 ## What it does
 
@@ -151,8 +151,9 @@ Lua is written to be read: read it before you submit.
 ./gradlew build
 ```
 
-To build a plugin against a checkout before the first release, include it in the plugin's `settings.gradle.kts` and
-apply the plugin without a version, as [CONTRIBUTING.md](CONTRIBUTING.md#trying-a-change-on-a-plugin) describes.
+To build a plugin against a checkout of Oneiro instead of a release, for example to try a change, include the checkout
+in the plugin's `settings.gradle.kts` and apply the plugin without a version, as
+[CONTRIBUTING.md](CONTRIBUTING.md#trying-a-change-on-a-plugin) describes.
 
 ## Contributing
 
