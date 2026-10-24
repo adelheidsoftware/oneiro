@@ -29,4 +29,10 @@ assert(table.concat(walked, " ") == "ashes=4 bones=1 coins=5", "a TreeMap copied
 local restocked = Ledger.restocked({ coins = 1, bones = 2 }, { coins = 5 })
 assert(restocked.coins == 5 and restocked.bones == 2, "a copy with putAll over it")
 
+local either = Ledger.either({ coins = true }, { bones = true, coins = true })
+assert(either.coins and either.bones and either.ashes == nil, "one set's keys added to another set")
+
+local named = Ledger.named({ coins = true }, { [7] = "bones" })
+assert(#named == 2 and named[1] == "coins" and named[2] == "bones", "a set's keys and a map's values added to a list")
+
 assert(Ledger.firstAndLast({ "coins", "ashes", "bones" }) == "coins to bones", "getFirst and getLast")

@@ -13,6 +13,8 @@ import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.NewClassTree;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.function.BiFunction;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import org.adelheid.oneiro.lua.BinaryOperator;
@@ -237,6 +239,18 @@ final class CollectionMethods {
 		return new Expression.TableField.Keyed(body.expression(key), value);
 	}
 
+	/** The kind of collection that receives another's elements, which decides how each one is stored. */
+	enum Kind {
+		LIST,
+		SET,
+		MAP;
+
+		/** The kind as messages name it: list, set or map. */
+		String noun() {
+			return name().toLowerCase(Locale.ROOT);
+		}
+	}
+
 	/** What a collection holds, for copying it: a list's elements, a set's keys, a map's values or entries. */
 	private enum Contents {
 		ELEMENTS,
@@ -299,20 +313,21 @@ final class CollectionMethods {
 	}
 
 	/** A new set or map filled from another collection, through the helper that fits what it holds. */
-	Expression filled(NewClassTree creation, Expression empty, boolean set, ExpressionTree source) {
+	Expression filled(NewClassTree creation, Expression empty, Kind target, ExpressionTree source) {
 		Holding holding = holding(source);
 		Expression table = body.expression(holding.table());
-		Helper helper;
-		if (set && holding.contents() == Contents.ELEMENTS) {
-			helper = Helper.ADD_ELEMENTS;
-		} else if (set && holding.contents() == Contents.KEYS) {
-			helper = Helper.ADD_KEYS;
-		} else if (!set && holding.contents() == Contents.ENTRIES) {
-			helper = Helper.COPY_ENTRIES;
-		} else {
-			throw Rejection.notYet(creation, "Filling a " + (set ? "set" : "map") + " from a "
-					+ LibraryCalls.simpleName(unit.type(source)));
-		}
+		Helper helper = switch (target) {
+			case SET -> switch (holding.contents()) {
+				case ELEMENTS -> Helper.ADD_ELEMENTS;
+				case KEYS -> Helper.ADD_KEYS;
+				case VALUES, ENTRIES -> throw cannotFill(creation, target, source);
+			};
+			case MAP -> switch (holding.contents()) {
+				case ENTRIES -> Helper.COPY_ENTRIES;
+				case ELEMENTS, KEYS, VALUES -> throw cannotFill(creation, target, source);
+			};
+			case LIST -> throw new IllegalStateException("a new list from another collection is listCopy's");
+		};
 		unit.use(helper);
 		return helper.invoke(empty, table);
 	}
@@ -321,37 +336,72 @@ final class CollectionMethods {
 	 * {@code list.addAll(set)}, {@code set.addAll(list)} or {@code map.putAll(other)} as a loop over what the other
 	 * collection holds; a list into a list is {@code table.move}.
 	 */
-	List<Statement> addedAll(ExpressionTree receiver, String target, ExpressionTree source) {
+	List<Statement> addedAll(ExpressionTree receiver, Kind target, ExpressionTree source) {
 		Holding holding = holding(source);
 		Expression into = library.stableReceiver(receiver);
-		if (target.equals("list") && holding.contents() == Contents.ELEMENTS) {
-			Expression list = library.stableReceiver(source);
-			Expression moved = call(field(name("table"), "move"), list, integer(1), LibraryCalls.length(list),
-					LibraryCalls.nextIndex(into), into);
-			return List.of(new Statement.CallStatement(moved));
-		}
+		return switch (target) {
+			case LIST -> switch (holding.contents()) {
+				case ELEMENTS -> List.of(moved(source, into));
+				case KEYS -> eachOf(source, holding, (key, value) -> appended(into, name(key)));
+				case VALUES -> eachOf(source, holding, (key, value) -> appended(into, name(value)));
+				case ENTRIES -> throw cannotAdd(source, target);
+			};
+			case SET -> switch (holding.contents()) {
+				case ELEMENTS -> eachOf(source, holding, (key, value) -> included(into, name(value)));
+				case KEYS -> eachOf(source, holding, (key, value) -> included(into, name(key)));
+				case VALUES, ENTRIES -> throw cannotAdd(source, target);
+			};
+			case MAP -> switch (holding.contents()) {
+				case ENTRIES -> eachOf(source, holding,
+						(key, value) -> Statement.assignment(new Expression.Index(into, name(key)), name(value)));
+				case ELEMENTS, KEYS, VALUES -> throw cannotAdd(source, target);
+			};
+		};
+	}
+
+	/** {@code table.move(list, 1, #list, #into + 1, into)}: a list's elements added to another list in one call. */
+	private Statement moved(ExpressionTree source, Expression into) {
+		Expression list = library.stableReceiver(source);
+		return new Statement.CallStatement(call(field(name("table"), "move"), list, integer(1),
+				LibraryCalls.length(list), LibraryCalls.nextIndex(into), into));
+	}
+
+	/**
+	 * A loop over what the collection holds, whose body stores each element, key or entry; {@code store} makes that
+	 * statement from the Lua names of the loop's key and value.
+	 */
+	private List<Statement> eachOf(ExpressionTree source, Holding holding,
+			BiFunction<String, String, Statement> store) {
 		Expression table = body.expression(holding.table());
 		String key = unit.freshLocal("key", source);
 		String value = unit.freshLocal("value", source);
-		Statement stored = switch (target + " " + holding.contents()) {
-			case "list KEYS" ->
-					Statement.assignment(new Expression.Index(into, LibraryCalls.nextIndex(into)), name(key));
-			case "list VALUES" ->
-					Statement.assignment(new Expression.Index(into, LibraryCalls.nextIndex(into)), name(value));
-			case "set ELEMENTS" ->
-					Statement.assignment(new Expression.Index(into, name(value)), new Expression.BooleanLiteral(true));
-			case "set KEYS" ->
-					Statement.assignment(new Expression.Index(into, name(key)), new Expression.BooleanLiteral(true));
-			case "map ENTRIES" -> Statement.assignment(new Expression.Index(into, name(key)), name(value));
-			default -> throw Rejection.notYet(source, "Adding a " + LibraryCalls.simpleName(unit.type(source))
-					+ " to a " + target);
-		};
 		List<String> names = switch (holding.contents()) {
 			case ELEMENTS, VALUES -> List.of("_", value);
 			case KEYS -> List.of(key);
 			case ENTRIES -> List.of(key, value);
 		};
 		String iterator = holding.contents() == Contents.ELEMENTS ? "ipairs" : "pairs";
-		return List.of(new Statement.GenericFor(names, List.of(call(name(iterator), table)), Block.of(stored)));
+		Block loopBody = Block.of(store.apply(key, value));
+		return List.of(new Statement.GenericFor(names, List.of(call(name(iterator), table)), loopBody));
+	}
+
+	/** {@code list[#list + 1] = element}. */
+	private static Statement appended(Expression list, Expression element) {
+		return Statement.assignment(new Expression.Index(list, LibraryCalls.nextIndex(list)), element);
+	}
+
+	/** {@code set[element] = true}. */
+	private static Statement included(Expression set, Expression element) {
+		return Statement.assignment(new Expression.Index(set, element), new Expression.BooleanLiteral(true));
+	}
+
+	private Rejection cannotFill(NewClassTree creation, Kind target, ExpressionTree source) {
+		return Rejection.notYet(creation, "Filling a " + target.noun() + " from a "
+				+ LibraryCalls.simpleName(unit.type(source)));
+	}
+
+	private Rejection cannotAdd(ExpressionTree source, Kind target) {
+		return Rejection.notYet(source, "Adding a " + LibraryCalls.simpleName(unit.type(source)) + " to a "
+				+ target.noun());
 	}
 }

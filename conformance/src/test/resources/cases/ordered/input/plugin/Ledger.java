@@ -104,6 +104,22 @@ public final class Ledger {
 		return result;
 	}
 
+	/** The drops of either run, each once. */
+	public static Set<String> either(Set<String> first, Set<String> second) {
+		Set<String> all = new HashSet<>();
+		all.addAll(first);
+		all.addAll(second);
+		return all;
+	}
+
+	/** The names the stock has, then the labels of the drops, in one list. */
+	public static List<String> named(Set<String> stock, Map<Integer, String> labels) {
+		List<String> names = new ArrayList<>();
+		names.addAll(stock);
+		names.addAll(labels.values());
+		return names;
+	}
+
 	/** The first and the last drop, such as "coins to bones". */
 	public static String firstAndLast(List<String> drops) {
 		return drops.getFirst() + " to " + drops.getLast();

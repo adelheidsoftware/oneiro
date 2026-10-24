@@ -253,6 +253,36 @@ function Ledger.restocked(stock, drops)
     return result
 end
 
+-- The drops of either run, each once.
+---@param first table<string, true>
+---@param second table<string, true>
+---@return table<string, true>
+function Ledger.either(first, second)
+    local all = {}
+    for key in pairs(first) do
+        all[key] = true
+    end
+    for key in pairs(second) do
+        all[key] = true
+    end
+    return all
+end
+
+-- The names the stock has, then the labels of the drops, in one list.
+---@param stock table<string, true>
+---@param labels table<integer, string>
+---@return string[]
+function Ledger.named(stock, labels)
+    local names = {}
+    for key in pairs(stock) do
+        names[#names + 1] = key
+    end
+    for _, value in pairs(labels) do
+        names[#names + 1] = value
+    end
+    return names
+end
+
 -- The first and the last drop, such as "coins to bones".
 ---@param drops string[]
 ---@return string

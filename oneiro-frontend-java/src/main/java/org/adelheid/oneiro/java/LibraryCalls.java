@@ -142,7 +142,7 @@ final class LibraryCalls {
 				}
 				case "addAll" -> {
 					if (arguments.size() == 1) {
-						return collections.addedAll(receiverTree, "list", arguments.getFirst());
+						return collections.addedAll(receiverTree, CollectionMethods.Kind.LIST, arguments.getFirst());
 					}
 				}
 				case "addFirst" -> {
@@ -193,7 +193,7 @@ final class LibraryCalls {
 					return List.of(new Statement.CallStatement(mapDefault(helper, receiverTree, arguments)));
 				}
 				case "putAll" -> {
-					return collections.addedAll(receiverTree, "map", arguments.getFirst());
+					return collections.addedAll(receiverTree, CollectionMethods.Kind.MAP, arguments.getFirst());
 				}
 				default -> {
 				}
@@ -213,7 +213,7 @@ final class LibraryCalls {
 							new Expression.Nil()));
 				}
 				case "addAll" -> {
-					return collections.addedAll(receiverTree, "set", arguments.getFirst());
+					return collections.addedAll(receiverTree, CollectionMethods.Kind.SET, arguments.getFirst());
 				}
 				default -> {
 				}
@@ -791,7 +791,7 @@ final class LibraryCalls {
 					: collections.listCopy(creation, arguments.getFirst());
 			case "java.util.HashMap", "java.util.HashSet" -> capacityOnly
 					? new Expression.Table(List.of())
-					: collections.filled(creation, new Expression.Table(List.of()), name.endsWith("Set"),
+					: collections.filled(creation, new Expression.Table(List.of()), setOrMap(name),
 							arguments.getFirst());
 			case "java.lang.StringBuilder" -> {
 				if (capacityOnly) {
@@ -821,7 +821,7 @@ final class LibraryCalls {
 				Expression empty = Helper.ORDERED_TABLE.invoke();
 				yield capacityOnly || arguments.size() == 2
 						? empty
-						: collections.filled(creation, empty, name.endsWith("Set"), arguments.getFirst());
+						: collections.filled(creation, empty, setOrMap(name), arguments.getFirst());
 			}
 			case "java.util.TreeMap", "java.util.TreeSet" -> {
 				unit().use(Helper.SORTED_TABLE);
@@ -837,7 +837,7 @@ final class LibraryCalls {
 					throw new Rejection(argument, "Java copies a sorted map or set with its comparator, which a Lua"
 							+ " table does not keep; make the new one with that comparator, then add the entries.");
 				}
-				yield collections.filled(creation, Helper.SORTED_TABLE.invoke(), name.endsWith("Set"), argument);
+				yield collections.filled(creation, Helper.SORTED_TABLE.invoke(), setOrMap(name), argument);
 			}
 			default -> {
 				if (types().isThrowable(type.asType())) {
@@ -897,6 +897,11 @@ final class LibraryCalls {
 					+ " object each time one is read, and Lua compares table keys by identity, so the map or set would"
 					+ " not find it again; key it by a number or string the value carries, such as its id or uid.");
 		}
+	}
+
+	/** The kind of collection a set or map class makes, by its name: {@code java.util.HashSet} makes a set. */
+	private static CollectionMethods.Kind setOrMap(String className) {
+		return className.endsWith("Set") ? CollectionMethods.Kind.SET : CollectionMethods.Kind.MAP;
 	}
 
 	private static boolean declaresEquals(TypeElement type) {
