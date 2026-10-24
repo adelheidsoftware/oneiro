@@ -21,6 +21,17 @@ The source keeps the shape of a RuneLite plugin, a `Plugin` class with `@Subscri
 and calls the RS3 API by the names Jagex documents:
 
 ```java
+package com.example.coins;
+
+import static org.adelheid.oneiro.rs3.Globals.log;
+
+import org.adelheid.oneiro.api.Plugin;
+import org.adelheid.oneiro.api.Subscribe;
+import org.adelheid.oneiro.rs3.Inventory;
+import org.adelheid.oneiro.rs3.InventoryUpdatedEventPayload;
+import org.adelheid.oneiro.rs3.config;
+import org.adelheid.oneiro.rs3.id;
+
 /** Logs the coins in your backpack whenever the amount changes. */
 public final class CoinWatch extends Plugin {
 
@@ -78,7 +89,10 @@ instead.
 
 ## Getting started
 
-You need JDK 25 (Gradle can download it for you) and the RS3 beta client to try the plugin in game.
+You need Gradle 9 (Oneiro is tested with 9.8) and Java 17 or newer to run it; Gradle downloads the JDK 25 that Oneiro
+compiles with if you have none. To try the plugin in game, you need the RS3 beta client.
+
+In a new folder, create the Gradle wrapper with `gradle wrapper --gradle-version 9.8.2`, then these two files.
 
 `settings.gradle.kts`:
 
@@ -123,12 +137,35 @@ oneiro {
 }
 ```
 
-Put the plugin class under `src/main/java/`, then:
+Put `CoinWatch.java` from above in `src/main/java/com/example/coins/`, and its settings interface next to it as
+`CoinSettings.java`:
+
+```java
+package com.example.coins;
+
+import org.adelheid.oneiro.api.ConfigGroup;
+import org.adelheid.oneiro.api.ConfigItem;
+
+/** Coin Watch's settings. */
+@ConfigGroup("coinwatch")
+public interface CoinSettings {
+
+    @ConfigItem(keyName = "enabled", name = "Log the coins")
+    default boolean enabled() {
+        return true;
+    }
+}
+```
+
+Then build the plugin and link it into the client:
 
 ```sh
 ./gradlew build           # compiles, checks, tests and zips the plugin
 ./gradlew linkDevPlugin   # links it into the client's dev_plugins folder, once
 ```
+
+The zip for Mod.io is `build/distributions/coin-watch-1.0.0.zip`. On Windows, `linkDevPlugin` finds the beta client's
+`dev_plugins` folder on its own; elsewhere, name it in the build: `oneiro { devPlugins = file("/path/to/dev_plugins") }`.
 
 In the client's console, `prf` finds the newly linked plugin and `pon coin-watch` enables it. After each build,
 `prl coin-watch` reloads it.
