@@ -1,3 +1,4 @@
+-- src/mode.lua
 -- How the tracker reacts to a new reading.
 
 local Mode = {

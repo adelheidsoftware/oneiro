@@ -1,3 +1,4 @@
+-- src/core/limits.lua
 -- Shared limits.
 
 local Limits = {}

@@ -1,3 +1,4 @@
+-- src/planter.lua
 -- Plants each herb it is given, keeping them in order.
 
 local Planter = {}

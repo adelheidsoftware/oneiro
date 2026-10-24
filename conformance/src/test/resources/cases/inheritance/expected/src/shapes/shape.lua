@@ -1,3 +1,4 @@
+-- src/shapes/shape.lua
 -- A shape with a name, which subclasses give an area.
 
 local Shape = {}

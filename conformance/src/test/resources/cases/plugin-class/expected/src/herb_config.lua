@@ -1,3 +1,4 @@
+-- src/herb_config.lua
 -- The herb tracker's settings.
 --
 -- Each setting is kept in PersistentDB under "herbs." and its key.

@@ -1,3 +1,4 @@
+-- src/badge.lua
 -- A badge of some type, at a level.
 
 local Badge = {}

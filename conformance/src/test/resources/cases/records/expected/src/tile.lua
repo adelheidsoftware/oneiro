@@ -1,3 +1,4 @@
+-- src/tile.lua
 -- A tile on the map, with the steps to another.
 
 local Tile = {}

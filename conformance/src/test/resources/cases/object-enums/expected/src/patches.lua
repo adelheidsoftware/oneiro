@@ -1,3 +1,4 @@
+-- src/patches.lua
 -- The herbs planted in a farmer's patches.
 
 local Herb = require("src/herb")

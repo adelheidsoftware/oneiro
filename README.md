@@ -56,6 +56,7 @@ public final class CoinWatch extends Plugin {
 becomes `main.lua`:
 
 ```lua
+-- main.lua
 -- Logs the coins in your backpack whenever the amount changes.
 
 local CoinSettings = require("src/coin_settings")
@@ -165,7 +166,8 @@ Then build the plugin and link it into the client:
 ```
 
 The zip for Mod.io is `build/distributions/coin-watch-1.0.0.zip`. On Windows, `linkDevPlugin` finds the beta client's
-`dev_plugins` folder on its own; elsewhere, name it in the build: `oneiro { devPlugins = file("/path/to/dev_plugins") }`.
+`dev_plugins` folder on its own; elsewhere, name it in the build:
+`oneiro { devPlugins = file("/path/to/dev_plugins") }`.
 
 In the client's console, `prf` finds the newly linked plugin and `pon coin-watch` enables it. After each build,
 `prl coin-watch` reloads it.

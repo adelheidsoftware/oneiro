@@ -1,3 +1,4 @@
+-- src/shapes/shapes.lua
 -- Shapes measured through interfaces, and a subclass nested next to the code that uses it.
 
 local Shape = require("src/shapes/shape")

@@ -1,3 +1,4 @@
+-- src/tier.lua
 -- How hard a patch is to farm, from the easiest.
 
 local Tier = {}

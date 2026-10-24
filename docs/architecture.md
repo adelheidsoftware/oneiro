@@ -6,8 +6,9 @@ How Oneiro is put together, for people who work on it. What Oneiro accepts and t
 ## Principles
 
 - **The Lua is the product.** Only the Lua is submitted to Mod.io, and Jagex's moderators read it. Every design choice
-  is judged by the Lua it produces, which must read like a careful person wrote it: a header comment per file, Lua
-  Language Server annotations, one module table per file, and the RS3 API called by its documented names.
+  is judged by the Lua it produces, which must read like a careful person wrote it: a header comment per file,
+  starting with the file's path so that the client's errors name it, Lua Language Server annotations, one module
+  table per file, and the RS3 API called by its documented names.
 - **A compiler, not a runtime.** Each Java construct becomes the Lua a person would write for it, at compile time.
   There is no runtime library. The few translations that need more than one expression use small helper functions,
   which a module defines only when it uses them, each with a comment.

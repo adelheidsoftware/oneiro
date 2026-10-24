@@ -1,3 +1,4 @@
+-- main.lua
 -- Counts game ticks and backpack changes while the plugin runs.
 
 local Tally = require("src/tally")

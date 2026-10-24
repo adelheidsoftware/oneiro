@@ -1,3 +1,4 @@
+-- src/garden.lua
 -- A garden that plants, sorts and describes herbs.
 
 local Planter = require("src/planter")

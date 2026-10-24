@@ -1,3 +1,4 @@
+-- src/strings.lua
 -- Strings in the house style: formatStr for building, table.concat for joining.
 
 -- The 0-based position of the text in the string, or -1, as Java's String.indexOf.

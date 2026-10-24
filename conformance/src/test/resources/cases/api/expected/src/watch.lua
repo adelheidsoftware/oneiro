@@ -1,3 +1,4 @@
+-- src/watch.lua
 -- Calls into the RS3 API: global tables, singletons, objects, constants, enums and events.
 
 local Watch = {}

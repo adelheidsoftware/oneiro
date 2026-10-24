@@ -1,3 +1,4 @@
+-- src/boss.lua
 -- A monster at the end of a dungeon.
 
 local Monster = require("src/monster")

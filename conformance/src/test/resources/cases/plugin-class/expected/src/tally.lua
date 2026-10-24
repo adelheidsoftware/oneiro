@@ -1,3 +1,4 @@
+-- src/tally.lua
 -- A running total.
 
 local Tally = {}

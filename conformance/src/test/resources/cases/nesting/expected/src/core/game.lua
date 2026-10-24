@@ -1,3 +1,4 @@
+-- src/core/game.lua
 -- Uses the board, and its public nested class, from another file.
 
 local Board = require("src/core/board")

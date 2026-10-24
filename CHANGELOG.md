@@ -6,6 +6,11 @@ All notable changes to Oneiro are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Every Lua file starts with its path inside the plugin, `-- src/core/row.lua`, before its description. The client
+  names a file in its errors only by the file's first line, so its errors now say which file they come from.
+
 ### Fixed
 
 - A local or parameter named like a private method or static field of the file, or like a member of the plugin class,

@@ -1,3 +1,4 @@
+-- src/core/scoring.lua
 -- How the game grades an arrangement, and the table that makes grading a single lookup.
 --
 -- A blueprint hides a rank 1..5 for each module (M) and for each slot (S). The penalty of an arrangement P is the

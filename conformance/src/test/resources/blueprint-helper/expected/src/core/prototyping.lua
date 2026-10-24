@@ -1,3 +1,4 @@
+-- src/core/prototyping.lua
 -- The prototyping tracker: which of the ten modules on the Discovery board a Prototype has confirmed or rejected.
 --
 -- The board offers ten modules; a selected one leaves the board for the track and its board icon hides. After

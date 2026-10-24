@@ -25,7 +25,7 @@ only when it uses them. Each one is listed in [Helpers](#helpers).
 | --- | --- | --- |
 | One top-level type per file, `<root>.core.OpeningTable` | `src/core/opening_table.lua` | `<root>` is the plugin's root package. A second top-level type in the same file is rejected. |
 | Class name `OpeningTable`, `NPCTracker` | Module table `OpeningTable`, file `opening_table.lua`, `npc_tracker.lua` | File names are snake case; an acronym stays one word. |
-| Class Javadoc | Header comment at the top of the file | A class without Javadoc gets a warning, because every Lua file needs a header. |
+| Class Javadoc | Header comment at the top of the file, after a first line with the file's path: `-- src/core/opening_table.lua` | The client's errors name a file only by its first line, so the path there makes them say which file they come from. A class without Javadoc gets a warning, because every Lua file needs a header. |
 | `import <root>.core.Row;` (used) | `local Row = require("src/core/row")` | In import order, after the header. Unused imports produce nothing. |
 | `import static <root>.core.Row.complete;` | `local Row = require("src/core/row")`, calls become `Row.complete(...)` | |
 | Name that is a Lua keyword (`end`, `local`, `nil`, `repeat`, ...), a Lua global the generated code calls (`table`, `string`, `type`, `pairs`, `formatStr`, ...), or the name of a helper the module uses | The name with a trailing underscore: `end_`, `table_` | Applies to locals, parameters and private members; public members are fields of the module table and keep their names. |

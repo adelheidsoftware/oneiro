@@ -1,3 +1,4 @@
+-- src/bank.lua
 -- A bank whose tabs know the bank they belong to.
 
 local Bank = {}

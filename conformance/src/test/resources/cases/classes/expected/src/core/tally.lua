@@ -1,3 +1,4 @@
+-- src/core/tally.lua
 -- A tally of confirmed modules, as a class with instances.
 
 local Tally = {}

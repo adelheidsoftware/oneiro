@@ -1,3 +1,4 @@
+-- src/ticker.lua
 -- An object whose methods are subscribed as callbacks.
 
 local Ticker = {}

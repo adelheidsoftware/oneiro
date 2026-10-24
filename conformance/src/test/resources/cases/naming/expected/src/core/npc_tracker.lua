@@ -1,3 +1,4 @@
+-- src/core/npc_tracker.lua
 -- Names: an acronym in the file name, Lua keywords and globals as local names, and static imports.
 
 local Limits = require("src/core/limits")

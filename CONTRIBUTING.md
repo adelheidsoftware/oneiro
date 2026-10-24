@@ -85,8 +85,10 @@ The Lua Oneiro writes, and the expected Lua in the conformance suite, follow the
 plugins:
 
 - Lua 5.4, four spaces, 120 columns, formatted as StyLua 2.6.0 formats it with `stylua.toml`.
-- A header comment at the top of every file, a comment above each function that has documentation in the Java, and
-  Lua Language Server annotations (`---@param`, `---@return`) for the signature.
+- A header comment at the top of every file, whose first line is the file's path inside the plugin, such as
+  `-- src/core/row.lua`: the client's errors name a file only by its first line. Then a comment above each function
+  that has documentation in the Java, and Lua Language Server annotations (`---@param`, `---@return`) for the
+  signature.
 - One module table per file, returned at its end; `local` for everything else. The only globals are the ones the
   client requires, such as `PluginShutdown`, each with a comment saying so.
 - `camelCase` for locals and functions, `PascalCase` for modules and classes, `UPPER_SNAKE_CASE` for constants.

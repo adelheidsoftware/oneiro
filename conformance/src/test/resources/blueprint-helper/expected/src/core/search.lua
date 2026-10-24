@@ -1,3 +1,4 @@
+-- src/core/search.lua
 -- The endgame search: given the current row and the surviving seeds, the swap that minimises the number of further
 -- swaps needed in the worst case.
 --

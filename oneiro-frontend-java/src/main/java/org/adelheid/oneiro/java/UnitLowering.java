@@ -46,7 +46,6 @@ import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import org.adelheid.oneiro.lua.Block;
-import org.adelheid.oneiro.lua.Chunk;
 import org.adelheid.oneiro.lua.Comment;
 import org.adelheid.oneiro.lua.Expression;
 import org.adelheid.oneiro.lua.FunctionBody;
@@ -290,7 +289,7 @@ final class UnitLowering {
 		if (diagnostics.stream().anyMatch(diagnostic -> diagnostic.severity() == Diagnostic.Severity.ERROR)) {
 			return null;
 		}
-		return new LuaModule(path, new Chunk(header, new Block(body, List.of())));
+		return LuaModule.of(path, header, new Block(body, List.of()));
 	}
 
 	private void collectFileTypes(ClassTree type) {

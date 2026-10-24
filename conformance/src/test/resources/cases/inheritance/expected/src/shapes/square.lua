@@ -1,3 +1,4 @@
+-- src/shapes/square.lua
 -- A square: a shape with four equal sides.
 
 local Shape = require("src/shapes/shape")

@@ -1,3 +1,4 @@
+-- src/parsing.lua
 -- Errors caught with pcall.
 
 local Parsing = {}

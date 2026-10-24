@@ -1,3 +1,4 @@
+-- src/pet.lua
 -- A creature that follows the player.
 
 local Creature = require("src/creature")

@@ -1,3 +1,4 @@
+-- src/cleanup.lua
 -- Work that always tidies up after itself.
 
 local Cleanup = {}

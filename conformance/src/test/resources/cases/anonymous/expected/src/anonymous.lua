@@ -1,3 +1,4 @@
+-- src/anonymous.lua
 -- Anonymous classes: functions where Java means one, objects otherwise.
 
 -- Gives the object the members of an anonymous class, which replace its class's where they share a name, and returns

@@ -1,3 +1,4 @@
+-- src/encounters.lua
 -- What to say about the creatures met.
 
 local Boss = require("src/boss")

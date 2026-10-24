@@ -1,3 +1,4 @@
+-- src/creature.lua
 -- Something that lives on the map, with a name.
 
 local Creature = {}

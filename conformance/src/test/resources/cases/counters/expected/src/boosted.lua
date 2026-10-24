@@ -1,3 +1,4 @@
+-- src/boosted.lua
 -- Counters whose level can drop below zero.
 
 local Counters = require("src/counters")

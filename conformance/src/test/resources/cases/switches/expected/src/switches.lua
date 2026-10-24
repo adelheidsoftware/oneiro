@@ -1,3 +1,4 @@
+-- src/switches.lua
 -- Switches as if/elseif chains.
 
 local Switches = {}

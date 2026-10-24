@@ -1,3 +1,4 @@
+-- src/monster.lua
 -- A creature that fights, with a combat level.
 
 local Creature = require("src/creature")

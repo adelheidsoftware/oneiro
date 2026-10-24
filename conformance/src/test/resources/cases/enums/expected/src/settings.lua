@@ -1,3 +1,4 @@
+-- src/settings.lua
 -- Enums: constants as strings, switches over them, and their lists.
 
 local Mode = require("src/mode")

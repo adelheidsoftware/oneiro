@@ -1,3 +1,4 @@
+-- src/core/permutations.lua
 -- Arrangements of the five Discovery modules as permutations. An arrangement maps slot to module, both 1..5, so
 -- 2 1 3 4 5 means module 2 sits in slot 1 and module 1 in slot 2. Module n is whatever sat in slot n of the first
 -- graded row, so that row is always 1 2 3 4 5, the first entry of `list`. The rest of the engine refers to an

@@ -1,3 +1,4 @@
+-- src/arithmetic.lua
 -- Integer arithmetic keeps Java's rounding toward zero.
 
 -- Integer division that rounds toward zero, as Java's / does; Lua's // rounds down.

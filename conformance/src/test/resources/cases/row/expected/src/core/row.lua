@@ -1,3 +1,4 @@
+-- src/core/row.lua
 -- A row is the five track slots of the Discovery window as the reader sees them: a list of five sprite IDs, -1 where
 -- a slot is empty. This is the one place that says when a row is complete.
 

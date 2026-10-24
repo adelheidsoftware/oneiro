@@ -1,3 +1,4 @@
+-- src/walker.lua
 -- Locals named like the file's private members, which share one namespace with them in Lua.
 
 local Walker = {}

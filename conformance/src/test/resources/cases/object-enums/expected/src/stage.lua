@@ -1,3 +1,4 @@
+-- src/stage.lua
 -- How far a patch has grown.
 
 local Stage = {}

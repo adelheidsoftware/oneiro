@@ -1,3 +1,4 @@
+-- dev/main.lua
 -- Development helpers: a teleport when the plugin starts, and the ticks it ran for when it stops.
 
 local ticks = 0

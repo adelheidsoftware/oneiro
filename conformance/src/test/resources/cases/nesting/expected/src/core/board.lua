@@ -1,3 +1,4 @@
+-- src/core/board.lua
 -- A board of cells, with the cell class nested inside.
 
 local Board = {}
