@@ -49,7 +49,7 @@ internal class Characters(private val body: BodyLowering) {
 	}
 
 	/** A char's members: its number, its case, and the tests of what kind of character it is. */
-	fun member(name: String, receiver: KtExpression): Expression? {
+	fun member(name: String, receiver: Receiver): Expression? {
 		val value = body.expression(receiver)
 		val characterClass = when (name) {
 			"isDigit" -> "%d"
@@ -66,7 +66,7 @@ internal class Characters(private val body: BodyLowering) {
 		}
 		return when (name) {
 			"code" -> {
-				checkOneByte(receiver)
+				(receiver as? Receiver.Written)?.let { checkOneByte(it.expression) }
 				byte(value)
 			}
 			"uppercaseChar", "uppercase" -> Expression.methodCall(value, "upper")

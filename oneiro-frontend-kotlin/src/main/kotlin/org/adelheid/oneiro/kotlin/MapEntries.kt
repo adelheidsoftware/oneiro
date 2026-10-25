@@ -36,7 +36,7 @@ import org.jetbrains.kotlin.psi.KtLambdaExpression
 internal class MapEntries(
 	private val body: BodyLowering,
 	private val fusion: CollectionLoops.Fusion,
-	map: KtExpression,
+	map: Receiver,
 	lambdas: List<KtLambdaExpression>,
 ) {
 

@@ -37,8 +37,8 @@ object Refused {
 	/** Each item and the length of its name, as pairs made another way. */
 	fun lengths(items: List<String>): Map<String, Int> = items.associate { Pair(it, it.length) }
 
-	/** A library function read on the receiver without naming it. */
-	fun String.shout(): String = uppercase()
+	/** A number as text, by toString() on the receiver without naming it. */
+	fun Int.label(): String = toString()
 
 	/** A scope function inside an expression, whose code runs as statements. */
 	fun logged(text: String): Int = text.apply { log(this) }.length
@@ -59,4 +59,7 @@ object Refused {
 		1 -> true
 		else -> false
 	}
+
+	/** The item there is most of, by a comparator, which a map's entries do not take yet. */
+	fun most(stock: Map<String, Int>): String? = stock.maxWithOrNull(compareBy { it.value })?.key
 }

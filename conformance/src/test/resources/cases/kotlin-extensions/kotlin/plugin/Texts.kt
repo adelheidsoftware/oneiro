@@ -15,7 +15,7 @@ object Texts {
 	}
 
 	/** The text in capitals, as if shouted. */
-	fun String.shout(): String = this.uppercase() + "!"
+	fun String.shout(): String = uppercase() + "!"
 
 	/** The text shouted twice. */
 	fun String.shoutTwice(): String = shout() + " " + this.shout()
@@ -37,4 +37,28 @@ object Texts {
 
 	/** The text shouted, or null for no text. */
 	fun loud(text: String?): String? = text?.shout()
+
+	/** The letters of the text after the first. */
+	fun String.rest(): Int = length - 1
+
+	/** The numbers added up. */
+	fun List<Int>.added(): Int = sum()
+
+	/** The herbs among the names, in capitals. */
+	fun List<String>.loudHerbs(): List<String> = filter { it.isHerb() }.map { it.uppercase() }
+
+	/** The letters of all the names. */
+	fun List<String>.totalLength(): Int {
+		var letters = 0
+		forEach { letters += it.length }
+		return letters
+	}
+
+	/** Adds the name, after "start" when the list is empty. */
+	fun MutableList<String>.record(name: String) {
+		if (isEmpty()) {
+			add("start")
+		}
+		add(name)
+	}
 }

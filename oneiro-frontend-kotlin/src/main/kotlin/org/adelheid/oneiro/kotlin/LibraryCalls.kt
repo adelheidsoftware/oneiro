@@ -63,11 +63,11 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	}
 
 	/** A property of the library: a collection's `size`, or a list's `lastIndex`. */
-	fun property(where: KtExpression, property: KaCallableSymbol, receiver: KtExpression?): Expression {
+	fun property(where: KtExpression, property: KaCallableSymbol, receiver: Receiver?): Expression {
 		val id = property.callableId
 		val name = id?.callableName?.asString()
 		val kind = receiver?.let { kind(type(it)) }
-		if (receiver != null && body.chars.isChar(receiver)) {
+		if (receiver != null && body.chars.isChar(type(receiver))) {
 			name?.let { body.chars.member(it, receiver) }?.let { return it }
 		}
 		if (id?.packageName?.asString() == "kotlin.math" && name == "PI") {
@@ -92,7 +92,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 *
 	 * @param arguments the arguments, in the order of the parameters they go to
 	 */
-	fun call(where: KtExpression, function: KaCallableSymbol, receiver: KtExpression?, arguments: LibraryArguments):
+	fun call(where: KtExpression, function: KaCallableSymbol, receiver: Receiver?, arguments: LibraryArguments):
 		Expression {
 		val name = function.callableId?.callableName?.asString().orEmpty()
 		val receiverType = receiver?.let(::type)
@@ -108,12 +108,12 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			body.chars.member(name, receiver)?.let { return it }
 		}
 		if (name == "toString" && receiver != null && arguments.isEmpty()) {
-			return body.strings.toText(receiver)
+			return body.strings.toText(written(receiver, where, "toString()"))
 		}
 		if (name == "format" && function.callableId?.packageName?.asString() == "kotlin.text") {
 			// "%d".format(n), or String.format("%d", n), whose receiver is the String class
 			return if (receiver != null && receiverType != null && types.isString(receiverType)) {
-				body.strings.format(where, receiver, arguments)
+				body.strings.format(where, written(receiver, where, "format(...)"), arguments)
 			} else {
 				body.strings.format(where, arguments.first(), arguments.drop(1))
 			}
@@ -147,7 +147,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * A call that changes its collection, made as a statement: `list.add(x)` as `list[#list + 1] = x`, `map.put(k, v)`
 	 * as `map[k] = v`, `set.remove(x)` as `set[x] = nil`; null when the call is none of these.
 	 */
-	fun statement(where: KtExpression, function: KaCallableSymbol, receiver: KtExpression,
+	fun statement(where: KtExpression, function: KaCallableSymbol, receiver: Receiver,
 		arguments: LibraryArguments): List<Statement>? {
 		val name = function.callableId?.callableName?.asString()
 		val kind = kind(type(receiver))
@@ -209,8 +209,8 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * `list.add(x)` as `list[#list + 1] = x`, or `table.insert(list, x)` for a list from a call, which Lua must not
 	 * make twice.
 	 */
-	private fun appended(receiver: KtExpression, value: KtExpression): Statement {
-		if (isCall(receiver)) {
+	private fun appended(receiver: Receiver, value: KtExpression): Statement {
+		if (receiver is Receiver.Written && isCall(receiver.expression)) {
 			return Statement.CallStatement(tableCall("insert", body.expression(receiver), element(value)))
 		}
 		val list = body.expression(receiver)
@@ -221,7 +221,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * `map.getOrPut(key) { value }` as a statement, and `map.putIfAbsent(key, value)`:
 	 * `if map[key] == nil then map[key] = value end`.
 	 */
-	private fun storedIfAbsent(name: String, receiver: KtExpression, arguments: LibraryArguments): Statement {
+	private fun storedIfAbsent(name: String, receiver: Receiver, arguments: LibraryArguments): Statement {
 		checkKey(arguments[0])
 		val value = if (name == "getOrPut") {
 			val lambda = arguments[1] as? KtLambdaExpression
@@ -243,7 +243,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * parameters the loop's variables. A list is walked with `ipairs`, and backwards to remove from it; a set or a map
 	 * with `pairs`.
 	 */
-	private fun loopOver(where: KtExpression, name: String?, kind: Kind, receiver: KtExpression,
+	private fun loopOver(where: KtExpression, name: String?, kind: Kind, receiver: Receiver,
 		arguments: LibraryArguments): List<Statement>? {
 		val argument = arguments.singleOrNull() ?: return null
 		val lambda = argument as? KtLambdaExpression ?: return if (name == "forEach") {
@@ -287,7 +287,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * `forEach(f)` with a function rather than a lambda: a loop that calls it with each element, or with each key and
 	 * value of a map.
 	 */
-	private fun calledFor(kind: Kind, receiver: KtExpression, function: KtExpression): Statement {
+	private fun calledFor(kind: Kind, receiver: Receiver, function: KtExpression): Statement {
 		val values = when (kind) {
 			Kind.MAP -> listOf(body.invent("key", function), body.invent("value", function))
 			else -> listOf(body.invent("item", function))
@@ -306,7 +306,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	/**
 	 * `list.removeAll { ... }` as a loop from the end, which removing does not disturb; a set's as a loop of `pairs`.
 	 */
-	private fun removed(where: KtExpression, name: String, kind: Kind, receiver: KtExpression,
+	private fun removed(where: KtExpression, name: String, kind: Kind, receiver: Receiver,
 		lambda: KtLambdaExpression): Statement {
 		val inlined = body.lambdas.inline(lambda, name)
 		val test = inlined.value?.let(body::expression)
@@ -334,7 +334,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * `list[i]` and `map[key]`, read or assigned: a position Kotlin counts from 0 is Lua's plus one, unless it names a
 	 * loop variable that already counts from 1, and a key stays as it is.
 	 */
-	fun index(where: KtExpression, receiver: KtExpression, key: KtExpression): Expression =
+	fun index(where: KtExpression, receiver: Receiver, key: KtExpression): Expression =
 		when (kind(type(receiver))) {
 			Kind.SEQUENCE -> Expression.Index(body.expression(receiver), position(key))
 			Kind.MAP -> {
@@ -367,7 +367,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 *
 	 * @param element the expression whose type the value has
 	 */
-	fun contains(where: PsiElement, element: KtExpression, value: Expression, collection: KtExpression): Expression {
+	fun contains(where: PsiElement, element: KtExpression, value: Expression, collection: Receiver): Expression {
 		if (type(collection)?.let(types::isString) == true) {
 			return strings.contains(body.expression(collection), value)
 		}
@@ -511,7 +511,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	}
 
 	/** The members of a list or an array. */
-	private fun sequence(where: KtExpression, name: String, receiver: KtExpression, arguments: LibraryArguments):
+	private fun sequence(where: KtExpression, name: String, receiver: Receiver, arguments: LibraryArguments):
 		Expression? {
 		val list = body.expression(receiver)
 		return when (name) {
@@ -555,7 +555,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * `list.joinToString(separator)` as `table.concat(list, separator)`, which joins strings and numbers as Kotlin
 	 * writes them; its separator is `", "` unless the call gives another.
 	 */
-	private fun joined(where: KtExpression, receiver: KtExpression, list: Expression, arguments: LibraryArguments):
+	private fun joined(where: KtExpression, receiver: Receiver, list: Expression, arguments: LibraryArguments):
 		Expression {
 		if (arguments.byName.keys.any { it != "separator" }) {
 			throw Rejection.notYet(where, "joinToString with a prefix, postfix, limit or transform")
@@ -607,7 +607,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	}
 
 	/** The members of a map. */
-	private fun map(where: KtExpression, name: String, receiver: KtExpression, arguments: List<KtExpression>):
+	private fun map(where: KtExpression, name: String, receiver: Receiver, arguments: List<KtExpression>):
 		Expression? = when (name) {
 		"firstKey" -> helper(Helper.FIRST_KEY, body.expression(receiver))
 		"lastKey" -> helper(Helper.LAST_KEY, body.expression(receiver))
@@ -630,7 +630,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	}
 
 	/** The members of a set. */
-	private fun set(where: KtExpression, name: String, receiver: KtExpression, arguments: List<KtExpression>):
+	private fun set(where: KtExpression, name: String, receiver: Receiver, arguments: List<KtExpression>):
 		Expression? = when (name) {
 		"contains" -> contains(where, arguments[0], body.expression(arguments[0]), receiver)
 		// The first and last keys pairs gives, which a sorted set's are
@@ -644,7 +644,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	}
 
 	/** `map.getOrPut(key) { value }`: the stored value, or the computed one stored first, through a helper. */
-	private fun getOrPut(receiver: KtExpression, arguments: List<KtExpression>): Expression {
+	private fun getOrPut(receiver: Receiver, arguments: List<KtExpression>): Expression {
 		checkKey(arguments[0])
 		return helper(Helper.COMPUTE_IF_ABSENT, body.expression(receiver), body.expression(arguments[0]),
 			body.expression(arguments[1]))
@@ -686,7 +686,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	}
 
 	/** A `StringBuilder`'s members: its pieces joined, and the `append`s a statement makes. */
-	private fun builder(where: KtExpression, name: String, receiver: KtExpression, arguments: LibraryArguments):
+	private fun builder(where: KtExpression, name: String, receiver: Receiver, arguments: LibraryArguments):
 		Expression = when (name) {
 		"toString" -> tableCall("concat", body.expression(receiver))
 		"append" -> throw Rejection(where, STATEMENT_ONLY.format(name))
@@ -708,7 +708,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * A number's conversions and operations: `toInt()` of a floating number drops its fraction, through a helper, while
 	 * the other conversions keep the Lua number as it is; `floorDiv` and `mod` round down, as Lua's `//` and `%` do.
 	 */
-	private fun number(name: String, receiver: KtExpression, type: KaType, arguments: List<KtExpression>): Expression? {
+	private fun number(name: String, receiver: Receiver, type: KaType, arguments: List<KtExpression>): Expression? {
 		val value = body.expression(receiver)
 		return when (name) {
 			"toInt", "toLong", "toShort", "toByte" -> if (types.isFloating(type)) {
@@ -788,7 +788,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	private fun position(index: KtExpression): Expression = body.position(index)
 
 	/** `map[key]` or `set[element]`. */
-	private fun entry(table: KtExpression, key: KtExpression): Expression =
+	private fun entry(table: Receiver, key: KtExpression): Expression =
 		Expression.Index(body.expression(table), body.expression(key))
 
 	private fun present(entry: Expression): Expression =
@@ -828,6 +828,22 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		return body.expression(receiver)
 	}
 
+	/** A receiver the Lua names twice: a written one as [stable] takes it, and one left unnamed by its name. */
+	fun stable(receiver: Receiver): Expression = when (receiver) {
+		is Receiver.Written -> stable(receiver.expression)
+		is Receiver.Unnamed -> receiver.lua
+	}
+
+	/**
+	 * The receiver's expression, for a member that reads the expression as written; one left unnamed is refused, as it
+	 * has none.
+	 */
+	private fun written(receiver: Receiver, where: KtExpression, member: String): KtExpression = when (receiver) {
+		is Receiver.Written -> receiver.expression
+		is Receiver.Unnamed -> throw Rejection(where, "Oneiro reads $member only on a receiver the code names; write"
+			+ " this.$member here.")
+	}
+
 	private fun tableCall(name: String, vararg arguments: Expression): Expression {
 		unit.useGlobal("table")
 		return Expression.Call(Expression.field(Expression.name("table"), name), arguments.toList())
@@ -839,6 +855,8 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	}
 
 	private fun type(expression: KtExpression): KaType? = with(unit.session) { expression.expressionType }
+
+	private fun type(receiver: Receiver): KaType? = receiver.type(unit.session)
 
 	/** Whether a type is a regular expression's, Kotlin's `Regex` or Java's `Pattern` and `Matcher`. */
 	private fun isRegex(type: KaType?): Boolean =

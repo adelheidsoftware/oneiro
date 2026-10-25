@@ -29,7 +29,8 @@ All notable changes to Oneiro are listed here. The format follows
   `settings.gradle.kts` where a build declares them there.
 - Kotlin's own constructs: extension functions, which take their receiver first as `self`; the scope functions `let`,
   `also`, `apply`, `run` and `with`, whose code runs where they are called, so that
-  `ui.Text(parent).apply { SetPos(10, 20) }` configures the new component in place; an `if` or `when` with blocks
+  `ui.Text(parent).apply { SetPos(10, 20) }` configures the new component in place; in both, the receiver's members
+  named without it, the Kotlin library's included, as in `fun List<Int>.total() = sum()`; an `if` or `when` with blocks
   inside an expression, whose value a local before the statement takes; chains over a map or its entries, such as
   `counts.maxByOrNull { it.value }?.key`, and loops that read `entry.key` and `entry.value`; the collection functions
   `distinct`, `take`, `drop`, `takeWhile`, `dropWhile`, `flatMap`, `groupBy` and `associate`, and the string functions

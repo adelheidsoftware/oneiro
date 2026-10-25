@@ -131,4 +131,16 @@ object Panels {
 			log("total $total")
 		}
 	}
+
+	/** A list of the two names, filled in as it is made. */
+	fun pair(first: String, second: String): List<String> {
+		val names = mutableListOf<String>().apply {
+			add(first)
+			add(second)
+		}
+		return names
+	}
+
+	/** How many names the list holds. */
+	fun count(names: List<String>): Int = with(names) { size }
 }

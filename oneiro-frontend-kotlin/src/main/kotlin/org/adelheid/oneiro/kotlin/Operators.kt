@@ -134,7 +134,7 @@ internal class Operators(private val body: BodyLowering) {
 		val inclusive = token == KtTokens.RANGE
 		if (bounds == null || !(inclusive || token == KtTokens.RANGE_UNTIL ||
 				bounds.operationReference.getReferencedName() == "until")) {
-			return body.library.contains(where, element, value, range)
+			return body.library.contains(where, element, value, Receiver.Written(range))
 		}
 		if (!stable && !body.isStable(element)) {
 			throw Rejection(element, "Lua compares this value with both ends of the range; store it in a local first.")

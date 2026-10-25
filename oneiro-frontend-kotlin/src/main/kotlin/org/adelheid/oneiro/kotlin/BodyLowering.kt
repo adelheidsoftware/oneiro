@@ -409,15 +409,19 @@ internal class BodyLowering(
 			+ " would go nowhere, so remove it or use it.")
 	}
 
-	/** `receiver.member(...)` as a statement, when the member is one of the library's that changes a collection. */
+	/**
+	 * `receiver.member(...)` as a statement, or `member(...)` on a receiver left unnamed, when the member is one of the
+	 * library's that changes a collection.
+	 */
 	private fun collectionStatement(expression: KtExpression): List<Statement>? = with(unit.session) {
-		val qualified = expression as? KtDotQualifiedExpression ?: return null
-		val call = qualified.selectorExpression as? KtCallExpression ?: return null
+		val qualified = expression as? KtDotQualifiedExpression
+		val call = (qualified?.selectorExpression ?: expression) as? KtCallExpression ?: return null
 		val resolved = call.resolveToCall()?.successfulFunctionCallOrNull() ?: return null
 		if (!isLibrary(resolved.symbol)) {
 			return null
 		}
-		library.statement(expression, resolved.symbol, qualified.receiverExpression, libraryArguments(resolved, call))
+		val receiver = libraryReceiver(qualified?.receiverExpression, call) ?: return null
+		library.statement(expression, resolved.symbol, receiver, libraryArguments(resolved, call))
 	}
 
 	/**
@@ -541,6 +545,12 @@ internal class BodyLowering(
 	}
 
 	// ---- Expressions
+
+	/** A library member's receiver: its expression, or the Lua name of one left unnamed. */
+	fun expression(receiver: Receiver): Expression = when (receiver) {
+		is Receiver.Written -> expression(receiver.expression)
+		is Receiver.Unnamed -> receiver.lua
+	}
 
 	fun expression(expression: KtExpression): Expression = when (expression) {
 		is KtConstantExpression -> constant(expression)
@@ -856,10 +866,7 @@ internal class BodyLowering(
 			return expression(receiver)
 		}
 		if (isLibrary(symbol)) {
-			if (receiver == null && implicitReceiver(reference) != null) {
-				throw Rejection(where, unnamedLibraryReceiver(reference.getReferencedName()))
-			}
-			return library.property(where, symbol, receiver)
+			return library.property(where, symbol, libraryReceiver(receiver, reference))
 		}
 		val classId = symbol.callableId?.classId
 		val declaration = symbol.psi
@@ -1027,20 +1034,30 @@ internal class BodyLowering(
 
 	/**
 	 * The receiver a member named without one is read on, when that is a scope function's or an extension function's
-	 * `this`, `apply { SetPos(1, 2) }`: its Lua name; null when it is the class's own object, or there is none.
+	 * `this`, `apply { SetPos(1, 2) }`: its Lua name and its type; null when it is the class's own object, or there
+	 * is none.
 	 */
-	private fun implicitReceiver(member: KtElement, extension: Boolean = false): Expression? = with(unit.session) {
+	fun unnamedReceiver(member: KtElement, extension: Boolean = false): Receiver.Unnamed? = with(unit.session) {
 		val call = member.resolveToCall()?.successfulCallOrNull<KaCallableMemberCall<*, *>>() ?: return null
 		val applied = call.partiallyAppliedSymbol
 		// An extension function's own receiver, or the object a member is read on
 		val receivers = if (extension) listOf(applied.extensionReceiver)
 		else listOf(applied.dispatchReceiver, applied.extensionReceiver)
-		receivers.firstNotNullOfOrNull { receiver ->
-			val owner = ((receiver as? KaImplicitReceiverValue)?.symbol as? KaReceiverParameterSymbol)
-				?.owningCallableSymbol?.psi
-			unit.receiverAlias(owner)
+		receivers.filterIsInstance<KaImplicitReceiverValue>().firstNotNullOfOrNull { receiver ->
+			val owner = (receiver.symbol as? KaReceiverParameterSymbol)?.owningCallableSymbol?.psi
+			unit.receiverAlias(owner)?.let { Receiver.Unnamed(it, receiver.type) }
 		}
 	}
+
+	private fun implicitReceiver(member: KtElement, extension: Boolean = false): Expression? =
+		unnamedReceiver(member, extension)?.lua
+
+	/**
+	 * The receiver of a member of the Kotlin library: the one written before the dot, or the one the member is named
+	 * on without it; null for a function outside any class, such as `listOf`.
+	 */
+	private fun libraryReceiver(written: KtExpression?, member: KtElement): Receiver? =
+		written?.let(Receiver::Written) ?: unnamedReceiver(member)
 
 	/** `this` that names a scope function's or an extension function's receiver: its Lua name; null for another. */
 	private fun aliasedReceiver(where: KtInstanceExpressionWithLabel): Expression? = with(unit.session) {
@@ -1122,9 +1139,6 @@ internal class BodyLowering(
 			return preconditions.notNullValue(call)
 		}
 		scopes.scope(call, receiver, where)?.let { return scopes.value(it) }
-		if (receiver == null && isLibrary(symbol) && implicitReceiver(call) != null) {
-			throw Rejection(where, unnamedLibraryReceiver("${symbol.callableId?.callableName}(...)"))
-		}
 		if (api.owner(symbol)?.classId?.asFqNameString() == LuaPatterns.CLASS) {
 			if (symbol.callableId?.callableName?.asString() == "gmatch") {
 				throw Rejection(where, LuaPatterns.GMATCH_OUTSIDE_LOOP)
@@ -1132,7 +1146,7 @@ internal class BodyLowering(
 			return LuaPatterns.call(symbol.callableId!!.callableName.asString(), arguments(resolved, call))
 		}
 		if (isLibrary(symbol)) {
-			return library.call(where, symbol, receiver, libraryArguments(resolved, call))
+			return library.call(where, symbol, libraryReceiver(receiver, call), libraryArguments(resolved, call))
 		}
 		if (symbol !is KaNamedFunctionSymbol) {
 			throw Rejection.notYet(where, "Calling this")
@@ -1430,7 +1444,7 @@ internal class BodyLowering(
 		val receiver = access.arrayExpression ?: throw Rejection(access, EMPTY)
 		val key = access.indexExpressions.singleOrNull()
 			?: throw Rejection.notYet(access, "Indexing with several values")
-		return library.index(access, receiver, key)
+		return library.index(access, Receiver.Written(receiver), key)
 	}
 
 	/** A position Kotlin counts from 0 as Lua's, one higher, unless it names a loop variable that counts from 1. */
@@ -1448,10 +1462,6 @@ internal class BodyLowering(
 
 	private companion object {
 		const val EMPTY = "This expression is incomplete and does not compile."
-
-		/** Why a member of the Kotlin library needs its receiver written out, as `this.member`. */
-		fun unnamedLibraryReceiver(member: String): String = "Oneiro reads the Kotlin library's members only on a" +
-			" value the code names; write this.$member here."
 
 		const val NO_CLASSES = "Lua has no runtime type information, so a value has no class to read; test it with" +
 			" is instead."

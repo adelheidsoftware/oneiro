@@ -71,7 +71,7 @@ internal class CollectionCopies(private val body: BodyLowering) {
 	 * `list.addAll(set)`, `set.addAll(list)` or `map.putAll(other)` as a loop over what the other collection holds; a
 	 * list into a list is one `table.move`.
 	 */
-	fun addedAll(receiver: KtExpression, target: LibraryCalls.Kind, source: KtExpression): Statement {
+	fun addedAll(receiver: Receiver, target: LibraryCalls.Kind, source: KtExpression): Statement {
 		val holding = holding(source)
 		val into = body.library.stable(receiver)
 		if (target == LibraryCalls.Kind.SEQUENCE && holding.contents == Contents.ELEMENTS) {

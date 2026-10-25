@@ -44,3 +44,7 @@ assert(logged[#logged] == "total 5", "apply on a new object, whose value goes no
 assert(Panels.Panel.new(parent):text() == "Ready", "apply in a class's property")
 local first = Panels.sharedTally()
 assert(first.total == 10 and Panels.sharedTally() == first, "apply assigned to a variable, and an object's private var")
+
+local pair = Panels.pair("guam", "ash")
+assert(#pair == 2 and pair[1] == "guam" and pair[2] == "ash", "apply with the library's members on its receiver")
+assert(Panels.count({ "guam", "ash" }) == 2, "with, and a library property of its receiver")

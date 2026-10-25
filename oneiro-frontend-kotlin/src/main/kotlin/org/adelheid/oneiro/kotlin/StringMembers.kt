@@ -19,7 +19,7 @@ internal class StringMembers(private val body: BodyLowering) {
 	private val unit = body.unit
 
 	/** A member of a string, or null when it is none of those this lists. */
-	fun member(where: KtExpression, name: String, receiver: KtExpression, arguments: LibraryArguments): Expression? {
+	fun member(where: KtExpression, name: String, receiver: Receiver, arguments: LibraryArguments): Expression? {
 		val text = body.expression(receiver)
 		if (name == "equals" && arguments.byName.containsKey("ignoreCase")) {
 			return equalsIgnoringCase(where, text, arguments)
@@ -135,10 +135,11 @@ internal class StringMembers(private val body: BodyLowering) {
 	 * A raw string's `trimIndent()` or `trimMargin()`, worked out here: the Lua holds the trimmed text, between long
 	 * brackets when it has several lines.
 	 */
-	private fun trimmed(where: KtExpression, name: String, receiver: KtExpression, arguments: LibraryArguments):
+	private fun trimmed(where: KtExpression, name: String, receiver: Receiver, arguments: LibraryArguments):
 		Expression {
-		val raw = literalText(receiver)
-		if (raw == null || receiver !is KtStringTemplateExpression || !body.isRaw(receiver)) {
+		val written = (receiver as? Receiver.Written)?.expression
+		val raw = written?.let(::literalText)
+		if (raw == null || written !is KtStringTemplateExpression || !body.isRaw(written)) {
 			throw Rejection.notYet(where, "$name of anything but a raw string without templates")
 		}
 		val text = if (name == "trimIndent") {

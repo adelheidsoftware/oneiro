@@ -176,4 +176,22 @@ function Panels.demo()
     log(formatStr("total {}", tally.total))
 end
 
+-- A list of the two names, filled in as it is made.
+---@param first string
+---@param second string
+---@return string[]
+function Panels.pair(first, second)
+    local names = {}
+    names[#names + 1] = first
+    names[#names + 1] = second
+    return names
+end
+
+-- How many names the list holds.
+---@param names string[]
+---@return integer
+function Panels.count(names)
+    return #names
+end
+
 return Panels

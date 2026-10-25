@@ -30,9 +30,9 @@ plugin/Refused.kt:38: error: associate with a pair that is not written key to va
 	fun lengths(items: List<String>): Map<String, Int> = items.associate { Pair(it, it.length) }
 	                                                                       ^
 
-plugin/Refused.kt:41: error: Oneiro reads the Kotlin library's members only on a value the code names; write this.uppercase(...) here.
-	fun String.shout(): String = uppercase()
-	                             ^
+plugin/Refused.kt:41: error: Oneiro reads toString() only on a receiver the code names; write this.toString() here.
+	fun Int.label(): String = toString()
+	                          ^
 
 plugin/Refused.kt:44: error: In Lua the code of apply runs as statements; give its value to a local, val x = ..., a return or an assignment of its own.
 	fun logged(text: String): Int = text.apply { log(this) }.length
@@ -45,3 +45,7 @@ plugin/Refused.kt:50: error: Lua runs the code of let in place, where a return@l
 plugin/Refused.kt:58: error: In Lua this when is a statement, which can run before the code around it only where nothing would see the difference; give its value to a local of its own first, val x = when ...
 	fun calm(ready: Boolean, mood: Int): Boolean = ready && when (mood) {
 	                                                        ^
+
+plugin/Refused.kt:64: error: maxWith and minWith over a map's entries is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+	fun most(stock: Map<String, Int>): String? = stock.maxWithOrNull(compareBy { it.value })?.key
+	                                                   ^

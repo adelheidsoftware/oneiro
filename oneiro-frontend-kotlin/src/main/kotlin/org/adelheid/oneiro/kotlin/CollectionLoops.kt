@@ -67,21 +67,29 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		data object Effect : Destination
 	}
 
-	/** One call of a chain: the function's name, the call and its arguments, and the whole `receiver.call(...)`. */
+	/**
+	 * One call of a chain: the function's name, the call and its arguments, and the whole `receiver.call(...)`, or the
+	 * call alone on a receiver left unnamed.
+	 */
 	class Operation(
 		val name: String,
 		val call: KtCallExpression,
 		val arguments: LibraryArguments,
-		val expression: KtDotQualifiedExpression,
-	)
+		val expression: KtExpression,
+	) {
+
+		/** The receiver written before the dot, or null for one left unnamed. */
+		val receiver: KtExpression?
+			get() = (expression as? KtDotQualifiedExpression)?.receiverExpression
+	}
 
 	/**
-	 * A chain from its collection to the call that gives its result, the default `?:` gives when that call finds
-	 * nothing, as in `firstOrNull { ... } ?: "none"`, and the part of a map's entry it gives, `key` or `value`, when it
-	 * finds an entry, as in `maxByOrNull { it.value }?.key`.
+	 * A chain from its collection, written or left unnamed, to the call that gives its result, the default `?:` gives
+	 * when that call finds nothing, as in `firstOrNull { ... } ?: "none"`, and the part of a map's entry it gives,
+	 * `key` or `value`, when it finds an entry, as in `maxByOrNull { it.value }?.key`.
 	 */
 	class Chain(
-		val source: KtExpression,
+		val source: Receiver,
 		val stages: List<Operation>,
 		val terminal: Operation,
 		val default: KtExpression?,
@@ -108,12 +116,16 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			return null
 		}
 		val stages = mutableListOf<Operation>()
-		var source = KtPsiUtil.safeDeparenthesize(terminal.expression.receiverExpression)
+		var first = terminal
 		while (true) {
-			val stage = operation(source)?.takeIf { it.name in STAGES } ?: break
+			val receiver = first.receiver?.let(KtPsiUtil::safeDeparenthesize) ?: break
+			val stage = operation(receiver)?.takeIf { it.name in STAGES } ?: break
 			stages.add(0, stage)
-			source = KtPsiUtil.safeDeparenthesize(stage.expression.receiverExpression)
+			first = stage
 		}
+		// The collection the first call is made on: written before its dot, or the receiver it is made on unnamed
+		val source = first.receiver?.let { Receiver.Written(KtPsiUtil.safeDeparenthesize(it)) }
+			?: body.unnamedReceiver(first.call) ?: return null
 		val chain = Chain(source, stages, terminal, default, part)
 		return if (stages.isEmpty() && isDirect(chain)) null else chain
 	}
@@ -130,23 +142,26 @@ internal class CollectionLoops(private val body: BodyLowering) {
 	/** The statements that run a chain and hand its result to the destination. */
 	fun lower(chain: Chain, destination: Destination): List<Statement> = Fusion(chain, destination).lower()
 
-	/** `receiver.function(...)` for one of Kotlin's functions on collections; null for any other expression. */
+	/**
+	 * `receiver.function(...)`, or `function(...)` on a receiver left unnamed, for one of Kotlin's functions on
+	 * collections; null for any other expression.
+	 */
 	private fun operation(expression: KtExpression?): Operation? = with(unit.session) {
-		val qualified = expression as? KtDotQualifiedExpression ?: return null
-		val call = qualified.selectorExpression as? KtCallExpression ?: return null
+		val qualified = expression as? KtDotQualifiedExpression
+		val call = (qualified?.selectorExpression ?: expression) as? KtCallExpression ?: return null
 		val resolved = call.resolveToCall()?.successfulFunctionCallOrNull() ?: return null
 		val id = resolved.symbol.callableId ?: return null
 		if (id.packageName.asString() != "kotlin.collections" || id.classId != null) {
 			return null
 		}
-		Operation(id.callableName.asString(), call, body.libraryArguments(resolved, call), qualified)
+		Operation(id.callableName.asString(), call, body.libraryArguments(resolved, call), qualified ?: call)
 	}
 
 	/** Whether a call on a list, set or map, with no steps before it, has a form of its own without a loop. */
 	private fun isDirect(chain: Chain): Boolean {
 		val terminal = chain.terminal
 		val kind = body.library.kind(type(chain.source))
-		if (kind == null || body.library.mapView(chain.source) != null) {
+		if (kind == null || written(chain.source)?.let(body.library::mapView) != null) {
 			return false
 		}
 		val takesFunction = argument(terminal) != null
@@ -177,6 +192,14 @@ internal class CollectionLoops(private val body: BodyLowering) {
 	}
 
 	private fun type(expression: KtExpression): KaType? = with(unit.session) { expression.expressionType }
+
+	private fun type(receiver: Receiver): KaType? = receiver.type(unit.session)
+
+	/** A receiver's expression, or null for one left unnamed. */
+	private fun written(receiver: Receiver): KtExpression? = (receiver as? Receiver.Written)?.expression
+
+	/** Whether reading a receiver again gives the same value, as one left unnamed, a name, does. */
+	private fun isStable(receiver: Receiver): Boolean = written(receiver)?.let(body::isStable) ?: true
 
 	/** The loop over a source, made once the element's name is known, and the name to give it otherwise. */
 	private class Source(val defaultName: String, val loop: (String, Block) -> Statement)
@@ -224,7 +247,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		private var entries: MapEntries? = null
 
 		fun lower(): List<Statement> {
-			if (chain.stages.isEmpty() && chain.terminal.name in SORTS && body.isStable(chain.source) &&
+			if (chain.stages.isEmpty() && chain.terminal.name in SORTS && isStable(chain.source) &&
 				body.library.kind(type(chain.source)) == LibraryCalls.Kind.SEQUENCE) {
 				return sortedCopy()
 			}
@@ -266,15 +289,16 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		// ---- The source
 
 		/** A list's or a set's elements, a range's integers, or a map's keys or values, which walk the map itself. */
-		private fun source(source: KtExpression): Source {
-			if (operation(source)?.name in SORTS) {
-				throw Rejection(source, "A chain's loop sees one element at a time, so it sorts only what it collects;"
+		private fun source(source: Receiver): Source {
+			val written = written(source)
+			if (written != null && operation(written)?.name in SORTS) {
+				throw Rejection(written, "A chain's loop sees one element at a time, so it sorts only what it collects;"
 					+ " sort at the end of the chain, or sort the list afterwards.")
 			}
-			CountingRange.of(source)?.let { range ->
+			written?.let { CountingRange.of(it) }?.let { range ->
 				return Source("i") { item, loop -> body.loops.numericFor(item, range) { loop } }
 			}
-			val view = body.library.mapView(source)
+			val view = written?.let(body.library::mapView)
 			if (view != null) {
 				val map = Expression.call(Expression.name("pairs"), body.expression(view.map))
 				return when (view.selector) {
@@ -295,21 +319,22 @@ internal class CollectionLoops(private val body: BodyLowering) {
 					Source("item") { item, loop -> Statement.GenericFor(listOf(item), listOf(set), loop) }
 				}
 				LibraryCalls.Kind.MAP -> throw IllegalStateException("a map, whose entries entrySource walks")
-				null -> throw Rejection(source, "$SUPPORTED; write a for loop for this one.")
+				null -> throw Rejection(written ?: (chain.stages.firstOrNull() ?: chain.terminal).call,
+					"$SUPPORTED; write a for loop for this one.")
 			}
 		}
 
 		/** The map whose entries a chain walks: a map itself, or a map's `entries`; null for any other source. */
-		private fun entryMap(source: KtExpression): KtExpression? {
-			val view = body.library.mapView(source)
+		private fun entryMap(source: Receiver): Receiver? {
+			val view = written(source)?.let(body.library::mapView)
 			if (view != null) {
-				return if (view.selector == "entries") view.map else null
+				return if (view.selector == "entries") Receiver.Written(view.map) else null
 			}
 			return if (body.library.kind(type(source)) == LibraryCalls.Kind.MAP) source else null
 		}
 
 		/** A map's entries, which the loop walks as their keys and values: `for key, value in pairs(map) do`. */
-		private fun entrySource(map: KtExpression): Source {
+		private fun entrySource(map: Receiver): Source {
 			val walk = MapEntries(body, this, map, entryLambdas())
 			entries = walk
 			element = walk.key
@@ -613,7 +638,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val value = argument ?: current()
 			Inlining.value(lowered, listOf(value))?.let { return it }
 			if (lowered is Expression.FunctionExpression) {
-				val local = fresh("action", function)
+				val local = taken("action", function)
 				before += Statement.Local(listOf(local), listOf(lowered))
 				return Expression.Call(Expression.name(local), listOf(value))
 			}
@@ -974,10 +999,11 @@ internal class CollectionLoops(private val body: BodyLowering) {
 
 		/** Whether the elements joined are strings or numbers, which a range's integers are. */
 		private fun joinable(terminal: Operation): Boolean = with(unit.session) {
-			if (chain.stages.isEmpty() && CountingRange.of(chain.source) != null) {
+			if (chain.stages.isEmpty() && written(chain.source)?.let { CountingRange.of(it) } != null) {
 				return true
 			}
-			val receiver = type(terminal.expression.receiverExpression) ?: return false
+			val written = terminal.receiver
+			val receiver = (if (written != null) type(written) else type(chain.source)) ?: return false
 			val element = types.elementClass(receiver) ?: types.typeArgumentOf(receiver, 0)?.expandedSymbol?.classId
 			element in LibraryCalls.JOINABLE
 		}

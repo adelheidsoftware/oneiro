@@ -125,4 +125,56 @@ function Texts.loud(text)
     return text and Texts.shout(text)
 end
 
+-- The letters of the text after the first.
+---@param self string
+---@return integer
+function Texts.rest(self)
+    return #self - 1
+end
+
+-- The numbers added up.
+---@param self integer[]
+---@return integer
+function Texts.added(self)
+    local sum = 0
+    for _, item in ipairs(self) do
+        sum = sum + item
+    end
+    return sum
+end
+
+-- The herbs among the names, in capitals.
+---@param self string[]
+---@return string[]
+function Texts.loudHerbs(self)
+    local list = {}
+    for _, it in ipairs(self) do
+        if isHerb(it) then
+            list[#list + 1] = it:upper()
+        end
+    end
+    return list
+end
+
+-- The letters of all the names.
+---@param self string[]
+---@return integer
+function Texts.totalLength(self)
+    local letters = 0
+    for _, it in ipairs(self) do
+        letters = letters + #it
+    end
+    return letters
+end
+
+-- Adds the name, after "start" when the list is empty.
+---@param self string[]
+---@param name string
+function Texts.record(self, name)
+    if #self == 0 then
+        self[#self + 1] = "start"
+    end
+    self[#self + 1] = name
+end
+
 return Texts
