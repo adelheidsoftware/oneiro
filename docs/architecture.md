@@ -14,8 +14,9 @@ How Oneiro is put together, for people who work on it. What Oneiro accepts and t
   which a module defines only when it uses them, each with a comment.
 - **Idiomatic source first.** Where a faithful, readable translation exists, the ordinary Java form is accepted. Only
   genuine gaps between Java and Lua are rejected, with an error that says why and what to write instead.
-- **Nothing hidden.** Oneiro downloads nothing the build does not name, never adds a permission to the manifest, and
-  reports every comment it cannot place instead of dropping it.
+- **Nothing hidden.** Oneiro downloads nothing the build does not name, apart from the libraries the Kotlin front end
+  runs on, from the two JetBrains repositories that [plugin-model.md](plugin-model.md) names; it never adds a
+  permission to the manifest, and reports every comment it cannot place instead of dropping it.
 
 ## From source to Lua
 
@@ -53,7 +54,7 @@ plugin's Kotlin ──► kotlinc ───────────────�
 | `oneiro-plugin-model` | Yes | The plugin apart from its code: the manifest and the permissions it may request, the checks of the folder that ships, the typed `Resources` and `Urls` classes, the compiler's settings, and the line maps and console errors behind `explainError`. |
 | `oneiro-lowering` | Yes | What lowering is apart from the source language, shared by both front ends: the compile result and its diagnostics, Lua modules, the plugin facts the code is checked against, the layout of a module's members, the Lua helpers, the settings functions and the plugin lifecycle, module paths, local names, comment text, doc annotations, index arithmetic, the review warnings' wording, what the client has nothing for (a clock and threads), the parts of the client's API the compiler writes on its own, the Lua of `LuaString`, the opening of a reference's small function where it is called, the folding of a table's field assignments into its constructor, and the writing of the Lua and its line map. |
 | `oneiro-frontend-java` | Yes | The Java front end: javac's trees to the Lua tree, and the javac plugin. |
-| `oneiro-frontend-kotlin` | Yes | The Kotlin front end, in Kotlin: the Kotlin Analysis API's trees to the Lua tree, and the entry the Gradle plugin's worker calls. Its jar bundles the Analysis API and the IntelliJ platform modules it needs, which JetBrains publishes only to its own repositories. In progress. |
+| `oneiro-frontend-kotlin` | Yes | The Kotlin front end, in Kotlin: the Kotlin Analysis API's trees to the Lua tree, and the entry the Gradle plugin's worker calls. It depends on the Analysis API and the IntelliJ platform modules it runs on, which JetBrains publishes only to its own repositories; the Gradle plugin adds those to a Kotlin plugin's build. |
 | `oneiro-gradle-plugin` | Yes | The Gradle plugin `org.adelheid.oneiro`: the `oneiro { }` block and the tasks. |
 | `conformance` | No | The conformance suite: Java inputs and their Kotlin twins, with hand-written expected Lua. |
 

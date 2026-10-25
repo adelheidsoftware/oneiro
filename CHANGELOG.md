@@ -23,7 +23,10 @@ All notable changes to Oneiro are listed here. The format follows
   chain of collection functions as one loop, `require` and `check`, fun interfaces and object expressions, and maps
   and sets that keep the order Kotlin promises. The RS3 bindings generated for such a plugin have a `Subscribe` for
   each callback a hook takes, so a hook's callback is a trailing lambda, `label.Subscribe(ui.Hook.ONCLICK) { ... }`.
-  Its jar bundles the Kotlin Analysis API, so a plugin's build needs only Maven Central.
+  It runs on the Kotlin Analysis API, which JetBrains publishes only to its own repositories: the Gradle plugin adds
+  them to a build that declares its repositories in `build.gradle.kts`, for those libraries alone, and
+  [plugin-model.md](docs/plugin-model.md#where-the-kotlin-front-ends-libraries-come-from) shows what to add to
+  `settings.gradle.kts` where a build declares them there.
 - Kotlin's own constructs: extension functions, which take their receiver first as `self`; the scope functions `let`,
   `also`, `apply`, `run` and `with`, whose code runs where they are called, so that
   `ui.Text(parent).apply { SetPos(10, 20) }` configures the new component in place; an `if` or `when` with blocks

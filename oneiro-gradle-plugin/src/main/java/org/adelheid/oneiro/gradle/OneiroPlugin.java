@@ -11,6 +11,8 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
+import org.gradle.api.artifacts.dsl.RepositoryHandler;
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository;
 import org.gradle.api.file.Directory;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.ProjectLayout;
@@ -48,6 +50,10 @@ import org.gradle.jvm.toolchain.JavaToolchainService;
 public final class OneiroPlugin implements Plugin<Project> {
 
 	private static final String GROUP = "oneiro";
+	/** The JetBrains repositories of the Kotlin Analysis API and the IntelliJ platform, which Maven Central lacks. */
+	private static final String INTELLIJ_DEPENDENCIES = "https://cache-redirector.jetbrains.com/intellij-dependencies";
+	private static final String INTELLIJ_RELEASES =
+			"https://cache-redirector.jetbrains.com/intellij-repository/releases";
 	private static final String WINDOWS_DEV_PLUGINS = "C:\\ProgramData\\Jagex\\RuneScape-BETA\\dev_plugins";
 
 	@Override
@@ -81,7 +87,16 @@ public final class OneiroPlugin implements Plugin<Project> {
 		dependencies.add(kotlinTool.getName(), "org.adelheid:oneiro-frontend-kotlin:" + version);
 		// A plugin is written in Kotlin when the Kotlin JVM plugin is applied, before or after this one
 		Property<Boolean> kotlin = project.getObjects().property(Boolean.class).convention(false);
-		project.getPluginManager().withPlugin("org.jetbrains.kotlin.jvm", applied -> kotlin.set(true));
+		project.getPluginManager().withPlugin("org.jetbrains.kotlin.jvm", applied -> {
+			kotlin.set(true);
+			// Only to a project that declares repositories of its own: one that declared none would then ignore those
+			// its settings declare, where the JetBrains repositories go instead
+			project.afterEvaluate(evaluated -> {
+				if (!evaluated.getRepositories().isEmpty()) {
+					jetBrainsRepositories(evaluated.getRepositories());
+				}
+			});
+		});
 		dependencies.add(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME, "org.adelheid:oneiro-api:" + version);
 		dependencies.add(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME,
 				"org.jspecify:jspecify:" + versions.getProperty("jspecify"));
@@ -291,6 +306,29 @@ public final class OneiroPlugin implements Plugin<Project> {
 		return layout.getProjectDirectory().dir("src/" + sourceSet + "/java").getAsFileTree()
 				.plus(layout.getProjectDirectory().dir("src/" + sourceSet + "/kotlin").getAsFileTree())
 				.matching(pattern -> pattern.include("**/*." + extension));
+	}
+
+	/**
+	 * Adds the JetBrains repositories that host the Kotlin Analysis API and the IntelliJ platform modules it runs on,
+	 * which the Kotlin front end needs and Maven Central does not have. Each is asked only for those artifacts, and
+	 * those artifacts only from it, so every other dependency of the build resolves as before.
+	 */
+	private static void jetBrainsRepositories(RepositoryHandler repositories) {
+		MavenArtifactRepository dependencies = repositories.maven(repository -> {
+			repository.setName("JetBrainsIntelliJDependencies");
+			repository.setUrl(INTELLIJ_DEPENDENCIES);
+		});
+		repositories.exclusiveContent(exclusive -> exclusive.forRepositories(dependencies).filter(filter -> {
+			filter.includeModuleByRegex("org\\.jetbrains\\.kotlin", ".*-for-ide");
+			filter.includeGroup("com.intellij.platform");
+			filter.includeGroupByRegex("org\\.jetbrains\\.intellij\\.deps.*");
+		}));
+		MavenArtifactRepository releases = repositories.maven(repository -> {
+			repository.setName("JetBrainsIntelliJReleases");
+			repository.setUrl(INTELLIJ_RELEASES);
+		});
+		repositories.exclusiveContent(exclusive -> exclusive.forRepositories(releases)
+				.filter(filter -> filter.includeGroupByRegex("com\\.jetbrains\\.intellij\\..*")));
 	}
 
 	/** The versions of Oneiro and JSpecify this plugin was built with. */

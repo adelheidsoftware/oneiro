@@ -208,7 +208,11 @@ interface CoinSettings {
 }
 ```
 
-A plugin is written in one language; the build fails when it has both Java and Kotlin sources.
+A plugin is written in one language; the build fails when it has both Java and Kotlin sources. A plugin written in
+Kotlin also needs the Kotlin Analysis API, which JetBrains publishes only to its own repositories. In a build like this
+one, which declares its repositories in `build.gradle.kts`, Oneiro's Gradle plugin adds those repositories itself; a
+build that declares its repositories in `settings.gradle.kts` adds them there, as
+[the plugin model](docs/plugin-model.md#where-the-kotlin-front-ends-libraries-come-from) shows.
 
 Then build the plugin and link it into the client:
 

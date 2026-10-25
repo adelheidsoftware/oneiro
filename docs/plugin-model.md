@@ -147,6 +147,42 @@ reports an error, `e: file:///.../HerbPlugin.kt:12:5 message`, which IDEs link t
 language: one with both Java and Kotlin sources fails to build. [kotlin-subset.md](kotlin-subset.md) lists the Kotlin
 it accepts, as [java-subset.md](java-subset.md) lists the Java.
 
+### Where the Kotlin front end's libraries come from
+
+The Kotlin front end runs on the Kotlin Analysis API and the IntelliJ platform modules it needs, which JetBrains
+publishes only to its own repositories, not to Maven Central. A plugin's build resolves them from there:
+
+- **A build that declares its repositories in `build.gradle.kts`**, as the README's does, needs nothing more. When the
+  Kotlin JVM plugin is applied, Oneiro's Gradle plugin adds the two JetBrains repositories to it, each asked only for
+  those artifacts, and those artifacts only from it, so every other dependency resolves as before.
+- **A build that declares its repositories in `settings.gradle.kts`**, under `dependencyResolutionManagement`, adds the
+  two there, as Gradle then reads no others:
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        // The Kotlin Analysis API and the IntelliJ platform, which Oneiro's Kotlin front end runs on
+        exclusiveContent {
+            forRepository { maven("https://cache-redirector.jetbrains.com/intellij-dependencies") }
+            filter {
+                includeModuleByRegex("org\\.jetbrains\\.kotlin", ".*-for-ide")
+                includeGroup("com.intellij.platform")
+                includeGroupByRegex("org\\.jetbrains\\.intellij\\.deps.*")
+            }
+        }
+        exclusiveContent {
+            forRepository { maven("https://cache-redirector.jetbrains.com/intellij-repository/releases") }
+            filter { includeGroupByRegex("com\\.jetbrains\\.intellij\\..*") }
+        }
+    }
+}
+```
+
+Without them, the build stops before `oneiroKotlin` with `Could not resolve all dependencies for configuration
+':oneiroKotlinTool'`, naming an artifact it could not find, such as `com.jetbrains.intellij.platform:core-impl`. The
+libraries come to about 100 MB, which Gradle downloads once and keeps in its cache.
+
 ## The plugin class, events and settings
 
 The one class that extends `Plugin` becomes `main.lua`. Its fields and methods are locals of `main.lua`; the body of
