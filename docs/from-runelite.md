@@ -413,10 +413,10 @@ val square = ShapeData().apply {
     lines = listOf(0, 1, 1, 2, 2, 3, 3, 0)
 }
 ShapeData.Register("herbs.square", square)
-ShapeList.CreateEntity("herbs.patch")?.let { marker ->
-    marker.SetShapeDataName("herbs.square")
-    marker.coordGrid = tile
-    marker.colour = 0x40FF40FFL
+ShapeList.CreateEntity("herbs.patch")?.apply {
+    SetShapeDataName("herbs.square")
+    coordGrid = tile
+    colour = 0x40FF40FFL
 }
 ```
 

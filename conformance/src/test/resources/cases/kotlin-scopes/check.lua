@@ -17,6 +17,13 @@ end
 
 local Panels = require("src/panels")
 
+-- Before the first tally, there is none to work on
+Panels.addToKept(5)
+Panels.reportKept()
+assert(#logged == 0 and Panels.logKept() == nil and #logged == 0, "?.apply and ?.also on nil run nothing")
+Panels.hideIfAny(nil)
+Panels.cornerIfAny(nil)
+
 local parent = {}
 local label = Panels.label(parent, "Guam")
 assert(label.parent == parent and label.content == "Guam" and label.x == 10 and label.y == 20, "apply returned")
@@ -44,6 +51,16 @@ assert(logged[#logged] == "total 5", "apply on a new object, whose value goes no
 assert(Panels.Panel.new(parent):text() == "Ready", "apply in a class's property")
 local first = Panels.sharedTally()
 assert(first.total == 10 and Panels.sharedTally() == first, "apply assigned to a variable, and an object's private var")
+Panels.addToKept(5)
+assert(first.total == 15 and logged[#logged] == "kept 15", "?.apply as a statement, on a call")
+local count = #logged
+assert(Panels.logKept() == first and #logged == count + 1 and logged[#logged] == "kept 15", "?.apply as a local's value")
+Panels.reportKept()
+assert(logged[#logged] == "total 15", "?.also as a statement")
+local corner = Panels.label(parent, "Corner")
+Panels.hideIfAny(corner)
+Panels.cornerIfAny(corner)
+assert(corner.hidden and corner.x == 0 and corner.y == 0, "?.apply and ?.run on a parameter")
 
 local pair = Panels.pair("guam", "ash")
 assert(#pair == 2 and pair[1] == "guam" and pair[2] == "ash", "apply with the library's members on its receiver")

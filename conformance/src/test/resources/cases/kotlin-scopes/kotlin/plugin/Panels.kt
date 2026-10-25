@@ -39,6 +39,40 @@ object Panels {
 		return tally
 	}
 
+	/** The tally kept between calls, or null before the first. */
+	fun keptTally(): Tally? = shared
+
+	/** Adds the amount to the kept tally, when there is one, and logs its total. */
+	fun addToKept(amount: Int) {
+		keptTally()?.apply {
+			add(amount)
+			log("kept $total")
+		}
+	}
+
+	/** Logs the kept tally's total, when there is one, and gives the tally. */
+	fun logKept(): Tally? {
+		val tally = keptTally()?.apply { log("kept $total") }
+		return tally
+	}
+
+	/** Logs the kept tally's total, when there is one. */
+	fun reportKept() {
+		keptTally()?.also { kept -> log("total ${kept.total}") }
+	}
+
+	/** Hides the label, when there is one. */
+	fun hideIfAny(label: ui.Text?) {
+		label?.apply {
+			hidden = true
+		}
+	}
+
+	/** Moves the label to the corner, when there is one. */
+	fun cornerIfAny(label: ui.Text?) {
+		label?.run { SetPos(0, 0) }
+	}
+
 	/** A label under the parent, placed and filled in. */
 	fun label(parent: ui.ComponentCollection, words: String): ui.Text {
 		return ui.Text(parent).apply {

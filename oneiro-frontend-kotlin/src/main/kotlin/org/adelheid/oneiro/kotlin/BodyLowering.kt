@@ -752,27 +752,13 @@ internal class BodyLowering(
 	}
 
 	/**
-	 * `receiver?.let { x -> ... }` as a statement: `local x = receiver`, then the lambda's code when it is not nil;
-	 * `receiver?.member(...)` runs the call when the receiver, a name or a property read, is not nil.
+	 * `receiver?.let { x -> ... }` and the other scope functions as a statement: the lambda's code when the receiver is
+	 * not nil, `local x = receiver` first for `let`; `receiver?.member(...)` runs the call when the receiver, a name or
+	 * a property read, is not nil.
 	 */
 	private fun safeStatement(safe: KtSafeQualifiedExpression): List<Statement> {
+		scopes.safeScope(safe)?.let { return scopes.safeEffect(it) }
 		val receiver = safe.receiverExpression
-		val call = safe.selectorExpression as? KtCallExpression
-		val lambda = call?.lambdaArguments?.singleOrNull()?.getLambdaExpression()
-		val function = with(unit.session) { call?.resolveToCall()?.successfulFunctionCallOrNull()?.symbol }
-		val isLet = function != null && isLibrary(function) && function.callableId?.callableName?.asString() == "let"
-		if (isLet && lambda != null) {
-			val parameter = lambda.functionLiteral.valueParameters.singleOrNull()
-			if (parameter?.destructuringDeclaration != null) {
-				throw Rejection.notYet(parameter, "A lambda parameter that destructures")
-			}
-			val name = unit.localName(parameter ?: lambda.functionLiteral, parameter?.name ?: "it")
-			val value = Expression.name(name)
-			val code = lambda.bodyExpression ?: throw Rejection(lambda, EMPTY)
-			val present = Expression.binary(value, BinaryOperator.NOT_EQUAL, Expression.Nil())
-			return listOf(Statement.Local(listOf(name), listOf(expression(receiver))), Statement.ifThen(present,
-				block(code)))
-		}
 		if (!isStable(receiver)) {
 			throw Rejection(safe, "Lua reads this value twice to test it for nil; store it in a local first.")
 		}

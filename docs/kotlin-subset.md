@@ -119,7 +119,9 @@ conformance case, which must give the same Lua, and the rest cases of Kotlin's o
 | `return try { measured(text) } catch (e: Exception) { fallback }`, `val x = try ...` | Each block returns its value, or assigns it | |
 | `return Reader(text).use { reader -> reader.first() }` | `local reader = Reader.new(text)`, the lambda's code under `pcall`, `reader:close()`, then the error raised again or the value returned | The resource is a class of the plugin's, which declares `close()`. |
 | `val failure = IllegalStateException("broken")` | `local failure = "broken"` | An exception kept as a value is its message, the value `error` raises. |
-| `firstWith(names, "C")?.let { name -> ... }` | `local name = Targets.firstWith(names, "C")` and `if name ~= nil then ... end` | |
+| `firstWith(names, "C")?.let { name -> ... }`, and `?.also` | `local name = Targets.firstWith(names, "C")` and `if name ~= nil then ... end` | As a statement. The local takes the lambda's parameter's name. |
+| `keptTally()?.apply { add(amount) }`, and `?.run` | `local tally = Panels.keptTally()` and `if tally ~= nil then tally:add(amount) end` | As a statement. A receiver that is a parameter, a `val` or `this` keeps its own name, `if label ~= nil then ... end`; any other is read once, into a local named after its type. |
+| `val tally = keptTally()?.apply { ... }`, and `?.also` | `local tally = Panels.keptTally()`, then `if tally ~= nil then ... end` | The local takes the receiver, nil or not, as Kotlin's does. |
 | `target?.refresh()` | `if target ~= nil then target:refresh() end` | The receiver is a name or a property read. |
 | A comment on its own line | The same comment above the statement | |
 

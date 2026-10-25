@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.kotlin
 
 import com.intellij.psi.util.PsiTreeUtil
+import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.Statement
@@ -18,6 +19,7 @@ import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPsiUtil
 import org.jetbrains.kotlin.psi.KtReturnExpression
+import org.jetbrains.kotlin.psi.KtSafeQualifiedExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
 
 /**
@@ -42,6 +44,19 @@ import org.jetbrains.kotlin.psi.KtThisExpression
  * local takes it, the one the call's value goes to where there is one. The call's value is the lambda's last
  * expression, or for `apply` and `also`, the receiver. Code that declares locals of its own runs in a `do` block, so
  * that they end with it.
+ *
+ * On `receiver?.`, the lambda's code runs when the receiver is not nil:
+ *
+ * ```kotlin
+ * ShapeList.CreateEntity("herbs.patch")?.apply { coordGrid = tile }
+ * ```
+ *
+ * ```lua
+ * local shapeEntity = ShapeList.CreateEntity("herbs.patch")
+ * if shapeEntity ~= nil then
+ *     shapeEntity.coordGrid = tile
+ * end
+ * ```
  */
 internal class ScopeFunctions(private val body: BodyLowering) {
 
@@ -92,6 +107,10 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 		Scope(name, scoped, lambda, whole)
 	}
 
+	/** The scope function a call on `receiver?.` is, as [scope] finds one on `receiver.`; null for any other. */
+	fun safeScope(safe: KtSafeQualifiedExpression): Scope? =
+		(safe.selectorExpression as? KtCallExpression)?.let { scope(it, safe.receiverExpression, safe) }
+
 	/**
 	 * A scope function as a statement of its own, or as a local's value, as block entries that keep the comments in
 	 * its lambda; null for any other statement.
@@ -100,11 +119,42 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 	 */
 	fun entries(statement: KtExpression, endsFunction: Boolean = false): List<Block.Entry>? {
 		if (statement is KtProperty) {
-			val scope = statement.initializer?.let(::scope) ?: return null
+			val initializer = statement.initializer
+			val safe = (initializer as? KtSafeQualifiedExpression)?.let(::safeScope)
+			if (safe != null && !safe.givesLambdaValue) {
+				return safeLocal(unit.localName(statement, statement.name!!), safe).map(Block.Entry::of)
+			}
+			val scope = initializer?.let(::scope) ?: return null
 			return local(unit.localName(statement, statement.name!!), scope)
 		}
 		return scope(statement)?.let { effect(it, endsFunction) }
 	}
+
+	/**
+	 * A scope function on `receiver?.` whose value goes nowhere: the lambda's code when the receiver is not nil. A
+	 * receiver the code does not name is read once, into a local; `let`'s and `also`'s always goes into a local of
+	 * their parameter's name, as a person names the value they test.
+	 */
+	fun safeEffect(scope: Scope): List<Statement> {
+		val receiverName = if (scope.passesReceiver) null else stableName(scope.receiver)
+		val name = receiverName ?: holderName(scope)
+		val holder = if (receiverName == null) listOf(local(name, body.expression(scope.receiver))) else listOf()
+		bind(scope, name)
+		return holder + Statement.ifThen(present(name), code(scope, null))
+	}
+
+	/**
+	 * `val x = receiver?.apply { ... }` and `also`: the local takes the receiver, nil or not, and the lambda's code
+	 * works on it when it is not nil.
+	 */
+	private fun safeLocal(name: String, scope: Scope): List<Statement> {
+		val holder = local(name, body.expression(scope.receiver))
+		bind(scope, name)
+		return listOf(holder, Statement.ifThen(present(name), code(scope, null)))
+	}
+
+	private fun present(name: String): Expression =
+		Expression.binary(Expression.name(name), BinaryOperator.NOT_EQUAL, Expression.Nil())
 
 	/**
 	 * A scope function whose value goes to the sink, a return or an assignment, as statements; for one whose value

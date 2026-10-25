@@ -58,6 +58,56 @@ function Panels.sharedTally()
     return tally
 end
 
+-- The tally kept between calls, or null before the first.
+---@return Tally?
+function Panels.keptTally()
+    return shared
+end
+
+-- Adds the amount to the kept tally, when there is one, and logs its total.
+---@param amount integer
+function Panels.addToKept(amount)
+    local tally = Panels.keptTally()
+    if tally ~= nil then
+        tally:add(amount)
+        log(formatStr("kept {}", tally.total))
+    end
+end
+
+-- Logs the kept tally's total, when there is one, and gives the tally.
+---@return Tally?
+function Panels.logKept()
+    local tally = Panels.keptTally()
+    if tally ~= nil then
+        log(formatStr("kept {}", tally.total))
+    end
+    return tally
+end
+
+-- Logs the kept tally's total, when there is one.
+function Panels.reportKept()
+    local kept = Panels.keptTally()
+    if kept ~= nil then
+        log(formatStr("total {}", kept.total))
+    end
+end
+
+-- Hides the label, when there is one.
+---@param label ui.Text?
+function Panels.hideIfAny(label)
+    if label ~= nil then
+        label.hidden = true
+    end
+end
+
+-- Moves the label to the corner, when there is one.
+---@param label ui.Text?
+function Panels.cornerIfAny(label)
+    if label ~= nil then
+        label:SetPos(0, 0)
+    end
+end
+
 -- A label under the parent, placed and filled in.
 ---@param parent ui.ComponentCollection
 ---@param words string
