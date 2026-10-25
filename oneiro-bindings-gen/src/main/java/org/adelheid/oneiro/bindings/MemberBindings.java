@@ -2,6 +2,7 @@ package org.adelheid.oneiro.bindings;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -84,6 +85,17 @@ final class MemberBindings {
 	 */
 	void field(StringBuilder out, ApiModel.ClassDef owner, ApiModel.FieldDef field, boolean isStatic,
 			String indent, Set<String> signatures) {
+		TypeMapping.Scope previous = typeMapping.scope(
+				new TypeMapping.Scope(isStatic ? Set.of() : Set.copyOf(owner.typeParams), owner));
+		try {
+			writeField(out, owner, field, isStatic, indent, signatures);
+		} finally {
+			typeMapping.scope(previous);
+		}
+	}
+
+	private void writeField(StringBuilder out, ApiModel.ClassDef owner, ApiModel.FieldDef field, boolean isStatic,
+			String indent, Set<String> signatures) {
 		String target = owner.name + "." + field.name();
 		TypeRef type = field.type();
 		if (field.name().startsWith("[")) {
@@ -101,11 +113,9 @@ final class MemberBindings {
 					.append(typeMapping.javaType(type).text()).append(" get(").append(key.text()).append(" key);\n");
 			return;
 		}
-		if (isStatic && type.withoutNil() instanceof TypeRef.Function function) {
-			// A function in a global table's field is a function of the table: utils.CalcTextWidth(fontID, text)
-			ApiModel.FunctionDef asFunction = ApiModel.FunctionDef.of(owner.name, field.name(), ApiModel.CallStyle.DOT,
-					function, field.description(), "");
-			method(out, owner, asFunction, Shape.NAMESPACE, indent, signatures, Map.of());
+		ApiModel.FunctionDef asFunction = fieldFunction(owner, field, isStatic);
+		if (asFunction != null) {
+			method(out, owner, asFunction, isStatic ? Shape.NAMESPACE : Shape.TYPE, indent, signatures, Map.of());
 			return;
 		}
 		JType javaType = nullability(target, type, typeMapping.javaType(type));
@@ -119,6 +129,9 @@ final class MemberBindings {
 				+ (copied ? ", a copy: change a local copy and assign it back" : ""));
 		JavaText.javadoc(out, indent, doc);
 		bindings.memberAnnotations(out, target, indent);
+		if (field.deprecated()) {
+			out.append(indent).append("@Deprecated\n");
+		}
 		if (copied) {
 			out.append(indent).append("@LuaCopy\n");
 		}
@@ -134,10 +147,30 @@ final class MemberBindings {
 				.append(isStatic && readOnly ? " = LuaOnly.value()" : "").append(";\n");
 	}
 
+	/**
+	 * The function a field of a function type stands for, or null for any other field. A function in a table's field is
+	 * a function of the table, {@code utils.CalcTextWidth(fontID, text)}; one that takes self first is a method,
+	 * called with a colon, as a highlight's {@code activate} is, on the table or on its objects.
+	 */
+	ApiModel.@Nullable FunctionDef fieldFunction(ApiModel.ClassDef owner, ApiModel.FieldDef field, boolean isStatic) {
+		if (!(field.type().withoutNil() instanceof TypeRef.Function function)) {
+			return null;
+		}
+		boolean method = !function.params().isEmpty() && function.params().getFirst().name().equals("self");
+		if (!isStatic && !method) {
+			return null;
+		}
+		TypeRef.Function called = method
+				? new TypeRef.Function(function.params().subList(1, function.params().size()), function.returns())
+				: function;
+		return ApiModel.FunctionDef.of(owner.name, field.name(),
+				method ? ApiModel.CallStyle.COLON : ApiModel.CallStyle.DOT, called, field.description(), "");
+	}
+
 	/** The receiver a member's Lua form shows: the table for a static member, a name for the object otherwise. */
-	static String receiver(ApiModel.ClassDef owner, boolean isStatic) {
+	String receiver(ApiModel.ClassDef owner, boolean isStatic) {
 		return isStatic
-				? JavaBindings.luaPath(owner.name)
+				? bindings.tablePath(owner)
 				: JavaText.lowerFirstWord(JavaText.simpleLuaName(owner.name));
 	}
 
@@ -180,7 +213,30 @@ final class MemberBindings {
 		}
 		boolean colon = function.style() == ApiModel.CallStyle.COLON;
 		boolean isStatic = shape == Shape.NAMESPACE || (shape == Shape.INSTANCE && !colon);
+		// An instance method names its class's type variables; a function's own ---@generic ones are the method's
+		Set<String> scope = new LinkedHashSet<>(isStatic ? List.of() : owner.typeParams);
+		List<String> own = function.typeParams().stream().filter(variable -> !scope.contains(variable)).toList();
+		scope.addAll(own);
+		TypeMapping.Scope previous = typeMapping.scope(new TypeMapping.Scope(scope, owner));
+		try {
+			writeMethod(out, owner, function, shape, indent, signatures, inherited, isStatic, own);
+		} finally {
+			typeMapping.scope(previous);
+		}
+	}
+
+	private void writeMethod(StringBuilder out, ApiModel.ClassDef owner, ApiModel.FunctionDef function, Shape shape,
+			String indent, Set<String> signatures, Map<String, Inherited> inherited, boolean isStatic,
+			List<String> typeParams) {
+		String target = owner.name + "." + function.name();
+		boolean colon = function.style() == ApiModel.CallStyle.COLON;
 		String javaName = javaMethodName(owner.name, function.name());
+		if (function.params().isEmpty() && function.returns().isEmpty() && function.overloads().isEmpty()
+				&& inherited.keySet().stream().anyMatch(key -> key.startsWith(javaName + "("))) {
+			// An override without annotations, as HighlightGroup:activate() is: the inherited method, typed as the
+			// parent class declares it, serves the calls, which Lua sends to this class's function
+			return;
+		}
 		List<Form> forms = new ArrayList<>();
 		for (Form untyped : forms(owner.name, function)) {
 			for (List<JParam> params : bindings.constantTables().hookTyped(untyped.params())) {
@@ -188,7 +244,10 @@ final class MemberBindings {
 			}
 		}
 		for (Form form : forms) {
-			boolean generic = form.params().stream().anyMatch(param -> param.type().text().equals("C"));
+			boolean generic = bindings.target.isRs3()
+					&& form.params().stream().anyMatch(param -> param.type().text().equals("C"));
+			List<String> variables = new ArrayList<>(generic ? List.of("C") : List.of());
+			variables.addAll(typeParams);
 			String key = javaName + "(" + erased(form.params()) + ")";
 			if (OBJECT_METHODS.contains(key)) {
 				warnings.add(target + " has the signature of Object's " + key + "; it is left out.");
@@ -206,6 +265,9 @@ final class MemberBindings {
 			if (generic) {
 				doc.add("@param <C> the callback the hook takes");
 			}
+			for (String variable : typeParams) {
+				doc.add("@param <" + variable + "> a type the call decides");
+			}
 			if (!function.returns().isEmpty() && !form.returned().text().equals("void")) {
 				String text = function.returns().getFirst().description();
 				if (!text.isEmpty()) {
@@ -214,6 +276,9 @@ final class MemberBindings {
 			}
 			JavaText.javadoc(out, indent, doc);
 			bindings.memberAnnotations(out, target, indent);
+			if (function.deprecated()) {
+				out.append(indent).append("@Deprecated\n");
+			}
 			if (shape == Shape.NAMESPACE && colon) {
 				out.append(indent).append("@LuaColon\n");
 			}
@@ -224,13 +289,20 @@ final class MemberBindings {
 				out.append(indent).append("@LuaName(").append(JavaText.javaString(function.name())).append(")\n");
 			}
 			out.append(indent).append("public ").append(isStatic ? "static " : "").append("native ")
-					.append(generic ? "<C> " : "").append(form.returned().text()).append(" ").append(javaName)
+					.append(variables.isEmpty() ? "" : "<" + String.join(", ", variables) + "> ")
+					.append(form.returned().text()).append(" ").append(javaName)
 					.append("(").append(parameterList(form.params(), function.varargs())).append(");\n");
 		}
-		List<String> names = overrides.arguments("returns", target);
+		List<String> names = returnNames(owner.name, function);
 		if (function.returns().size() > 1 && names != null && !names.isEmpty() && bindings.writtenRecords.add(target)) {
 			out.append("\n");
-			returnValues(out, owner, function, names, indent);
+			// The record is a class of its own, which no method's type variables reach
+			TypeMapping.Scope previous = typeMapping.scope(TypeMapping.Scope.NONE);
+			try {
+				returnValues(out, owner, function, names, indent);
+			} finally {
+				typeMapping.scope(previous);
+			}
 		}
 	}
 
@@ -258,8 +330,7 @@ final class MemberBindings {
 	private void returnValues(StringBuilder out, ApiModel.ClassDef owner, ApiModel.FunctionDef function,
 			List<String> names, String indent) {
 		List<String> doc = new ArrayList<>();
-		doc.add("The values {@code " + JavaBindings.luaPath(owner.name) + "." + function.name()
-				+ "} returns, in order.");
+		doc.add("The values {@code " + bindings.tablePath(owner) + "." + function.name() + "} returns, in order.");
 		List<String> components = new ArrayList<>();
 		for (int index = 0; index < function.returns().size() && index + 1 < names.size(); index++) {
 			ApiModel.ReturnDef returned = function.returns().get(index);
@@ -282,20 +353,38 @@ final class MemberBindings {
 			return JType.VOID;
 		}
 		if (returns.size() > 1) {
-			List<String> names = overrides.arguments("returns", target);
+			List<String> names = returnNames(owner, function);
 			if (names != null && !names.isEmpty()) {
 				Node node = bindings.byLuaName.get(owner);
 				String ownerReference = node == null ? JavaBindings.luaPath(owner) : node.reference();
 				return JType.reference(ownerReference + "." + names.getFirst());
 			}
-			warnings.add(target + " returns " + returns.size()
-					+ " values, but the overrides name none; only the first is bound.");
+			warnings.add(target + " returns " + returns.size() + " values, but neither its ---@return tags nor the"
+					+ " overrides name them; only the first is bound.");
 		}
 		TypeRef type = returns.getFirst().type();
 		if (type instanceof TypeRef.Named named && named.name().equals("nil")) {
 			return JType.VOID;
 		}
 		return nullability(target, type, typeMapping.javaType(type));
+	}
+
+	/**
+	 * The record and component names of a function's several return values: those of the overrides' {@code returns}
+	 * line, or, where every {@code ---@return} names its value, the function's name and {@code Result}, and those
+	 * names; null for a function with one value, or with several that are not all named.
+	 */
+	private @Nullable List<String> returnNames(String owner, ApiModel.FunctionDef function) {
+		List<String> stated = overrides.arguments("returns", owner + "." + function.name());
+		if (stated != null || function.returns().size() < 2
+				|| function.returns().stream().anyMatch(returned -> returned.name().isEmpty())) {
+			return stated;
+		}
+		String functionName = JavaText.javaIdentifier(function.name());
+		List<String> names = new ArrayList<>();
+		names.add(Character.toUpperCase(functionName.charAt(0)) + functionName.substring(1) + "Result");
+		function.returns().forEach(returned -> names.add(JavaText.javaIdentifier(returned.name())));
+		return names;
 	}
 
 	/** A function's Java name: the overrides' {@code java-name}, {@code create} for {@code new}, or its Lua name. */

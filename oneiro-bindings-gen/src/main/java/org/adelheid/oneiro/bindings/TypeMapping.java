@@ -1,24 +1,51 @@
 package org.adelheid.oneiro.bindings;
 
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.adelheid.oneiro.bindings.JavaBindings.JType;
 import org.adelheid.oneiro.bindings.JavaBindings.Node;
+import org.jspecify.annotations.Nullable;
 
 /**
- * Chooses the Java type of each LuaCATS type the stubs give, as {@link #javaType} lists: the stubs' classes and enums
- * become their bindings, and anything Java cannot type more closely becomes {@code Object}.
+ * Chooses the Java type of each LuaCATS type, as {@link #javaType} lists: the model's classes and enums become their
+ * bindings, a name the model does not declare becomes the class of the bindings that do, the RS3 API's first, and
+ * anything Java cannot type more closely becomes {@code Object}.
  */
 final class TypeMapping {
 
 	private final JavaBindings bindings;
 	private final ApiModel model;
+	/** What the member being written can name. */
+	private Scope scope = Scope.NONE;
+	/** Every type variable the model's classes and functions declare, which elsewhere is an Object. */
+	private @Nullable Set<String> declaredVariables;
+
+	/**
+	 * What a member can name: the type variables of its class, for an instance member, and its own, and the class that
+	 * {@code self} stands for.
+	 */
+	record Scope(Set<String> variables, ApiModel.@Nullable ClassDef owner) {
+
+		static final Scope NONE = new Scope(Set.of(), null);
+
+		Scope {
+			variables = Set.copyOf(variables);
+		}
+	}
 
 	TypeMapping(JavaBindings bindings) {
 		this.bindings = bindings;
 		this.model = bindings.model;
+	}
+
+	/** Sets what the member being written can name, and returns what it replaces, for the caller to put back. */
+	Scope scope(Scope next) {
+		Scope previous = scope;
+		scope = next;
+		return previous;
 	}
 
 	/**
@@ -39,7 +66,7 @@ final class TypeMapping {
 			case TypeRef.Named named -> named(named);
 			case TypeRef.ArrayOf array -> JType.reference("java.util.List<" + javaType(array.element()).boxed() + ">");
 			case TypeRef.Optional optional -> javaType(optional.inner()).nullable();
-			case TypeRef.Union _ -> JType.OBJECT;
+			case TypeRef.Union union -> literals(union);
 			case TypeRef.Function function -> functional(function);
 			case TypeRef.Table table -> table(table);
 			case TypeRef.Literal _ -> JType.reference("String");
@@ -54,49 +81,134 @@ final class TypeMapping {
 		if (original.equals("Long") || original.equals("Uint64")) {
 			return JType.primitive("long", "Long");
 		}
-		String name = model.resolveAlias(original);
-		switch (name) {
-			case "integer" -> {
-				return JType.primitive("int", "Integer");
-			}
-			case "number" -> {
-				return JType.primitive("double", "Double");
-			}
-			case "boolean" -> {
-				return JType.primitive("boolean", "Boolean");
-			}
-			case "string" -> {
-				return JType.reference("String");
-			}
-			case "nil" -> {
-				return JType.VOID;
-			}
-			case "table" -> {
-				return named.args().size() == 2 ? map(named.args().get(0), named.args().get(1)) : JType.OBJECT;
-			}
-			case "any", "unknown" -> {
-				return JType.OBJECT;
-			}
-			case "function" -> {
-				return JType.reference("Runnable");
-			}
-			default -> {
+		if (scope.variables().contains(original)) {
+			return JType.reference(original);
+		}
+		ApiModel.ClassDef owner = scope.owner();
+		if (original.equals("self") && owner != null) {
+			// ---@return self: the object itself, of its own class, as a fluent method returns it
+			List<TypeRef> variables = owner.typeParams.stream()
+					.filter(scope.variables()::contains)
+					.map(variable -> (TypeRef) TypeRef.Named.of(variable))
+					.toList();
+			JType self = binding(bindings, owner.name, "", variables);
+			if (self != null) {
+				return self;
 			}
 		}
-		ApiModel.ClassDef classDef = model.classes.get(name);
+		String name = model.resolveAlias(original);
+		JType builtin = builtin(model, name, named);
+		if (builtin != null) {
+			return builtin;
+		}
+		JType own = binding(bindings, name, "", named.args());
+		if (own != null) {
+			return own;
+		}
+		// A type the model names but does not declare: the RS3 API's ui.Component in a library's types
+		for (JavaBindings other : bindings.foreign) {
+			String resolved = other.model.resolveAlias(name);
+			JType foreignBuiltin = builtin(other.model, resolved, named);
+			if (foreignBuiltin != null) {
+				return foreignBuiltin;
+			}
+			JType found = binding(other, resolved, other.target.packageName() + ".", named.args());
+			if (found != null) {
+				return found;
+			}
+		}
+		if (declaredVariables().contains(original)) {
+			// A class's type variable in a static member, which cannot name it
+			return JType.OBJECT;
+		}
+		bindings.warnings.add("The type " + original + " has no binding class; Object stands in for it.");
+		return JType.OBJECT;
+	}
+
+	private Set<String> declaredVariables() {
+		Set<String> declared = declaredVariables;
+		if (declared == null) {
+			declared = new HashSet<>();
+			for (ApiModel.ClassDef classDef : model.classes.values()) {
+				declared.addAll(classDef.typeParams);
+			}
+			for (ApiModel.FunctionDef function : model.allFunctions()) {
+				declared.addAll(function.typeParams());
+			}
+			declaredVariables = declared;
+		}
+		return declared;
+	}
+
+	/**
+	 * A union: of string literals, {@code "left" | "right"}, a string; of integer literals, an int; of anything else,
+	 * an Object.
+	 */
+	private static JType literals(TypeRef.Union union) {
+		if (union.options().stream().allMatch(TypeRef.Literal.class::isInstance)) {
+			return JType.reference("String");
+		}
+		if (union.options().stream().allMatch(option -> option instanceof TypeRef.NumberLiteral number
+				&& number.isInteger())) {
+			return JType.primitive("int", "Integer");
+		}
+		return JType.OBJECT;
+	}
+
+	/**
+	 * Lua's own types and the names LuaCATS gives them, and an alias of a type that is no name, such as a union of
+	 * literals.
+	 */
+	private @Nullable JType builtin(ApiModel of, String name, TypeRef.Named named) {
+		ApiModel.AliasDef alias = of.aliases.get(name);
+		if (alias != null && !(alias.target() instanceof TypeRef.Named)) {
+			return javaType(alias.target());
+		}
+		return switch (name) {
+			case "integer" -> JType.primitive("int", "Integer");
+			case "number" -> JType.primitive("double", "Double");
+			case "boolean" -> JType.primitive("boolean", "Boolean");
+			case "string" -> JType.reference("String");
+			case "nil" -> JType.VOID;
+			case "table" -> named.args().size() == 2 ? map(named.args().get(0), named.args().get(1)) : JType.OBJECT;
+			case "any", "unknown", "userdata", "lightuserdata", "thread" -> JType.OBJECT;
+			case "function" -> JType.reference("Runnable");
+			default -> null;
+		};
+	}
+
+	/**
+	 * The binding of a class or enum of one set of bindings, with its package for another set's, and with the type
+	 * arguments a generic class takes; null when that set declares none of the name.
+	 */
+	private @Nullable JType binding(JavaBindings of, String name, String packagePrefix, List<TypeRef> args) {
+		ApiModel.ClassDef classDef = of.model.classes.get(name);
 		if (classDef != null && "integer".equals(classDef.superclass)) {
 			return JType.primitive("int", "Integer");
 		}
-		Node node = bindings.byLuaName.get(name);
+		Node node = of.byLuaName.get(name);
 		if (node == null) {
-			bindings.warnings.add("The type " + original + " has no binding class; Object stands in for it.");
-			return JType.OBJECT;
+			return null;
 		}
 		ApiModel.EnumDef enumDef = node.enumDef;
-		if (enumDef != null && bindings.typeUses.getOrDefault(enumDef.name(), 0) == 0) {
+		if (enumDef != null && enumDef.keys()) {
+			// ---@enum (key): a value of the type is one of the table's keys
+			return JType.reference("String");
+		}
+		if (enumDef != null && of.typeUses.getOrDefault(enumDef.name(), 0) == 0) {
 			return enumDef.integerValued() ? JType.primitive("int", "Integer") : JType.reference("String");
 		}
-		return JType.reference(node.reference());
+		ApiModel.ClassDef nodeClass = node.classDef;
+		if (nodeClass != null && !nodeClass.typeParams.isEmpty() && nodeClass.typeParams.size() == args.size()) {
+			// zyklib.reactive.Event<LogicEventPayload, nil>: nil is no value, Void in Java
+			String arguments = args.stream()
+					.map(arg -> arg instanceof TypeRef.Named nil && nil.name().equals("nil")
+							? "Void"
+							: javaType(arg).boxed())
+					.collect(Collectors.joining(", "));
+			return JType.reference(packagePrefix + node.reference() + "<" + arguments + ">");
+		}
+		return JType.reference(packagePrefix + node.reference());
 	}
 
 	private JType functional(TypeRef.Function function) {
@@ -120,9 +232,10 @@ final class TypeMapping {
 					: returnsBoolean ? prefix + "BiPredicate<" + joined + ">"
 					: prefix + "BiFunction<" + joined + ", " + result + ">");
 			default -> {
-				bindings.warnings.add("The function type " + function.show() + " has more parameters than"
-						+ " java.util.function covers; Object stands in for it.");
-				yield JType.OBJECT;
+				// More values than java.util.function's interfaces take: an interface of the bindings' own
+				String name = (returnsNothing ? "Consumer" : "Function") + params.size();
+				bindings.callbacks.add(name);
+				yield JType.reference(name + "<" + joined + (returnsNothing ? "" : ", " + result) + ">");
 			}
 		};
 	}

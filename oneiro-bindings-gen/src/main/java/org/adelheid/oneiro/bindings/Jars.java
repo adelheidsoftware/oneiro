@@ -26,12 +26,16 @@ final class Jars {
 	private Jars() {
 	}
 
-	/** Writes every file under {@code folder} into {@code jar}, at its path relative to the folder. */
-	static void write(Path folder, Path jar) throws IOException {
+	/**
+	 * Writes the files under {@code folder} whose path relative to it starts with {@code prefix} into {@code jar}, at
+	 * that path; with an empty prefix, every file. One folder of classes, compiled together, can so make several jars.
+	 */
+	static void write(Path folder, Path jar, String prefix) throws IOException {
 		Files.createDirectories(jar.toAbsolutePath().getParent());
 		List<Path> files;
 		try (Stream<Path> walk = Files.walk(folder)) {
 			files = walk.filter(Files::isRegularFile)
+					.filter(file -> entryName(folder, file).startsWith(prefix))
 					.sorted((first, second) -> entryName(folder, first).compareTo(entryName(folder, second)))
 					.toList();
 		}

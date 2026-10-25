@@ -6,6 +6,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -15,11 +17,12 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The facts about the RS3 API that the stubs do not state, read from {@code overrides.txt}: which global tables are
- * singletons, which values can be nil, which fields are read-only, the Java names for Lua names Java cannot use, what
- * needs a permission, and so on. Each line is {@code <fact> <target> [<argument> ...]}, followed by {@code #} and how
- * the fact was checked. The generator asks for facts by kind and target; facts it never asked about are reported, as
- * they no longer match anything in the stubs.
+ * The facts about an API that its LuaCATS types do not state: for the RS3 API, the bundled {@code overrides.txt}, and
+ * for a library, a file the plugin keeps for it. They say which global tables are singletons, which values can be nil,
+ * which fields are read-only, the Java names for Lua names Java cannot use, and so on, and for the RS3 API alone also
+ * what needs a permission, what moderation reviews, and the hooks' callbacks. Each line is
+ * {@code <fact> <target> [<argument> ...]}, followed by {@code #} and how the fact was checked. The generator asks for
+ * facts by kind and target; facts it never asked about are reported, as they no longer match anything in the types.
  */
 final class Overrides {
 
@@ -31,34 +34,55 @@ final class Overrides {
 		}
 	}
 
-	/** The facts the file may state, so that a misspelt one fails loudly instead of being ignored. */
-	private static final Set<String> FACTS = Set.of("singleton", "instance", "constructible", "not-constructible",
-			"nullable", "not-nullable", "read-only", "writable", "copied", "not-copied", "java-name", "rename",
-			"values", "type", "field", "function", "param", "superclass", "hook", "operator", "returns", "permission",
-			"manifest-flag", "review", "dev-only", "skip", "element-table", "no-from-id", "note");
+	/** The facts a library's file may state, those that hold for any Lua, so that a misspelt one fails loudly. */
+	private static final Set<String> LIBRARY_FACTS = Set.of("singleton", "instance", "constructible",
+			"not-constructible", "nullable", "not-nullable", "read-only", "writable", "java-name", "rename", "values",
+			"type", "field", "function", "param", "superclass", "operator", "returns", "skip", "note");
+	/** The facts the RS3 API's file may state: those, and the facts of the client alone. */
+	private static final Set<String> RS3_FACTS = union(LIBRARY_FACTS, Set.of("copied", "not-copied", "hook",
+			"permission", "manifest-flag", "review", "dev-only", "element-table", "no-from-id"));
 
 	private final List<Entry> entries;
+	private final String source;
 	private final Set<Entry> used = new HashSet<>();
 	/** Entries applied somewhere the stubs already said the same. */
 	private final Set<Entry> agreed = new HashSet<>();
 	/** Entries applied somewhere the stubs said otherwise: there, the entry is still needed. */
 	private final Set<Entry> corrected = new HashSet<>();
 
-	private Overrides(List<Entry> entries) {
+	private Overrides(List<Entry> entries, String source) {
 		this.entries = List.copyOf(entries);
+		this.source = source;
 	}
 
-	/** The overrides that ship with Oneiro. */
+	/** The overrides of the RS3 API, which ship with Oneiro. */
 	static Overrides bundled() {
 		try (InputStream in = Objects.requireNonNull(Overrides.class.getResourceAsStream("overrides.txt"),
 				"overrides.txt")) {
-			return parse(in);
+			return parse(in, "overrides.txt", RS3_FACTS);
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
 	}
 
+	/** A plugin's overrides of a library, which state only the facts that hold for any Lua. */
+	static Overrides library(Path file) throws IOException {
+		try (InputStream in = Files.newInputStream(file)) {
+			return parse(in, file.getFileName().toString(), LIBRARY_FACTS);
+		}
+	}
+
+	/** No overrides, for a library the plugin keeps none for. */
+	static Overrides none() {
+		return new Overrides(List.of(), "");
+	}
+
+	/** The overrides of the RS3 API from another source, for tests. */
 	static Overrides parse(InputStream in) throws IOException {
+		return parse(in, "overrides.txt", RS3_FACTS);
+	}
+
+	private static Overrides parse(InputStream in, String source, Set<String> facts) throws IOException {
 		List<Entry> entries = new ArrayList<>();
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
 			String line;
@@ -71,17 +95,28 @@ final class Overrides {
 					continue;
 				}
 				List<String> words = Arrays.asList(content.split("\\s+"));
-				if (words.size() < 2 || !FACTS.contains(words.getFirst())) {
-					throw new IOException("overrides.txt:" + number + ": expected <fact> <target>, with a fact from "
-							+ FACTS.stream().sorted().toList() + ": " + line);
+				if (words.size() < 2 || !facts.contains(words.getFirst())) {
+					throw new IOException(source + ":" + number + ": expected <fact> <target>, with a fact from "
+							+ facts.stream().sorted().toList() + ": " + line);
 				}
 				if (words.getFirst().equals("note") && words.size() < 3) {
-					throw new IOException("overrides.txt:" + number + ": a note needs its text: " + line);
+					throw new IOException(source + ":" + number + ": a note needs its text: " + line);
 				}
 				entries.add(new Entry(words.get(0), words.get(1), words.subList(2, words.size()), number));
 			}
 		}
-		return new Overrides(entries);
+		return new Overrides(entries, source);
+	}
+
+	private static Set<String> union(Set<String> first, Set<String> second) {
+		Set<String> all = new HashSet<>(first);
+		all.addAll(second);
+		return Set.copyOf(all);
+	}
+
+	/** The file's name, which its messages start with. */
+	String source() {
+		return source;
 	}
 
 	/** Whether the file states the fact about the target. */

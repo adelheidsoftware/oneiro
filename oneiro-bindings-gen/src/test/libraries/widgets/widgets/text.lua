@@ -50,4 +50,31 @@ text.describe = function(self, prefix)
     return prefix .. tostring(self)
 end
 
+--- The colour a line is drawn in, by its name in COLOURS.
+---@param colour widgets.Colour
+function text.paint(colour)
+    text.current = text.COLOURS[colour]
+end
+
+--- How wide a line is drawn, and whether it was cut to fit.
+---@param line string
+---@return integer width the width in characters, at most MAX_WIDTH
+---@return boolean cut whether the line was longer
+function text.measure(line)
+    return math.min(#line, text.MAX_WIDTH), #line > text.MAX_WIDTH
+end
+
+--- The list's values as one line, each formatted with its position and whether it is the last.
+---@generic T
+---@param list T[]
+---@param format fun(value: T, index: integer, last: boolean): string
+---@return string
+function text.join(list, format)
+    local parts = {}
+    for index, value in ipairs(list) do
+        parts[index] = format(value, index, index == #list)
+    end
+    return table.concat(parts, " ")
+end
+
 return text

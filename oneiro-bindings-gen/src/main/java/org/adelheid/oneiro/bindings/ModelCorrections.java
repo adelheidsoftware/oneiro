@@ -42,7 +42,7 @@ final class ModelCorrections {
 		for (Overrides.Entry entry : overrides.all("operator")) {
 			int dot = entry.target().lastIndexOf('.');
 			if (dot < 0 || !model.classes.containsKey(entry.target().substring(0, dot))) {
-				warnings.add("overrides.txt:" + entry.line() + ": operator " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": operator " + entry.target()
 						+ " needs a class of the stubs.");
 			}
 		}
@@ -58,7 +58,7 @@ final class ModelCorrections {
 			int dot = entry.target().lastIndexOf('.');
 			ApiModel.ClassDef owner = dot < 0 ? null : model.classes.get(entry.target().substring(0, dot));
 			if (owner == null || entry.arguments().size() != 1) {
-				warnings.add("overrides.txt:" + entry.line() + ": rename " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": rename " + entry.target()
 						+ " needs a class of the stubs and one new name.");
 				continue;
 			}
@@ -86,7 +86,7 @@ final class ModelCorrections {
 			} else if (hasNew) {
 				overrides.applied(entry, true);
 			} else {
-				warnings.add("overrides.txt:" + entry.line() + ": rename " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": rename " + entry.target()
 						+ " matches no field and no function, under either name.");
 			}
 		}
@@ -107,7 +107,7 @@ final class ModelCorrections {
 				}
 			}
 			if (enumDef == null || given.size() != entry.arguments().size()) {
-				warnings.add("overrides.txt:" + entry.line() + ": values " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": values " + entry.target()
 						+ " needs an enum of the stubs and NAME=value arguments.");
 				continue;
 			}
@@ -123,7 +123,7 @@ final class ModelCorrections {
 				}
 			}
 			if (!given.isEmpty()) {
-				warnings.add("overrides.txt:" + entry.line() + ": values " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": values " + entry.target()
 						+ " names values the stubs lack: " + String.join(", ", given.keySet()) + ".");
 			}
 			overrides.applied(entry, agrees);
@@ -176,7 +176,7 @@ final class ModelCorrections {
 				}
 			}
 			if (!applied) {
-				warnings.add("overrides.txt:" + entry.line() + ": type " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": type " + entry.target()
 						+ " matches no field and no function.");
 			}
 		}
@@ -198,7 +198,7 @@ final class ModelCorrections {
 		for (Overrides.Entry entry : overrides.all("field")) {
 			int dot = entry.target().lastIndexOf('.');
 			if (dot < 0 || entry.arguments().isEmpty()) {
-				warnings.add("overrides.txt:" + entry.line() + ": field " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": field " + entry.target()
 						+ " needs a class and a type.");
 				continue;
 			}
@@ -240,7 +240,7 @@ final class ModelCorrections {
 			ApiModel.ClassDef owner = separator < 0 ? null : model.classes.get(target.substring(0, separator));
 			TypeRef type = entry.arguments().isEmpty() ? null : TypeParser.parse(String.join(" ", entry.arguments()));
 			if (owner == null || !(type instanceof TypeRef.Function function)) {
-				warnings.add("overrides.txt:" + entry.line() + ": function " + target
+				warnings.add(overrides.source() + ":" + entry.line() + ": function " + target
 						+ " needs a class of the stubs and a fun(...) type.");
 				continue;
 			}
@@ -262,7 +262,7 @@ final class ModelCorrections {
 					? ApiModel.CallStyle.COLON
 					: ApiModel.CallStyle.DOT;
 			ApiModel.FunctionDef added =
-					ApiModel.FunctionDef.of(owner.name, name, style, function, "", "overrides.txt");
+					ApiModel.FunctionDef.of(owner.name, name, style, function, "", overrides.source());
 			boolean present = false;
 			for (int index = 0; index < owner.functions.size(); index++) {
 				ApiModel.FunctionDef existing = owner.functions.get(index);
@@ -318,7 +318,7 @@ final class ModelCorrections {
 				}
 			}
 			if (!applied) {
-				warnings.add("overrides.txt:" + entry.line() + ": param " + entry.target() + " "
+				warnings.add(overrides.source() + ":" + entry.line() + ": param " + entry.target() + " "
 						+ String.join(" ", entry.arguments()) + " matches no parameter of a function of the stubs.");
 			}
 		}
@@ -343,7 +343,7 @@ final class ModelCorrections {
 			ApiModel.EnumDef enumDef = model.enums.get(table);
 			boolean known = enumDef != null && enumDef.values().stream().anyMatch(value -> value.key().equals(luaName));
 			if (!known || entry.arguments().isEmpty()) {
-				warnings.add("overrides.txt:" + entry.line() + ": hook " + target
+				warnings.add(overrides.source() + ":" + entry.line() + ": hook " + target
 						+ " needs a value of a table of hooks in the stubs and a callback name.");
 				continue;
 			}
@@ -356,8 +356,8 @@ final class ModelCorrections {
 			String callback = entry.arguments().getFirst();
 			List<TypeRef.Param> earlier = callbacks.putIfAbsent(callback, params);
 			if (earlier != null && !types(earlier).equals(types(params))) {
-				warnings.add("overrides.txt:" + entry.line() + ": hook " + target + " gives the callback " + callback
-						+ " other parameter types than an earlier line; the earlier ones are kept.");
+				warnings.add(overrides.source() + ":" + entry.line() + ": hook " + target + " gives the callback "
+						+ callback + " other parameter types than an earlier line; the earlier ones are kept.");
 				params = earlier;
 			}
 			overrides.applied(entry, false);
@@ -376,7 +376,7 @@ final class ModelCorrections {
 			ApiModel.ClassDef classDef = model.classes.get(entry.target());
 			String superName = entry.arguments().isEmpty() ? null : entry.arguments().getFirst();
 			if (classDef == null || superName == null || !model.classes.containsKey(superName)) {
-				warnings.add("overrides.txt:" + entry.line() + ": superclass " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": superclass " + entry.target()
 						+ " needs two classes of the stubs.");
 				continue;
 			}

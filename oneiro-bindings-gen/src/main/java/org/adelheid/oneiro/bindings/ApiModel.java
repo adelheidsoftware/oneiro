@@ -195,9 +195,9 @@ final class ApiModel {
 	/**
 	 * A module: a file that returns a table, which {@code require(path)} gives. {@code export} names the class of that
 	 * table: the class the file declares for it, or, for a table it declares no class for, a class named by the path,
-	 * {@code src/core/seeds}, which holds what the file defines on the table.
+	 * {@code src/core/seeds}, which holds what the file defines on the table, and which is then {@code implicit}.
 	 */
-	record ModuleDef(String path, String export, String file) {
+	record ModuleDef(String path, String export, String file, boolean implicit) {
 	}
 
 	/** A line the reader could not place, with a normalised pattern used to group similar lines. */

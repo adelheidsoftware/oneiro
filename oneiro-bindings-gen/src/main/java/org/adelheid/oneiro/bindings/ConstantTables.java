@@ -40,20 +40,30 @@ final class ConstantTables {
 	 * plain constants.
 	 */
 	void writeEnum(StringBuilder out, Node node, ApiModel.EnumDef enumDef, String indent) {
-		// A Java enum lowers to the table's own field, whatever its value, so an enum whose values are unknown is one
-		boolean asJavaEnum = bindings.typeUses.getOrDefault(enumDef.name(), 0) > 0 || enumDef.placeholderValued();
+		String table = bindings.enumPath(node, enumDef);
+		boolean rs3 = bindings.target.isRs3();
+		// A Java enum lowers to the table's own field, whatever its value, so an enum whose values are unknown is one.
+		// A (key) enum's values are its keys, which plugins write as strings, so its table holds plain constants.
+		boolean asJavaEnum = !enumDef.keys()
+				&& (bindings.typeUses.getOrDefault(enumDef.name(), 0) > 0 || enumDef.placeholderValued());
 		List<String> doc = new ArrayList<>(JavaText.lines(enumDef.description()));
 		doc.add(asJavaEnum
-				? "<p>Lua: the table {@code " + enumDef.name() + "}, whose values the client compares with {@code ==}."
-				: "<p>Lua: the table {@code " + enumDef.name() + "}; its values are plain "
+				? "<p>Lua: the table {@code " + table + "}, whose values " + (rs3 ? "the client" : "the library")
+						+ " compares with {@code ==}."
+				: "<p>Lua: the table {@code " + table + "}; its values are plain "
 						+ (enumDef.integerValued() ? "integers, such as bit flags." : "strings."));
+		if (enumDef.keys() && !enumDef.values().isEmpty()) {
+			String example = JavaText.escape(enumDef.values().getFirst().key());
+			doc.add("<p>A value of the type {@code " + enumDef.name() + "} is one of the table's keys, as a string,"
+					+ " such as {@code \"" + example + "\"}.");
+		}
 		JavaText.javadoc(out, indent, doc);
-		out.append(indent).append("@LuaGlobal(\"").append(enumDef.name()).append("\")\n");
+		out.append(indent).append("@LuaGlobal(\"").append(table).append("\")\n");
 		String inner = indent + "\t";
 		Set<String> javaNames = new HashSet<>();
 		if (asJavaEnum) {
 			// The client gives all but a few enum tables FromID, which turns a value into its name
-			if (!overrides.has("no-from-id", enumDef.name())) {
+			if (rs3 && !overrides.has("no-from-id", enumDef.name())) {
 				out.append(indent).append("@LuaFromId\n");
 			}
 			out.append(indent).append("public enum ").append(node.javaName).append(" {\n");
@@ -72,7 +82,7 @@ final class ConstantTables {
 				List<String> valueDoc = new ArrayList<>(JavaText.lines(value.comment()));
 				String first = firstWithValue.putIfAbsent(value.literal(), javaName);
 				String shown = enumDef.placeholderValued() ? "" : ", " + JavaText.escape(value.literal());
-				valueDoc.add("<p>Lua: {@code " + enumDef.name() + "." + luaKey + "}" + shown
+				valueDoc.add("<p>Lua: {@code " + table + "." + luaKey + "}" + shown
 						+ (first == null ? "." : ", the value of {@link #" + first + "}."));
 				JavaText.javadoc(constant, inner, valueDoc);
 				if (!javaName.equals(luaKey)) {
@@ -104,7 +114,7 @@ final class ConstantTables {
 				}
 				out.append("\n");
 				List<String> valueDoc = new ArrayList<>(JavaText.lines(value.comment()));
-				valueDoc.add("<p>Lua: {@code " + enumDef.name() + "." + luaKey + "}");
+				valueDoc.add("<p>Lua: {@code " + table + "." + luaKey + "}");
 				JavaText.javadoc(out, inner, valueDoc);
 				if (!javaName.equals(luaKey)) {
 					out.append(inner).append("@LuaName(").append(JavaText.javaString(luaKey)).append(")\n");

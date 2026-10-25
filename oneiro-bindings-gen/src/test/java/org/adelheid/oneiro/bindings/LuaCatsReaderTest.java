@@ -35,13 +35,14 @@ class LuaCatsReaderTest {
 		ApiModel model = read(LIBRARIES.resolve("widgets"), LIBRARIES.resolve("widgets"));
 		assertEquals(List.of(), model.unparsed);
 		assertEquals("widgets", export(model, "widgets"));
-		assertEquals(Map.of("Counter", "widgets.Counter", "text", "widgets.text"), classNamed(model, "widgets").tables);
+		assertEquals(Map.of("Counter", "widgets.Counter", "LoudCounter", "widgets.LoudCounter", "text", "widgets.text"),
+				classNamed(model, "widgets").tables);
 
 		ApiModel.ClassDef counter = classNamed(model, "widgets.Counter");
 		assertEquals("widgets.Counter", export(model, "widgets/Counter"));
 		// The private step is no part of the API, nor is the @package reset
 		assertEquals(List.of("value"), counter.fields.stream().map(ApiModel.FieldDef::name).toList());
-		assertEquals(List.of("new", "increment", "bump"), functionNames(counter));
+		assertEquals(List.of("new", "increment", "advance", "bump"), functionNames(counter));
 		assertEquals(List.of("start"), function(counter, "new").luaParams());
 		ApiModel.FunctionDef increment = function(counter, "increment");
 		assertEquals(ApiModel.CallStyle.COLON, increment.style());
@@ -59,7 +60,7 @@ class LuaCatsReaderTest {
 		assertEquals(List.of("MAX_WIDTH: integer", "ELLIPSIS: string", "align: widgets.Align"),
 				text.fields.stream().map(field -> field.name() + ": " + field.type().show()).toList());
 		assertEquals("The widest a line may be, in characters.", text.fields.getFirst().description().strip());
-		assertEquals(List.of("trim", "find", "describe"), functionNames(text));
+		assertEquals(List.of("trim", "find", "describe", "paint", "measure", "join"), functionNames(text));
 		assertEquals(List.of("line"), function(text, "trim").luaParams());
 		assertEquals(List.of("T"), function(text, "find").typeParams());
 		// A function whose first parameter is self is called with a colon
@@ -87,7 +88,7 @@ class LuaCatsReaderTest {
 		assertEquals(List.of("version"), gauges.fields.stream().map(ApiModel.FieldDef::name).toList());
 		ApiModel.ClassDef gauge = classNamed(model, "gauges.Gauge");
 		assertEquals(ApiModel.Binding.GLOBAL, gauge.binding);
-		assertEquals(List.of("new", "SetValue", "Destroy"), functionNames(gauge));
+		assertEquals(List.of("new", "SetValue", "Destroy", "Follow"), functionNames(gauge));
 		assertEquals(ApiModel.CallStyle.COLON, function(gauge, "SetValue").style());
 		assertEquals(ApiModel.Binding.NONE, classNamed(model, "gauges.GaugeOptions").binding);
 		assertTrue(model.modules.isEmpty());

@@ -68,8 +68,9 @@ final class ClientAudit {
 	static List<String> report(Path stubsRoot, List<String> log) throws IOException {
 		Overrides overrides = Overrides.bundled();
 		// The bindings apply the overrides' corrections to the model as they are made: renames, added members
-		JavaBindings bindings = new JavaBindings(Stubs.read(stubsRoot), overrides, BindingsGenerator.Language.JAVA,
-				new ArrayList<>());
+		Stubs stubs = Stubs.read(stubsRoot);
+		JavaBindings bindings = new JavaBindings(stubs.model(), stubs.namespaces(), overrides, BindingsTarget.rs3(),
+				BindingsGenerator.Language.JAVA, new ArrayList<>());
 		return new ClientAudit(bindings.model, overrides).report(logged(log));
 	}
 

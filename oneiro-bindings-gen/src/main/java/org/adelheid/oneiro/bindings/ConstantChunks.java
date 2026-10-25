@@ -38,7 +38,7 @@ final class ConstantChunks {
 
 	/** Writes the namespace's chunk classes under {@code classes}, in the package's folder. */
 	static void write(JavaBindings.ConstantNamespace namespace, Path classes) throws IOException {
-		Path folder = classes.resolve(JavaBindings.PACKAGE.replace('.', '/'));
+		Path folder = classes.resolve(BindingsTarget.RS3_PACKAGE.replace('.', '/'));
 		Files.createDirectories(folder);
 		String element = namespace.elementBinaryName();
 		ClassDesc elementType = element == null ? ConstantDescs.CD_int : ClassDesc.of(element);
@@ -46,7 +46,7 @@ final class ConstantChunks {
 		ClassDesc superclass = ConstantDescs.CD_Object;
 		for (int chunk = 1; chunk <= namespace.chunkCount(); chunk++) {
 			String name = namespace.chunkPrefix() + chunk;
-			ClassDesc self = ClassDesc.of(JavaBindings.PACKAGE + "." + name);
+			ClassDesc self = ClassDesc.of(BindingsTarget.RS3_PACKAGE + "." + name);
 			ClassDesc parent = superclass;
 			List<CsvConstants.Row> names = rows.subList((chunk - 1) * JavaBindings.CHUNK_SIZE,
 					Math.min(rows.size(), chunk * JavaBindings.CHUNK_SIZE));

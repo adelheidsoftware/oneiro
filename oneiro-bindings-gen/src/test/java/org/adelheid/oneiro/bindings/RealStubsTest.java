@@ -37,4 +37,30 @@ class RealStubsTest {
 			assertEquals(List.of(), result.warnings());
 		}
 	}
+
+	/**
+	 * The bindings of real Lua against the real stubs, when both are checked out next to Oneiro: Zyklib, whose types
+	 * name the RS3 API's, and Blueprint-Helper's modules, annotated in part, which must generate without a warning and
+	 * compile.
+	 */
+	@Test
+	void realLibrariesGenerateBindingsThatCompile() throws IOException {
+		Path stubs = Path.of(System.getProperty("oneiro.stubs", ""));
+		Path zyklib = Path.of(System.getProperty("oneiro.zyklib", "")).resolve("src");
+		Path blueprintHelper = Path.of(System.getProperty("oneiro.blueprintHelper", "")).resolve("src");
+		Assumptions.assumeTrue(Files.isRegularFile(stubs.resolve("types.lua")) && Files.isDirectory(zyklib)
+				&& Files.isDirectory(blueprintHelper),
+				"runescape-api-stubs, Zyklib and Blueprint-Helper are not all checked out next to Oneiro.");
+
+		BindingsGenerator.Result result = BindingsGenerator.generate(stubs, Path.of("build", "real-library-bindings"),
+				Overrides.bundled(), BindingsGenerator.Language.JAVA, List.of(
+						new BindingsGenerator.Library("zyklib", "org.adelheid.oneiro.lib.zyklib", zyklib, "",
+								Path.of("src", "test", "libraries", "zyklib-overrides.txt")),
+						new BindingsGenerator.Library("blueprint", "org.adelheid.oneiro.lib.blueprint", blueprintHelper,
+								"src/", null)));
+		for (BindingsGenerator.LibraryResult library : result.libraries()) {
+			assertTrue(Files.size(library.classesJar()) > 0);
+			assertEquals(List.of(), library.warnings(), library.name());
+		}
+	}
 }

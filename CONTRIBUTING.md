@@ -26,7 +26,7 @@ otherwise:
 | An installed Lua 5.4 | `oneiro.luaExecutable=/path/to/lua` in `~/.gradle/gradle.properties` | Runs the conformance suite on that interpreter instead of the bundled Lua 5.4.8. |
 | [runescape-api-stubs](https://github.com/FriendlyDevelopment/runescape-api-stubs) | A checkout next to Oneiro's, at `../runescape-api-stubs` | Generates the bindings from the real stubs, which must produce no warning. Otherwise the generator's tests use the small fixture in `oneiro-bindings-gen/src/test/stubs/`. |
 | Blueprint-Helper | A checkout next to Oneiro's, at `../Blueprint-Helper` | Runs that plugin's own tests against the Lua Oneiro writes for five of its core modules, from the Java in `conformance/src/test/resources/blueprint-helper/`, and reads its modules' annotations, which must produce no warning. |
-| [Zyklib](https://codeberg.org/ZyklopMarco/runescape-api-zyklib) | A checkout next to Oneiro's, at `../runescape-api-zyklib` | Reads the library's annotated code, which must produce no warning. The reader's own fixtures, in `oneiro-bindings-gen/src/test/libraries/`, run either way. |
+| [Zyklib](https://codeberg.org/ZyklopMarco/runescape-api-zyklib) | A checkout next to Oneiro's, at `../runescape-api-zyklib` | Reads the library's annotated code and, with the real stubs and Blueprint-Helper also there, generates its bindings and those of Blueprint-Helper's modules, which must produce no warning and compile. The fixtures in `oneiro-bindings-gen/src/test/libraries/` run either way. |
 
 StyLua's layout can change between versions, so use 2.6.0 for the expected files.
 

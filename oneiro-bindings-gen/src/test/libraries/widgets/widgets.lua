@@ -3,6 +3,7 @@
 ---@class widgets
 local widgets = {
     Counter = require("widgets/Counter"),
+    LoudCounter = require("widgets/LoudCounter"),
     text = require "widgets/text",
 }
 

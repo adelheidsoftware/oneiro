@@ -29,6 +29,14 @@ function Counter:increment(by)
     return self.value
 end
 
+--- Counts up by `by`, and gives the counter back, for the next call.
+---@param by integer
+---@return self
+function Counter:advance(by)
+    self.value = self.value + by
+    return self
+end
+
 ---@package
 function Counter:reset()
     self.value = 0

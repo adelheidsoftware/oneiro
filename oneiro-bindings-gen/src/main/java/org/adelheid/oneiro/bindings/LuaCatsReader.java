@@ -198,7 +198,7 @@ final class LuaCatsReader {
 					return false;
 				}
 				model.modules.put(pending.path(), new ApiModel.ModuleDef(pending.path(), target.export(),
-						pending.file()));
+						pending.file(), target.implicit()));
 				return true;
 			});
 		}
@@ -789,7 +789,7 @@ final class LuaCatsReader {
 			model.classes.put(exportType.name, exportType);
 			exported = exportType;
 		}
-		model.modules.put(modulePath, new ApiModel.ModuleDef(modulePath, exportType.name, file));
+		model.modules.put(modulePath, new ApiModel.ModuleDef(modulePath, exportType.name, file, provisional));
 	}
 
 	/** A field that holds a module's table, known once every file is read; it keeps its place among the tables. */

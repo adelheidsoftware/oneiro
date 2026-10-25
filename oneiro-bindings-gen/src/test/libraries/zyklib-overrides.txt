@@ -1,0 +1,4 @@
+# A plugin's overrides of Zyklib, for the test that generates its bindings: what its types leave out.
+
+returns zyklib.array.find FindResult value index           # its ---@return tags describe both values but name neither
+returns zyklib.array.findLast FindLastResult value index   # likewise

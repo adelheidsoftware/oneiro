@@ -9,6 +9,7 @@ gauges = {}
 
 --- A gauge: a bar in a parent component.
 ---@class gauges.Gauge
+---@field Highlight fun(self: gauges.Gauge, colour: integer): gauges.Gauge Draws the bar in the colour, until the next value.
 gauges.Gauge = {}
 
 --- The options of a gauge.
@@ -29,3 +30,16 @@ function gauges.Gauge.new(parent, options) end
 function gauges.Gauge:SetValue(value) end
 
 function gauges.Gauge:Destroy() end
+
+--- Shows a counter's value from now on, a type of another library.
+---@param counter widgets.Counter
+function gauges.Gauge:Follow(counter) end
+
+--- A gauge that asks for a value, as a dialog.
+---@class gauges.Prompt
+gauges.Prompt = {}
+
+--- Shows the prompt, whose answer is a gauge's value.
+---@param parent ui.Component
+---@return gauges.Gauge
+function gauges.Prompt.new(parent) end

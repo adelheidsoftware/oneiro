@@ -9,16 +9,24 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.lang.model.SourceVersion;
 import org.adelheid.oneiro.api.LuaConstants;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Writes the Java sources of the RS3 bindings from the stubs' model and the overrides: one class per global table,
- * with nested classes for nested tables, so that {@code ui.Text} in Lua is {@code ui.Text} in Java. Each class and
- * member carries the annotations that tell Oneiro its Lua shape, and the Javadoc of the RS3 documentation the stubs
- * were generated from. The names of the {@code id}, {@code config} and {@code var} namespaces are not written as
- * sources: they are returned for {@link ConstantChunks}, and the namespace classes extend them.
+ * Writes the Java sources of a set of bindings from a model and its overrides: one class per table, with nested classes
+ * for nested tables, so that {@code ui.Text} in Lua is {@code ui.Text} in Java. A global table is a class of the
+ * package; a library's module is one too, named as its {@code require} binds it, and the tables its own table holds in
+ * fields are nested in it, so that {@code zyklib.reactive.Event} in Lua is {@code zyklib.reactive.Event} in Java. Each
+ * class and member carries the annotations that tell Oneiro its Lua shape, and the Javadoc of its description. A type
+ * a library names but does not declare, such as {@code ui.Component}, is the RS3 bindings' class, or another library's.
+ *
+ * <p>The RS3 API's own parts are written for its bindings alone ({@link BindingsTarget}): the events, the hooks, and
+ * the {@code id}, {@code config} and {@code var} namespaces, whose names are not written as sources: they are returned
+ * for {@link ConstantChunks}, and the namespace classes extend them.
  *
  * <p>This class has the model corrected by {@link ModelCorrections}, arranges the classes in their tree, and writes
  * each class's declaration and constructors. {@link MemberBindings} writes the members, {@link ConstantTables} the
@@ -27,12 +35,12 @@ import org.jspecify.annotations.Nullable;
  */
 final class JavaBindings {
 
-	/** The package of the generated bindings. */
-	static final String PACKAGE = "org.adelheid.oneiro.rs3";
 	/** How many names each chunk class of a constant namespace holds. */
 	static final int CHUNK_SIZE = 20_000;
 
 	private static final String NULLABLE = "@Nullable";
+	/** What separates the words of a file's name, {@code opening_table}. */
+	private static final Pattern NOT_WORD = Pattern.compile("[^A-Za-z0-9]+");
 
 	/** The names of one constant namespace, written as chunk classes by {@link ConstantChunks}. */
 	record ConstantNamespace(String luaPath, String chunkPrefix, @Nullable String elementBinaryName,
@@ -141,6 +149,8 @@ final class JavaBindings {
 		/** For a table of named objects, such as {@code game.options}: the names, and the node of their type. */
 		@Nullable List<String> elementNames;
 		@Nullable Node elementType;
+		/** For a library's module, as a top-level class: the path {@code require} loads it by. */
+		@Nullable String module;
 
 		Node(String javaName, String luaSegment, @Nullable Node parent) {
 			this.javaName = javaName;
@@ -162,11 +172,22 @@ final class JavaBindings {
 		String luaName() {
 			return parent == null ? luaSegment : parent.luaName() + "." + luaSegment;
 		}
+
+		/** The top-level class this one is nested in, or this one. */
+		Node top() {
+			return parent == null ? this : parent.top();
+		}
 	}
 
 	final ApiModel model;
 	private final Map<String, CsvConstants.Namespace> csvs;
 	final Overrides overrides;
+	final BindingsTarget target;
+	/**
+	 * The bindings whose classes a type this model names but does not declare resolves to, in order: the RS3 API's,
+	 * then the other libraries'. The generator fills it before the sources are written.
+	 */
+	final List<JavaBindings> foreign = new ArrayList<>();
 	final BindingsGenerator.Language language;
 	final List<String> warnings;
 	final Map<String, Integer> typeUses;
@@ -179,18 +200,29 @@ final class JavaBindings {
 	private final Map<String, Node> tops = new TreeMap<>();
 	/** The node of each Lua class and enum name, and of each synthesized payload. */
 	final Map<String, Node> byLuaName = new HashMap<>();
+	/** The nodes of a library's module tables, whose Lua path comes from their module, not from a class's name. */
+	private final Set<Node> moduleTables = new HashSet<>();
+	/** The classes and enums placed as module tables, which are not placed again by name. */
+	private final Set<String> placed = new HashSet<>();
 	final Map<String, EventInfo> events = new LinkedHashMap<>();
 	private final List<ConstantNamespace> constants = new ArrayList<>();
 	final Set<String> writtenRecords = new HashSet<>();
+	/** The callback interfaces of more values than java.util.function's take, {@code Function3}, that members name. */
+	final Set<String> callbacks = new TreeSet<>();
 	/** The classes the stubs lack that {@code field} lines declare, with the first line of each. */
 	final Map<String, Overrides.Entry> declaredClasses = new LinkedHashMap<>();
 	/** The hook lines, by the Lua name of the table of hooks they describe, {@code ui.Hook}, in order. */
 	final Map<String, List<HookLine>> hooks = new LinkedHashMap<>();
 
-	JavaBindings(Stubs stubs, Overrides overrides, BindingsGenerator.Language language, List<String> warnings) {
-		this.model = stubs.model();
-		this.csvs = stubs.namespaces();
+	/**
+	 * @param csvs the name lists of the RS3 API's constant namespaces; empty for a library
+	 */
+	JavaBindings(ApiModel model, Map<String, CsvConstants.Namespace> csvs, Overrides overrides, BindingsTarget target,
+			BindingsGenerator.Language language, List<String> warnings) {
+		this.model = model;
+		this.csvs = csvs;
 		this.overrides = overrides;
+		this.target = target;
 		this.language = language;
 		this.warnings = warnings;
 		this.corrections = new ModelCorrections(this);
@@ -202,12 +234,15 @@ final class JavaBindings {
 		this.typeUses = model.typeUses();
 		declaredClasses.forEach((name, entry) -> {
 			if (typeUses.getOrDefault(name, 0) == 0) {
-				warnings.add("overrides.txt:" + entry.line() + ": field " + entry.target() + " declares the class "
-						+ name + ", which the stubs lack and no type line uses; check its name.");
+				warnings.add(overrides.source() + ":" + entry.line() + ": field " + entry.target()
+						+ " declares the class " + name
+						+ ", which the stubs lack and no type line uses; check its name.");
 			}
 		});
 		collectParameterTypes();
-		collectEvents();
+		if (target.isRs3()) {
+			collectEvents();
+		}
 		buildTree();
 	}
 
@@ -223,6 +258,11 @@ final class JavaBindings {
 		return memberBindings;
 	}
 
+	/** The names of the package's top-level classes. */
+	Set<String> topNames() {
+		return tops.keySet();
+	}
+
 	/** The constant namespaces whose chunk classes the namespace classes extend. */
 	List<ConstantNamespace> constants() {
 		return constants;
@@ -231,14 +271,21 @@ final class JavaBindings {
 	/** Every source file, by its path under the source root. */
 	Map<String, String> sources() {
 		Map<String, String> files = new TreeMap<>();
-		String folder = PACKAGE.replace('.', '/') + "/";
-		files.put(folder + "package-info.java", SourceFiles.packageInfo());
-		files.put(folder + "LuaOnly.java", SourceFiles.luaOnly());
-		files.put(folder + "EventSubscription.java", sourceFiles.subscription(false));
-		files.put(folder + "EventPredicateSubscription.java", sourceFiles.subscription(true));
-		files.put(folder + "Globals.java", sourceFiles.globals());
+		String folder = target.packageName().replace('.', '/') + "/";
+		files.put(folder + "package-info.java", sourceFiles.packageInfo());
+		files.put(folder + "LuaOnly.java", sourceFiles.luaOnly());
+		List<String> fixedNames = new ArrayList<>(List.of("LuaOnly"));
+		if (target.isRs3()) {
+			files.put(folder + "EventSubscription.java", sourceFiles.subscription(false));
+			files.put(folder + "EventPredicateSubscription.java", sourceFiles.subscription(true));
+			files.put(folder + "Globals.java", sourceFiles.globals());
+			fixedNames.addAll(List.of("EventSubscription", "EventPredicateSubscription", "Globals"));
+		} else {
+			model.globalFunctions.forEach(function -> warnings.add("The global function " + function.name()
+					+ " is left out: a library's bindings bind its tables."));
+		}
 		Set<String> lowerCaseNames = new HashSet<>();
-		for (String fixed : List.of("LuaOnly", "EventSubscription", "EventPredicateSubscription", "Globals")) {
+		for (String fixed : fixedNames) {
 			lowerCaseNames.add(fixed.toLowerCase(Locale.ROOT));
 		}
 		for (Node top : tops.values()) {
@@ -249,7 +296,14 @@ final class JavaBindings {
 			StringBuilder source = new StringBuilder();
 			writeNode(source, top, "");
 			files.put(folder + top.javaName + ".java",
-					SourceFiles.file(source.toString(), SourceFiles.nestedNames(top)));
+					sourceFiles.file(source.toString(), SourceFiles.nestedNames(top)));
+		}
+		// The callbacks are known once the classes that name them are written
+		for (String callback : callbacks) {
+			if (!lowerCaseNames.add(callback.toLowerCase(Locale.ROOT))) {
+				throw new IllegalStateException("A binding class takes the name of a callback interface: " + callback);
+			}
+			files.put(folder + callback + ".java", sourceFiles.callback(callback));
 		}
 		return files;
 	}
@@ -291,8 +345,9 @@ final class JavaBindings {
 	}
 
 	private void buildTree() {
+		placeModules();
 		for (ApiModel.ClassDef classDef : model.classes.values()) {
-			if (isGenerated(classDef)) {
+			if (isGenerated(classDef) && !placed.contains(classDef.name)) {
 				Node node = node(luaPath(classDef.name));
 				// _global.id and the table id are one namespace, and the class holds the fields
 				ApiModel.ClassDef existing = node.classDef;
@@ -304,9 +359,15 @@ final class JavaBindings {
 			}
 		}
 		for (ApiModel.EnumDef enumDef : model.enums.values()) {
+			if (placed.contains(enumDef.name())) {
+				continue;
+			}
 			Node node = node(enumDef.name());
 			node.enumDef = enumDef;
 			byLuaName.put(enumDef.name(), node);
+		}
+		if (!target.isRs3()) {
+			return;
 		}
 		for (EventInfo event : events.values()) {
 			Node node = byLuaName.get(event.payload());
@@ -328,6 +389,122 @@ final class JavaBindings {
 	}
 
 	/**
+	 * A library's modules, placed where Lua reaches them. A module whose table no other module's table holds in a field
+	 * is a top-level class, named as its {@code require} binds it; the tables its table holds in fields, the modules it
+	 * requires there and the classes and enums it declares there, are classes nested in it, and theirs in them. A table
+	 * that two modules hold is placed where it is reached first.
+	 */
+	private void placeModules() {
+		Set<String> held = new HashSet<>();
+		model.classes.values().forEach(classDef -> held.addAll(classDef.tables.values()));
+		for (ApiModel.ModuleDef module : new TreeMap<>(model.modules).values()) {
+			ApiModel.ClassDef classDef = model.classes.get(module.export());
+			if (held.contains(module.export()) || classDef == null || placed.contains(classDef.name)) {
+				continue;
+			}
+			String name = moduleName(module, classDef);
+			if (tops.containsKey(name)) {
+				warnings.add("The module " + module.path() + " would be the class " + name
+						+ ", which another module is already; it is left out.");
+				continue;
+			}
+			Node node = new Node(name, name, null);
+			node.module = module.path();
+			tops.put(name, node);
+			placeTable(node, classDef);
+		}
+	}
+
+	private void placeTable(Node node, ApiModel.ClassDef classDef) {
+		node.classDef = classDef;
+		placed.add(classDef.name);
+		moduleTables.add(node);
+		byLuaName.put(classDef.name, node);
+		for (Map.Entry<String, String> table : classDef.tables.entrySet()) {
+			String field = table.getKey();
+			String type = table.getValue();
+			String javaName = JavaText.javaIdentifier(field);
+			ApiModel.EnumDef enumDef = model.enums.get(type);
+			ApiModel.ClassDef held = model.classes.get(type);
+			if (placed.contains(type) || (held != null && !isGenerated(held)) || (held == null && enumDef == null)) {
+				continue;
+			}
+			if (node.children.containsKey(javaName)) {
+				warnings.add(classDef.name + "." + field
+						+ " has the Java name of another of its tables; it is left out.");
+				continue;
+			}
+			Node child = new Node(javaName, field, node);
+			node.children.put(javaName, child);
+			if (held != null) {
+				placeTable(child, held);
+			} else {
+				child.enumDef = enumDef;
+				placed.add(type);
+				moduleTables.add(child);
+				byLuaName.put(type, child);
+			}
+		}
+	}
+
+	/**
+	 * The name of a module's top-level class, which is also the local its {@code require} binds: the last name of the
+	 * class it declares for its table, {@code zyklib}, or for a table it declares none for, its file's name as a Java
+	 * class is named, {@code OpeningTable} for {@code opening_table.lua}.
+	 */
+	private static String moduleName(ApiModel.ModuleDef module, ApiModel.ClassDef classDef) {
+		if (!module.implicit()) {
+			return JavaText.javaIdentifier(JavaText.simpleLuaName(classDef.name));
+		}
+		String file = module.path().substring(module.path().lastIndexOf('/') + 1);
+		String name = NOT_WORD.splitAsStream(file)
+				.filter(word -> !word.isEmpty())
+				.map(word -> Character.toUpperCase(word.charAt(0)) + word.substring(1))
+				.collect(Collectors.joining());
+		return JavaText.javaIdentifier(name);
+	}
+
+	/** Whether a class is a module's table that the module declares no class for, named by the module's path. */
+	private boolean isImplicit(ApiModel.ClassDef classDef) {
+		return model.modules.values().stream()
+				.anyMatch(module -> module.implicit() && module.export().equals(classDef.name));
+	}
+
+	/** Whether a class has a table plugins reach: a global one, or a module's. */
+	private boolean hasTable(ApiModel.ClassDef classDef) {
+		return classDef.binding == ApiModel.Binding.GLOBAL || placed.contains(classDef.name);
+	}
+
+	/**
+	 * The Lua path of a class's table, as its members' Javadoc shows it and its annotation gives it: from its module
+	 * for a module's table, {@code zyklib.reactive.Event}, and otherwise the class's own name.
+	 */
+	String tablePath(ApiModel.ClassDef classDef) {
+		Node node = byLuaName.get(classDef.name);
+		return node != null && moduleTables.contains(node) ? node.luaName() : luaPath(classDef.name);
+	}
+
+	/** The Lua path of an enum table: from its module for a module's, and otherwise the enum's own name. */
+	String enumPath(Node node, ApiModel.EnumDef enumDef) {
+		return moduleTables.contains(node) ? node.luaName() : enumDef.name();
+	}
+
+	/**
+	 * Where a table is, for a class's Javadoc: a global table, the module a top-level class is, or a table in a
+	 * module.
+	 */
+	private String tableDescription(Node node, String path) {
+		if (!moduleTables.contains(node)) {
+			return "the global table {@code " + path + "}";
+		}
+		Node top = node.top();
+		String module = "{@code " + top.module + "}";
+		return node == top
+				? "the module " + module + ", the table {@code require(\"" + top.module + "\")} gives"
+				: "the table {@code " + path + "} of the module " + module;
+	}
+
+	/**
 	 * {@code element-table game.options ClientOption <names...>}: the stubs describe one element of the table as the
 	 * table itself. The table becomes a class of named objects, and the stubs' class becomes their type.
 	 */
@@ -335,7 +512,7 @@ final class JavaBindings {
 		Node node = byLuaName.get(entry.target());
 		ApiModel.ClassDef classDef = node == null ? null : node.classDef;
 		if (node == null || classDef == null || entry.arguments().size() < 2) {
-			warnings.add("overrides.txt:" + entry.line() + ": element-table " + entry.target()
+			warnings.add(overrides.source() + ":" + entry.line() + ": element-table " + entry.target()
 					+ " needs a class of the stubs, a type name and the element names.");
 			return;
 		}
@@ -349,7 +526,7 @@ final class JavaBindings {
 			if (named.size() == elementNames.size()) {
 				overrides.applied(entry, true);
 			} else {
-				warnings.add("overrides.txt:" + entry.line() + ": element-table " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": element-table " + entry.target()
 						+ " is left as the stubs give it, which name some of its elements as fields ("
 						+ String.join(", ", named) + ") but not all; check the line against the stubs.");
 			}
@@ -498,7 +675,7 @@ final class JavaBindings {
 		if (type instanceof TypeRef.Named named) {
 			Node node = byLuaName.get(model.resolveAlias(named.name()));
 			if (node != null) {
-				return PACKAGE + "." + node.binaryName();
+				return target.packageName() + "." + node.binaryName();
 			}
 		}
 		warnings.add("The names of type " + type.show() + " have no binding class; they are left out.");
@@ -508,7 +685,7 @@ final class JavaBindings {
 	// ---- Writing classes
 
 	private Shape shape(ApiModel.ClassDef classDef) {
-		if (classDef.binding != ApiModel.Binding.GLOBAL) {
+		if (!hasTable(classDef)) {
 			return Shape.TYPE;
 		}
 		if (overrides.has("instance", classDef.name)) {
@@ -552,9 +729,15 @@ final class JavaBindings {
 	}
 
 	private void writeHolder(StringBuilder out, Node node, String indent) {
-		JavaText.javadoc(out, indent,
-				List.of("The Lua table {@code " + node.luaName() + "}, which holds the classes nested here."));
-		out.append(indent).append("@LuaGlobal(\"").append(node.luaName()).append("\")\n");
+		if (target.isRs3()) {
+			JavaText.javadoc(out, indent,
+					List.of("The Lua table {@code " + node.luaName() + "}, which holds the classes nested here."));
+			out.append(indent).append("@LuaGlobal(\"").append(node.luaName()).append("\")\n");
+		} else {
+			// LuaCATS names a library's types freely, a.b.Name with no table a.b in Lua
+			JavaText.javadoc(out, indent, List.of("Holds the types named {@code " + node.luaName()
+					+ ".}..., for which Lua has no table."));
+		}
 		out.append(indent).append("public ").append(node.parent == null ? "" : "static ").append("final class ")
 				.append(node.javaName).append(" {\n\n");
 		privateConstructor(out, node, indent + "\t");
@@ -627,31 +810,45 @@ final class JavaBindings {
 	private void writeClass(StringBuilder out, Node node, ApiModel.ClassDef classDef, String indent) {
 		Shape shape = shape(classDef);
 		String luaName = luaPath(classDef.name);
+		String path = tablePath(classDef);
 		EventInfo payload = node.payloadOf;
 		List<String> doc = new ArrayList<>(JavaText.lines(classDef.description));
 		doc.addAll(notes(classDef.name));
 		boolean hasNew = classDef.functions.stream()
-				.anyMatch(function -> isConstructor(function) && isBound(classDef, function));
+				.anyMatch(function -> isConstructor(classDef, function) && isBound(classDef, function));
+		// What the RS3 API hands out and takes, a library does
+		String provider = target.isRs3() ? "the API" : "the library";
 		doc.add(switch (shape) {
-			case NAMESPACE -> "<p>Lua: the global table {@code " + luaName + "}.";
-			case INSTANCE -> "<p>Lua: the global table {@code " + luaName + "}" + (hasNew
+			case NAMESPACE -> "<p>Lua: " + tableDescription(node, path) + ".";
+			case INSTANCE -> "<p>Lua: " + tableDescription(node, path) + (hasNew
 					? ", whose {@code new} makes its objects."
-					: "; its objects come from the API.");
+					: "; its objects come from " + provider + ".");
 			case TYPE -> "<p>Lua: values of the type {@code " + luaName + "}" + (isBuiltByPlugin(node, classDef)
-					? ": tables the plugin builds and passes to the API."
-					: ", which the client hands out.");
+					? ": tables the plugin builds and passes to " + provider + "."
+					: ", which " + (target.isRs3() ? "the client" : "the library") + " hands out.");
 		});
 		JavaText.javadoc(out, indent, doc);
 		if (payload != null) {
 			eventAnnotations(out, payload, indent);
 		}
 		memberAnnotations(out, classDef.name, indent);
-		out.append(indent).append(shape == Shape.TYPE ? "@LuaType(\"" : "@LuaGlobal(\"").append(luaName)
-				.append("\")\n");
+		if (node.module != null) {
+			out.append(indent).append("@LuaModule(").append(JavaText.javaString(node.module)).append(")\n");
+		}
+		if (shape != Shape.TYPE && moduleTables.contains(node) && !path.equals(luaName) && !isImplicit(classDef)) {
+			// A module's table whose class has a name of its own, which Lua Language Server annotations use
+			out.append(indent).append("@LuaType(\"").append(luaName).append("\")\n");
+		}
+		out.append(indent).append(shape == Shape.TYPE ? "@LuaType(\"" : "@LuaGlobal(\"")
+				.append(shape == Shape.TYPE ? luaName : path).append("\")\n");
 		String superclass = superclass(classDef, shape);
 		boolean isFinal = shape == Shape.NAMESPACE || payload != null;
+		// The type variables of a class of objects; a namespace's functions are static, which cannot name them
+		String variables = shape == Shape.NAMESPACE || classDef.typeParams.isEmpty()
+				? ""
+				: "<" + String.join(", ", classDef.typeParams) + ">";
 		out.append(indent).append("public ").append(node.parent == null ? "" : "static ")
-				.append(isFinal ? "final " : "").append("class ").append(node.javaName)
+				.append(isFinal ? "final " : "").append("class ").append(node.javaName).append(variables)
 				.append(superclass == null ? "" : " extends " + superclass).append(" {\n\n");
 		String inner = indent + "\t";
 		Map<String, Inherited> inherited = inheritedMethods(classDef);
@@ -659,14 +856,15 @@ final class JavaBindings {
 		constructors(out, node, classDef, shape, inner, signatures);
 		boolean isStatic = shape == Shape.NAMESPACE;
 		for (ApiModel.FieldDef field : classDef.fields) {
-			if (luaName.equals("Event")) {
+			if (target.isRs3() && luaName.equals("Event")) {
 				memberBindings.eventField(out, field, inner);
 			} else if (!overrides.has("skip", classDef.name + "." + field.name())) {
 				memberBindings.field(out, classDef, field, isStatic, inner, signatures);
 			}
 		}
 		for (ApiModel.FunctionDef function : classDef.functions) {
-			if (!(shape == Shape.INSTANCE && isConstructor(function)) && !isLeftToSubclasses(classDef, function)) {
+			if (!(shape == Shape.INSTANCE && isConstructor(classDef, function))
+					&& !isLeftToSubclasses(classDef, function)) {
 				memberBindings.method(out, classDef, function, shape, inner, signatures, inherited);
 			}
 		}
@@ -689,7 +887,7 @@ final class JavaBindings {
 					: TypeParser.parse(String.join(" ", entry.arguments().subList(1, entry.arguments().size())));
 			if (!(type instanceof TypeRef.Function function) || function.params().size() != 1
 					|| function.returns().size() != 1) {
-				warnings.add("overrides.txt:" + entry.line() + ": operator " + entry.target()
+				warnings.add(overrides.source() + ":" + entry.line() + ": operator " + entry.target()
 						+ " needs an operator and a fun(other): result type.");
 				continue;
 			}
@@ -701,7 +899,7 @@ final class JavaBindings {
 			if (!signatures.add(javaName + "(" + paramType.erased() + ")")) {
 				continue;
 			}
-			String receiver = MemberBindings.receiver(owner, false);
+			String receiver = memberBindings.receiver(owner, false);
 			String escaped = JavaText.escape(operator);
 			out.append("\n");
 			JavaText.javadoc(out, indent, List.of(
@@ -715,8 +913,20 @@ final class JavaBindings {
 		}
 	}
 
-	private static boolean isConstructor(ApiModel.FunctionDef function) {
-		return function.name().equals("new") && function.style() == ApiModel.CallStyle.DOT;
+	/**
+	 * Whether a function is the class's constructor: its table's {@code new}, unless that gives an object of another
+	 * class, as {@code Confirm.new} gives a {@code Dialog}, which makes it a function of the table, {@code create}.
+	 */
+	private boolean isConstructor(ApiModel.ClassDef owner, ApiModel.FunctionDef function) {
+		if (!function.name().equals("new") || function.style() != ApiModel.CallStyle.DOT) {
+			return false;
+		}
+		if (function.returns().isEmpty() || !(function.returns().getFirst().type().withoutNil()
+				instanceof TypeRef.Named named)) {
+			return true;
+		}
+		String returned = model.resolveAlias(named.name());
+		return returned.equals(owner.name) || !model.classes.containsKey(returned);
 	}
 
 	/**
@@ -751,10 +961,18 @@ final class JavaBindings {
 		boolean publicNoArguments = false;
 		if (shape == Shape.INSTANCE) {
 			for (ApiModel.FunctionDef function : classDef.functions) {
-				if (!isConstructor(function) || !isBound(classDef, function)) {
+				if (!isConstructor(classDef, function) || !isBound(classDef, function)) {
 					continue;
 				}
-				for (Form form : memberBindings.forms(classDef.name, function)) {
+				TypeMapping.Scope previous =
+						typeMapping.scope(new TypeMapping.Scope(Set.copyOf(classDef.typeParams), classDef));
+				List<Form> forms;
+				try {
+					forms = memberBindings.forms(classDef.name, function);
+				} finally {
+					typeMapping.scope(previous);
+				}
+				for (Form form : forms) {
 					if (!signatures.add("<init>(" + MemberBindings.erased(form.params()) + ")")) {
 						continue;
 					}
@@ -762,7 +980,7 @@ final class JavaBindings {
 					StringBuilder constructor = new StringBuilder();
 					List<String> doc = new ArrayList<>(JavaText.lines(function.description()));
 					doc.addAll(notes(classDef.name + ".new"));
-					doc.add("<p>Lua: {@code " + luaPath(classDef.name) + ".new("
+					doc.add("<p>Lua: {@code " + tablePath(classDef) + ".new("
 							+ MemberBindings.luaArguments(form.params()) + ")}");
 					MemberBindings.paramDocs(doc, form.params());
 					JavaText.javadoc(constructor, indent, doc);
@@ -851,7 +1069,7 @@ final class JavaBindings {
 	 * class the stubs give a global table, whose objects the client makes.
 	 */
 	boolean isBuiltByPlugin(Node node, ApiModel.ClassDef classDef) {
-		return node.payloadOf == null && classDef.binding != ApiModel.Binding.GLOBAL && isConstructible(classDef);
+		return node.payloadOf == null && !hasTable(classDef) && isConstructible(classDef);
 	}
 
 	private boolean isConstructible(ApiModel.ClassDef classDef) {
@@ -875,19 +1093,38 @@ final class JavaBindings {
 			}
 			Shape superShape = shape(superDef);
 			for (ApiModel.FunctionDef function : superDef.functions) {
-				if (superShape == Shape.INSTANCE && isConstructor(function)) {
+				if (superShape == Shape.INSTANCE && isConstructor(superDef, function)) {
 					continue;
 				}
 				boolean isStatic = superShape == Shape.INSTANCE && function.style() == ApiModel.CallStyle.DOT;
-				String javaName = memberBindings.javaMethodName(superDef.name, function.name());
-				for (Form form : memberBindings.forms(superDef.name, function)) {
-					found.putIfAbsent(javaName + "(" + MemberBindings.erased(form.params()) + ")",
-							new Inherited(form.returned().erased(), isStatic));
+				inherit(found, superDef, function, isStatic);
+			}
+			// The methods its fields of function types stand for, as a highlight's activate
+			for (ApiModel.FieldDef field : superDef.fields) {
+				ApiModel.FunctionDef asFunction =
+						memberBindings.fieldFunction(superDef, field, superShape == Shape.NAMESPACE);
+				if (asFunction != null) {
+					inherit(found, superDef, asFunction, superShape == Shape.NAMESPACE);
 				}
 			}
 			superName = superDef.superclass;
 		}
 		return found;
+	}
+
+	private void inherit(Map<String, Inherited> found, ApiModel.ClassDef superDef, ApiModel.FunctionDef function,
+			boolean isStatic) {
+		String javaName = memberBindings.javaMethodName(superDef.name, function.name());
+		TypeMapping.Scope previous = typeMapping.scope(
+				new TypeMapping.Scope(isStatic ? Set.of() : Set.copyOf(superDef.typeParams), superDef));
+		try {
+			for (Form form : memberBindings.forms(superDef.name, function)) {
+				found.putIfAbsent(javaName + "(" + MemberBindings.erased(form.params()) + ")",
+						new Inherited(form.returned().erased(), isStatic));
+			}
+		} finally {
+			typeMapping.scope(previous);
+		}
 	}
 
 	/** Whether one binding class extends another, directly or further up, by their Java references. */

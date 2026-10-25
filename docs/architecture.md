@@ -142,7 +142,9 @@ permission check. When the client changes one of them, the compiler changes ther
 
 ## The bindings generator
 
-The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` runs it.
+The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` runs it. It writes the RS3 bindings,
+and the bindings of the Lua libraries a plugin uses, each from its LuaCATS types: a `BindingsTarget` says which, and
+only the RS3 API's have its events, hooks, constant namespaces and `Globals`.
 
 1. `Stubs` reads a checkout. `LuaCatsReader` turns the LuaCATS files into an `ApiModel`: `LuaSyntax` parses each
    file as Lua 5.4, from the tokens of `LuaLexer`, comments included, and the reader reads the annotations before
@@ -152,16 +154,22 @@ The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` r
 2. `Overrides` reads `overrides.txt`, which states what the stubs do not: which tables are singletons, which values
    can be `nil`, which fields are read-only or hand out copies, which members need a permission or draw moderation's
    closer review, and the Java names for Lua names Java cannot use; its notes add what the client does that the
-   docs do not say to a member's Javadoc. The file's own header describes its format. `ModelCorrections` applies its
+   docs do not say to a member's Javadoc. The file's own header describes its format. A library's overrides file, if
+   the plugin keeps one, takes the same lines, but for those of the client alone. `ModelCorrections` applies the
    corrections to the model.
 3. `JavaBindings` writes the sources, with `MemberBindings` for fields and methods, `TypeMapping` for types,
    `ConstantTables` for enums, hooks and constant namespaces, and `SourceFiles` for the files that do not come from a
-   table. The plugin's language (`BindingsGenerator.Language`) decides how a member that takes a hook types the
-   callback: one generic method, from which javac types a lambda, or for Kotlin one method for each callback.
+   table. A global table is a class named like it; a library's module is a class named as its `require` binds it,
+   annotated `@LuaModule`, and the tables it holds in fields are nested in it, so that each class's `@LuaGlobal` path
+   is the one Lua reaches it by. A type a library names but does not declare resolves to the RS3 bindings' class,
+   then to another library's; LuaCATS generics become Java's. The plugin's language (`BindingsGenerator.Language`)
+   decides how a member that takes a hook types the callback: one generic method, from which javac types a lambda,
+   or for Kotlin one method for each callback.
 4. The constant namespaces hold about half a million names; `config.Loc` alone has more than one class can hold.
    `ConstantChunks` writes them straight to class files with the JDK's ClassFile API, as a chain of chunk classes
    that each extend the one before, which is also far faster than compiling them from Java. `Jars` packs everything
-   into reproducible jars.
+   into reproducible jars: the libraries' sources compile together, against the RS3 jar, and each library's classes
+   go into a jar of their own.
 
 `ClientAudit`, in a source set of its own that is not published, compares the members the client's objects have, as
 a development plugin logs them from their metatables, with the bindings: `./gradlew :oneiro-bindings-gen:auditClient

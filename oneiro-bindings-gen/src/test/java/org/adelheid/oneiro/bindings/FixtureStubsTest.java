@@ -136,7 +136,7 @@ class FixtureStubsTest {
 			overrides = Overrides.parse(new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
 		}
 		BindingsGenerator.Result run = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings-caught-up"),
-				overrides, BindingsGenerator.Language.JAVA);
+				overrides, BindingsGenerator.Language.JAVA, List.of());
 		List<String> notes = run.notes().stream()
 				.map(note -> note.replaceFirst("^overrides\\.txt:\\d+: ", ""))
 				.toList();
@@ -180,7 +180,7 @@ class FixtureStubsTest {
 			overrides = Overrides.parse(new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
 		}
 		BindingsGenerator.Result run = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings-notes"),
-				overrides, BindingsGenerator.Language.JAVA);
+				overrides, BindingsGenerator.Language.JAVA, List.of());
 		String ui = source(run, "ui.java");
 		assertTrue(ui.contains("\t * <p>In the client: Made by the client only.\n\t *\n\t * <p>Lua: values of the type"
 				+ " {@code ui.Text}, which the client hands out.\n\t */\n\t@LuaType(\"ui.Text\")"), ui);
