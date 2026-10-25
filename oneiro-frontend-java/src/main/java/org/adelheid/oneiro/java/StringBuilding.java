@@ -18,6 +18,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import org.adelheid.oneiro.lowering.ClientApi;
 import org.adelheid.oneiro.lowering.FormatTranslation;
 import org.adelheid.oneiro.lowering.Helper;
 import org.adelheid.oneiro.lowering.SourceLanguage;
@@ -88,10 +89,7 @@ final class StringBuilding {
 					.orElseThrow();
 			return toText(value);
 		}
-		List<Expression> callArguments = new ArrayList<>();
-		callArguments.add(Expression.string(template.toString()));
-		callArguments.addAll(arguments);
-		return new Expression.Call(name("formatStr"), callArguments);
+		return ClientApi.formatStr(template.toString(), arguments);
 	}
 
 	/** The text of a string or char literal, which goes into the template as it is; null for anything else. */
@@ -151,7 +149,7 @@ final class StringBuilding {
 			return body.expression(value);
 		}
 		if (types().isFloating(type)) {
-			return call(name("formatStr"), Expression.string("{}"), body.expression(value));
+			return ClientApi.formatStr("{}", List.of(body.expression(value)));
 		}
 		if (types().isBoolean(type) || type.getKind() == TypeKind.NULL) {
 			return call(name("tostring"), body.expression(value));
@@ -166,7 +164,7 @@ final class StringBuilding {
 			return body.expression(value);
 		}
 		if (types().isFloating(type)) {
-			return call(name("formatStr"), Expression.string("{}"), body.expression(value));
+			return ClientApi.formatStr("{}", List.of(body.expression(value)));
 		}
 		if (types().isIntegral(type) || types().isBoolean(type) || type.getKind() == TypeKind.NULL) {
 			return call(name("tostring"), body.expression(value));
@@ -253,10 +251,9 @@ final class StringBuilding {
 	 */
 	Expression apiEnumName(ExpressionTree value, TypeElement api, Tree where) {
 		if (!JavaTypes.hasAnnotation(api, JavaTypes.LUA_FROM_ID)) {
-			throw new Rejection(where, "The client's " + api.getSimpleName() + " table has no FromID to give a value's"
-					+ " name; compare the value with " + api.getSimpleName() + "'s constants instead.");
+			throw new Rejection(where, ClientApi.noFromId(api.getSimpleName().toString()));
 		}
-		return call(field(body.api().table(api, where), "FromID"), body.expression(value));
+		return ClientApi.fromId(body.api().table(api, where), body.expression(value));
 	}
 
 	/**

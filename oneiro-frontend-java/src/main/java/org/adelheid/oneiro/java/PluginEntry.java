@@ -20,6 +20,7 @@ import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
+import org.adelheid.oneiro.lowering.ClientApi;
 import org.adelheid.oneiro.lowering.PluginLifecycle;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Comment;
@@ -141,8 +142,8 @@ final class PluginEntry {
 			public Void visitMethod(MethodTree node, Void unused) {
 				if (JavaTypes.isSubscriber(unit.element(node))) {
 					unit.error(unit.start(node), "Only the plugin class's methods are subscribed with @Subscribe;"
-							+ " subscribe this one with Event.<Name>.Subscribe(name, callback), and unsubscribe it when"
-							+ " it is done.");
+							+ " subscribe this one with " + ClientApi.EVENT + ".<Name>.Subscribe(name, callback), and"
+							+ " unsubscribe it when it is done.");
 				}
 				return null;
 			}
@@ -177,7 +178,7 @@ final class PluginEntry {
 			List<Block.Entry> entries = new ArrayList<>();
 			Set<Element> referenced = new HashSet<>();
 			for (Subscription subscription : subscriptions) {
-				unit.useGlobal("Event");
+				unit.useGlobal(ClientApi.EVENT);
 				Statement subscribe = PluginLifecycle.subscribe(subscription.event(),
 						prefix + subscription.method().getName(), subscription.local());
 				entries.add(new Block.Entry(subscribe,
@@ -189,7 +190,7 @@ final class PluginEntry {
 		if (!subscriptions.isEmpty() || shutDown != null || dev) {
 			List<Block.Entry> body = new ArrayList<>();
 			for (Subscription subscription : subscriptions) {
-				unit.useGlobal("Event");
+				unit.useGlobal(ClientApi.EVENT);
 				body.add(Block.Entry.of(PluginLifecycle.unsubscribe(subscription.event(),
 						prefix + subscription.method().getName())));
 			}

@@ -2,6 +2,7 @@ package org.adelheid.oneiro.kotlin
 
 import com.intellij.psi.PsiElement
 import org.adelheid.oneiro.api.LuaConstants
+import org.adelheid.oneiro.lowering.ClientApi
 import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.LuaNames
@@ -128,12 +129,10 @@ internal class ApiCalls(private val unit: FileLowering) {
 	 * `FromID` turns into the name, `GameState.FromID(state)`. A table without `FromID` gives its values no names.
 	 */
 	fun enumName(where: PsiElement, value: Expression, owner: KaClassSymbol): Expression {
-		val name = owner.classId?.shortClassName?.asString()
 		if (!annotations.has(owner, Annotations.LUA_FROM_ID)) {
-			throw Rejection(where, "The client's $name table has no FromID to give a value's name; compare the value"
-				+ " with $name's constants instead.")
+			throw Rejection(where, ClientApi.noFromId(owner.classId?.shortClassName?.asString().orEmpty()))
 		}
-		return Expression.call(Expression.field(table(global(owner, where)), "FromID"), value)
+		return ClientApi.fromId(table(global(owner, where)), value)
 	}
 
 	/** `ui.Text(parent)` as the table's constructor, `ui.Text.new(parent)`; a `@LuaType` as a table to fill in. */
@@ -188,7 +187,7 @@ internal class ApiCalls(private val unit: FileLowering) {
 		if (permission != null && permission !in unit.options.plugin.permissions()) {
 			throw Rejection(where, "$display needs the $permission permission, which the manifest does not declare; add"
 				+ " it to the build, oneiro { plugin { permissions { optional($permission) } } }, and check"
-				+ " CurrentPlugin.HasPermission(PluginPermissions.$permission) before using it.")
+				+ " ${ClientApi.permissionCheck(permission)} before using it.")
 		}
 		if (member !is KaJavaFieldSymbol) {
 			unit.reviews.check(member, display, where)

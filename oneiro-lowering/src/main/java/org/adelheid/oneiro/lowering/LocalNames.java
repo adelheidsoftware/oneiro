@@ -12,8 +12,8 @@ public final class LocalNames {
 
 	/** Lua globals that generated code calls, which a local of the same name would hide. */
 	private static final Set<String> GLOBALS = Set.of(
-			"error", "formatStr", "getmetatable", "ipairs", "math", "next", "pairs", "pcall", "print", "require",
-			"select", "setmetatable", "string", "table", "tonumber", "tostring", "type");
+			"error", ClientApi.FORMAT_STR, "getmetatable", "ipairs", "math", "next", "pairs", "pcall", "print",
+			"require", "select", "setmetatable", "string", "table", "tonumber", "tostring", "type");
 	/** What a method calls its object in the Lua, which a Java local of that name would hide: a hook's self. */
 	private static final String SELF = "self";
 

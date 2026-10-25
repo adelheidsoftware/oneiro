@@ -3,6 +3,7 @@ package org.adelheid.oneiro.plugin;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -11,6 +12,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -39,8 +41,9 @@ public record Manifest(
 		boolean settingsIcon,
 		boolean ribbonIcon) {
 
-	/** The permissions a plugin may request. */
-	public static final Set<String> PERMISSIONS = Set.of("httpAccess", "chatAccess", "trackingAccess");
+	/** The permissions a plugin may request, by their names in {@code plugin.json}. */
+	public static final Set<String> PERMISSIONS =
+			Arrays.stream(Permission.values()).map(Permission::manifestName).collect(Collectors.toUnmodifiableSet());
 
 	private static final Pattern ID = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
 	private static final Pattern VERSION = Pattern.compile("\\d+(\\.\\d+)*");
@@ -121,8 +124,8 @@ public record Manifest(
 		}
 		for (String permission : permissions()) {
 			if (!PERMISSIONS.contains(permission)) {
-				problems.add("The permission " + permission + " is not one the client knows; use httpAccess,"
-						+ " chatAccess or trackingAccess.");
+				problems.add("The permission " + permission + " is not one the client knows; use "
+						+ permissionChoices() + ".");
 			}
 			if (requiredPermissions.contains(permission) && optionalPermissions.contains(permission)) {
 				problems.add("The permission " + permission + " is both required and optional; keep one, preferably"
@@ -138,7 +141,7 @@ public record Manifest(
 				problems.add("The URL " + url.getValue() + " must be an http or https address with a host.");
 			}
 		}
-		boolean http = permissions().contains("httpAccess");
+		boolean http = permissions().contains(Permission.HTTP_ACCESS.manifestName());
 		if (http && urls.isEmpty()) {
 			problems.add("The httpAccess permission only reaches the manifest's base URLs; add one: oneiro { plugin {"
 					+ " urls { url(\"prices\", \"https://prices.example.org\") } } }.");
@@ -165,6 +168,12 @@ public record Manifest(
 						+ " local plugin's folder name.");
 			}
 		}
+	}
+
+	/** The permissions' names as a choice: {@code httpAccess, chatAccess or trackingAccess}. */
+	private static String permissionChoices() {
+		List<String> names = Arrays.stream(Permission.values()).map(Permission::manifestName).toList();
+		return String.join(", ", names.subList(0, names.size() - 1)) + " or " + names.get(names.size() - 1);
 	}
 
 	static boolean isLuaName(String name) {

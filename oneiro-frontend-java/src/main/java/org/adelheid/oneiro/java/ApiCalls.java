@@ -16,6 +16,7 @@ import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
+import org.adelheid.oneiro.lowering.ClientApi;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Expression;
 import org.adelheid.oneiro.lua.LuaNames;
@@ -242,8 +243,7 @@ final class ApiCalls {
 		if (permission != null && !unit().plugin.permissions().contains(permission)) {
 			throw new Rejection(where, display(member) + " needs the " + permission + " permission, which the manifest"
 					+ " does not declare; add it to the build, oneiro { plugin { permissions { optional(" + permission
-					+ ") } } }, and check CurrentPlugin.HasPermission(PluginPermissions." + permission + ")"
-					+ " before using it.");
+					+ ") } } }, and check " + ClientApi.permissionCheck(permission) + " before using it.");
 		}
 		if (member.getKind() != ElementKind.FIELD) {
 			unit().reviewWarnings().check(member, display(member), where);

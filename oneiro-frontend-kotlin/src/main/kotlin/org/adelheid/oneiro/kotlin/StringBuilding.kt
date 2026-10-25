@@ -1,5 +1,6 @@
 package org.adelheid.oneiro.kotlin
 
+import org.adelheid.oneiro.lowering.ClientApi
 import org.adelheid.oneiro.lowering.FormatTranslation
 import org.adelheid.oneiro.lowering.Helper
 import org.adelheid.oneiro.lowering.SourceLanguage
@@ -78,8 +79,7 @@ internal class StringBuilding(private val body: BodyLowering) {
 			// "" + value, or "$value": the value as text
 			return toText(parts.first { it.value != null }.value!!)
 		}
-		unit.useGlobal("formatStr")
-		return Expression.Call(Expression.name("formatStr"), listOf(Expression.string(template.toString())) + arguments)
+		return ClientApi.formatStr(template.toString(), arguments)
 	}
 
 	/** The pieces of a template or of `a + b + c`, following only the `+` that join strings, in order. */
@@ -154,7 +154,7 @@ internal class StringBuilding(private val body: BodyLowering) {
 		val type = with(unit.session) { value.expressionType } ?: throw Rejection(value, EMPTY)
 		return when {
 			types.isString(type) && !types.isNullable(type) || types.isIntegral(type) -> body.expression(value)
-			types.isFloating(type) -> call("formatStr", Expression.string("{}"), body.expression(value))
+			types.isFloating(type) -> ClientApi.formatStr("{}", listOf(body.expression(value)))
 			types.isBoolean(type) || isNull(value) || types.isString(type) -> call("tostring", body.expression(value))
 			else -> objectText(value, type)
 		}
@@ -165,7 +165,7 @@ internal class StringBuilding(private val body: BodyLowering) {
 		val type = with(unit.session) { value.expressionType } ?: throw Rejection(value, EMPTY)
 		return when {
 			types.isString(type) && !types.isNullable(type) -> body.expression(value)
-			types.isFloating(type) -> call("formatStr", Expression.string("{}"), body.expression(value))
+			types.isFloating(type) -> ClientApi.formatStr("{}", listOf(body.expression(value)))
 			types.isIntegral(type) || types.isBoolean(type) || isNull(value) || types.isString(type) ->
 				call("tostring", body.expression(value))
 			else -> objectText(value, type)
@@ -266,7 +266,6 @@ internal class StringBuilding(private val body: BodyLowering) {
 			override fun expression(index: Int): Expression = body.expression(values[index])
 		}
 		try {
-			unit.useGlobal("formatStr")
 			return FormatTranslation.translate(text, translated, SourceLanguage.KOTLIN)
 		} catch (problem: FormatTranslation.Problem) {
 			val at = if (problem.value() < 0) where else values[problem.value()]

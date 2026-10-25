@@ -135,10 +135,7 @@ public final class FormatTranslation {
 			}
 		}
 		template.append(escapeBraces(format.substring(textStart)));
-		List<Expression> callArguments = new ArrayList<>();
-		callArguments.add(Expression.string(template.toString()));
-		callArguments.addAll(formatArguments);
-		return new Expression.Call(name("formatStr"), callArguments);
+		return ClientApi.formatStr(template.toString(), formatArguments);
 	}
 
 	/** One translated specifier: the options after the colon, and the argument it formats. */
@@ -151,8 +148,8 @@ public final class FormatTranslation {
 			int value, boolean numbered) {
 		Kind kind = values.kind(value);
 		if (flags.contains(",")) {
-			throw new Problem(-1, false, "The client's formatStr adds no digit grouping, so %,d cannot print as "
-					+ language + " prints it.");
+			throw new Problem(-1, false, "The client's " + ClientApi.FORMAT_STR + " adds no digit grouping, so %,d"
+					+ " cannot print as " + language + " prints it.");
 		}
 		return switch (conversion) {
 			case "s" -> new Placeholder(colon(alignment(flags, width) + nullToEmpty(precision)),
@@ -211,8 +208,8 @@ public final class FormatTranslation {
 						: values.expression(value);
 				yield new Placeholder(colon(alignment(flags, width)), truth);
 			}
-			case "g", "G" -> throw new Problem(-1, false, "The client's formatStr drops trailing zeros for %g, which "
-					+ language + " keeps; use %f or %e.");
+			case "g", "G" -> throw new Problem(-1, false, "The client's " + ClientApi.FORMAT_STR
+					+ " drops trailing zeros for %g, which " + language + " keeps; use %f or %e.");
 			case "t", "T" -> throw new Problem(-1, false, "The client has no os library to read the calendar from, so"
 					+ " %t has nothing to format; format the parts yourself with %d.");
 			default -> throw new Problem(-1, true, "The format specifier %" + conversion);

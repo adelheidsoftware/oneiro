@@ -37,7 +37,8 @@ public final class SettingsFunctions {
 
 	/** The line a settings module's header ends with, saying where its settings are kept. */
 	public static Comment storageNote(String group) {
-		return Comment.line("Each setting is kept in PersistentDB under \"" + group + ".\" and its key.");
+		return Comment.line("Each setting is kept in " + ClientApi.PERSISTENT_DB + " under \"" + group
+				+ ".\" and its key.");
 	}
 
 	/** The comment above a setting's getter or setter: its name, and its description when it has one. */
@@ -52,7 +53,8 @@ public final class SettingsFunctions {
 	 * @param enumTable the table of the plugin enum whose constants the setting holds by name, or null
 	 */
 	public static Block getter(String key, Kind kind, Expression fallback, @Nullable Expression enumTable) {
-		Expression stored = Expression.methodCall(name("PersistentDB"), "Get" + kind.suffix, Expression.string(key));
+		Expression stored =
+				Expression.methodCall(name(ClientApi.PERSISTENT_DB), "Get" + kind.suffix, Expression.string(key));
 		if (enumTable != null) {
 			// Only a name that is one of the enum's constants reads back as a value
 			Expression constant = new Expression.Index(enumTable, stored);
@@ -71,8 +73,8 @@ public final class SettingsFunctions {
 
 	/** A setter's body, which stores the value with the typed accessor of the setting's kind. */
 	public static Block setter(String key, Kind kind, Expression value) {
-		Expression store = Expression.methodCall(name("PersistentDB"), "Set" + kind.suffix, Expression.string(key),
-				value);
+		Expression store = Expression.methodCall(name(ClientApi.PERSISTENT_DB), "Set" + kind.suffix,
+				Expression.string(key), value);
 		return Block.of(new Statement.CallStatement(store));
 	}
 }

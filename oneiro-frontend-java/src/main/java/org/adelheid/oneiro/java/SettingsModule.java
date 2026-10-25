@@ -17,6 +17,7 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import org.adelheid.oneiro.lowering.ClientApi;
 import org.adelheid.oneiro.lowering.Diagnostic;
 import org.adelheid.oneiro.lowering.LuaModule;
 import org.adelheid.oneiro.lowering.SettingsFunctions;
@@ -63,7 +64,7 @@ final class SettingsModule {
 			header.add(Comment.line(""));
 		}
 		header.add(SettingsFunctions.storageNote(group));
-		unit.useGlobal("PersistentDB");
+		unit.useGlobal(ClientApi.PERSISTENT_DB);
 		List<UnitLowering.Member> members = new ArrayList<>();
 		int cursor = unit.start(type);
 		for (Tree member : type.getMembers()) {
@@ -165,6 +166,6 @@ final class SettingsModule {
 			return new Accessor(SettingsFunctions.Kind.STRING, types.pluginType(type));
 		}
 		throw new Rejection(where, "A setting is a boolean, an int or long, a double, a String or an enum of the"
-				+ " plugin's; PersistentDB keeps those with typed accessors.");
+				+ " plugin's; " + ClientApi.PERSISTENT_DB + " keeps those with typed accessors.");
 	}
 }

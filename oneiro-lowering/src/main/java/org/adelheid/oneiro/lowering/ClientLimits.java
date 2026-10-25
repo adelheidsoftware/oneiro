@@ -10,8 +10,8 @@ import org.jspecify.annotations.Nullable;
  */
 public final class ClientLimits {
 
-	private static final String COUNT_TICKS = "count the ticks of Event.ServerLogic, about every 0.6 seconds, or of"
-			+ " Event.Logic, 50 a second.";
+	private static final String COUNT_TICKS = "count the ticks of " + ClientApi.EVENT + ".ServerLogic, about every"
+			+ " 0.6 seconds, or of " + ClientApi.EVENT + ".Logic, 50 a second.";
 
 	/** The reason a plugin cannot start threads or schedule work. */
 	public static final String NO_THREADS = "Plugins run on the client's one thread and cannot start threads or"

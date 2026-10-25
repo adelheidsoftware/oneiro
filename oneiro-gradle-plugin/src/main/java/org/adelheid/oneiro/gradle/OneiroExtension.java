@@ -2,6 +2,7 @@ package org.adelheid.oneiro.gradle;
 
 import java.io.File;
 import javax.inject.Inject;
+import org.adelheid.oneiro.plugin.Permission;
 import org.gradle.api.Action;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.RegularFileProperty;

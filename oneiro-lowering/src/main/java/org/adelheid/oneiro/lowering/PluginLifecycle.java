@@ -30,13 +30,13 @@ public final class PluginLifecycle {
 
 	/** {@code Event.Name.Subscribe("<id>.<method>", method)}. */
 	public static Statement subscribe(String event, String reference, String function) {
-		return new Statement.CallStatement(call(field(field(name("Event"), event), "Subscribe"),
+		return new Statement.CallStatement(call(field(field(name(ClientApi.EVENT), event), "Subscribe"),
 				Expression.string(reference), name(function)));
 	}
 
 	/** {@code Event.Name.Unsubscribe("<id>.<method>")}. */
 	public static Statement unsubscribe(String event, String reference) {
-		return new Statement.CallStatement(call(field(field(name("Event"), event), "Unsubscribe"),
+		return new Statement.CallStatement(call(field(field(name(ClientApi.EVENT), event), "Unsubscribe"),
 				Expression.string(reference)));
 	}
 
@@ -57,16 +57,16 @@ public final class PluginLifecycle {
 			statements.add(Block.Entry.of(Statement.ifThen(defined, Block.of(shutDownFirst))));
 		}
 		statements.addAll(body);
-		Statement function = new Statement.FunctionDeclaration(List.of("PluginShutdown"), null,
+		Statement function = new Statement.FunctionDeclaration(List.of(ClientApi.PLUGIN_SHUTDOWN), null,
 				FunctionBody.of(List.of(), new Block(statements, closing)));
 		List<Block.Entry> entries = new ArrayList<>();
 		if (dev) {
-			Statement saved = new Statement.Local(List.of("pluginShutdown"), List.of(name("PluginShutdown")));
+			Statement saved = new Statement.Local(List.of("pluginShutdown"), List.of(name(ClientApi.PLUGIN_SHUTDOWN)));
 			Comment note = Comment.line("The plugin's own shutdown, which runs first.");
 			entries.add(new Block.Entry(saved, new Trivia(true, List.of(note), null), null));
 		}
-		Comment global = Comment.line(
-				"The client calls PluginShutdown when the plugin is disabled, and requires it to be global.");
+		Comment global = Comment.line("The client calls " + ClientApi.PLUGIN_SHUTDOWN
+				+ " when the plugin is disabled, and requires it to be global.");
 		entries.add(new Block.Entry(function, new Trivia(!dev, List.of(global), null), origin));
 		return entries;
 	}

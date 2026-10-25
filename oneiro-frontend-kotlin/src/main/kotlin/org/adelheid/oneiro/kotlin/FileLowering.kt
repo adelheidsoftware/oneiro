@@ -4,6 +4,7 @@ import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.util.PsiTreeUtil
+import org.adelheid.oneiro.lowering.ClientApi
 import org.adelheid.oneiro.lowering.Diagnostic
 import org.adelheid.oneiro.lowering.Helper
 import org.adelheid.oneiro.lowering.LocalNames
@@ -404,7 +405,8 @@ internal class FileLowering(
 			val owner = function.containingClassOrObject?.let { with(session) { it.classSymbol } }
 			if (hasAnnotation(function, Annotations.SUBSCRIBE) && (owner == null || !isEntryClass(owner))) {
 				error(function, "Only the plugin class's functions are subscribed with @Subscribe; subscribe this one"
-					+ " with Event.<Name>.Subscribe(name, callback), and unsubscribe it when it is done.")
+					+ " with ${ClientApi.EVENT}.<Name>.Subscribe(name, callback), and unsubscribe it when it is"
+					+ " done.")
 			}
 		}
 	}

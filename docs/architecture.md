@@ -50,8 +50,8 @@ plugin's Kotlin ──► kotlinc ───────────────�
 | `oneiro-lua-tree` | Yes | The Lua tree (`Chunk`, `Statement`, `Expression`), the printer and the line map. It knows nothing about Java. |
 | `oneiro-lua-runner` | Yes | Runs Lua 5.4: the bundled Lua 5.4.8 through LuaJava, or an installed interpreter, and the plugin's Lua tests. |
 | `oneiro-bindings-gen` | Yes | Generates the RS3 bindings from the stubs and `overrides.txt`. |
-| `oneiro-plugin-model` | Yes | The plugin apart from its code: the manifest, the checks of the folder that ships, the typed `Resources` and `Urls` classes, the compiler's settings, and the line maps and console errors behind `explainError`. |
-| `oneiro-lowering` | Yes | What lowering is apart from the source language, shared by both front ends: the compile result and its diagnostics, Lua modules, the plugin facts the code is checked against, the layout of a module's members, the Lua helpers, the settings functions and the plugin lifecycle, module paths, local names, comment text, doc annotations, index arithmetic, the review warnings' wording, what the client has nothing for (a clock and threads), the Lua of `LuaString`, the opening of a reference's small function where it is called, the folding of a table's field assignments into its constructor, and the writing of the Lua and its line map. |
+| `oneiro-plugin-model` | Yes | The plugin apart from its code: the manifest and the permissions it may request, the checks of the folder that ships, the typed `Resources` and `Urls` classes, the compiler's settings, and the line maps and console errors behind `explainError`. |
+| `oneiro-lowering` | Yes | What lowering is apart from the source language, shared by both front ends: the compile result and its diagnostics, Lua modules, the plugin facts the code is checked against, the layout of a module's members, the Lua helpers, the settings functions and the plugin lifecycle, module paths, local names, comment text, doc annotations, index arithmetic, the review warnings' wording, what the client has nothing for (a clock and threads), the parts of the client's API the compiler writes on its own, the Lua of `LuaString`, the opening of a reference's small function where it is called, the folding of a table's field assignments into its constructor, and the writing of the Lua and its line map. |
 | `oneiro-frontend-java` | Yes | The Java front end: javac's trees to the Lua tree, and the javac plugin. |
 | `oneiro-frontend-kotlin` | Yes | The Kotlin front end, in Kotlin: the Kotlin Analysis API's trees to the Lua tree, and the entry the Gradle plugin's worker calls. Its jar bundles the Analysis API and the IntelliJ platform modules it needs, which JetBrains publishes only to its own repositories. In progress. |
 | `oneiro-gradle-plugin` | Yes | The Gradle plugin `org.adelheid.oneiro`: the `oneiro { }` block and the tasks. |
@@ -128,6 +128,11 @@ settings the javac plugin reads and writes the Lua and its line map to the same 
 What lowering is apart from the language, such as the layout of a module, the settings functions and the plugin's
 lifecycle, lives in `oneiro-lowering`, where both front ends use it; more moves there as the Kotlin front end needs it.
 
+The RS3 API reaches the compiler as the bindings' annotations, so a member the client adds, changes or removes needs
+only regenerated bindings. The few parts of the API the compiler writes on its own are named only in `ClientApi` in
+`oneiro-lowering`: the `Event` table, `PersistentDB`, `PluginShutdown`, `formatStr`, an enum table's `FromID` and the
+permission check. When the client changes one of them, the compiler changes there.
+
 ## The bindings generator
 
 The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` runs it.
@@ -152,7 +157,9 @@ The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` r
 - **Conformance.** Each folder under `conformance/src/test/resources/cases/` is one case. `ConformanceTest` compiles
   its `input/` and compares the Lua with the hand-written `expected/` files, or the errors with `diagnostics.txt`.
   It then runs `check.lua` against the generated modules on Lua 5.4, and checks that the expected Lua is formatted as
-  StyLua formats it. Every row of [java-subset.md](java-subset.md) has a case.
+  StyLua formats it. Every row of [java-subset.md](java-subset.md) has a case. `ClientNamesTest` checks that no
+  source of the front ends or of `oneiro-lowering` other than `ClientApi` spells one of the client's names in a
+  string.
 - **Unit tests** cover the printer and the line map, the bundled Lua, the bindings generator (on a small stubs
   fixture, and on a checkout of runescape-api-stubs when there is one), the manifest, the package checks and the
   typed sources.

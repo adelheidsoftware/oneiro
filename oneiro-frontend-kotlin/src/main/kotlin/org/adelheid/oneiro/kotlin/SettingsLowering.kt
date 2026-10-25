@@ -1,5 +1,6 @@
 package org.adelheid.oneiro.kotlin
 
+import org.adelheid.oneiro.lowering.ClientApi
 import org.adelheid.oneiro.lowering.LuaModule
 import org.adelheid.oneiro.lowering.SettingsFunctions
 import org.adelheid.oneiro.lua.Block
@@ -33,7 +34,7 @@ internal class SettingsLowering(private val unit: FileLowering, private val type
 			lines += Comment.line("")
 		}
 		lines += SettingsFunctions.storageNote(group)
-		unit.useGlobal("PersistentDB")
+		unit.useGlobal(ClientApi.PERSISTENT_DB)
 		val members = mutableListOf<Member>()
 		for (member in type.declarations) {
 			try {
@@ -107,7 +108,7 @@ internal class SettingsLowering(private val unit: FileLowering, private val type
 		unit.types.isFloating(type) -> SettingsFunctions.Kind.FLOAT
 		unit.types.isString(type) || pluginEnum(type) != null -> SettingsFunctions.Kind.STRING
 		else -> throw Rejection(where, "A setting is a Boolean, an Int or Long, a Double, a String or an enum of the"
-			+ " plugin's; PersistentDB keeps those with typed accessors.")
+			+ " plugin's; ${ClientApi.PERSISTENT_DB} keeps those with typed accessors.")
 	}
 
 	/** The plugin's enum a setting holds, by its constants' names; null for any other type. */

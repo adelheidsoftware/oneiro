@@ -38,6 +38,9 @@ All notable changes to Oneiro are listed here. The format follows
   names a file in its errors only by the file's first line, so its errors now say which file they come from.
 - The RS3 bindings declare the values a function takes any number of, such as `log`'s, as nullable, as Lua's `...`
   takes nil.
+- `Permission`, the type of the build's `permissions { }` block, moved from `org.adelheid.oneiro.gradle` to
+  `org.adelheid.oneiro.plugin`. Build scripts that write `optional(chatAccess)` need no change; one that imports the
+  type imports it from its new package.
 
 ### Fixed
 

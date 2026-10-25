@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.kotlin
 
 import com.intellij.psi.util.PsiTreeUtil
+import org.adelheid.oneiro.lowering.ClientApi
 import org.adelheid.oneiro.lowering.LuaModule
 import org.adelheid.oneiro.lowering.PluginLifecycle
 import org.adelheid.oneiro.lua.Block
@@ -190,7 +191,7 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 			members += Member(listOf(startUp), false, null, entries, listOf(), References.of(unit, startUp))
 		}
 		if (subscriptions.isNotEmpty()) {
-			unit.useGlobal("Event")
+			unit.useGlobal(ClientApi.EVENT)
 			val entries = subscriptions.mapIndexed { index, subscription ->
 				val statement = PluginLifecycle.subscribe(subscription.event, prefix + subscription.function.name,
 					unit.names.luaName(subscription.function.name!!))

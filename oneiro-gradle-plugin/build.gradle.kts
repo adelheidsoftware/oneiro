@@ -12,7 +12,8 @@ plugins {
 description = "The Gradle plugin that builds RS3 plugins written in Java with Oneiro."
 
 dependencies {
-	implementation(project(":oneiro-plugin-model"))
+	// The plugin model holds the Permission values the oneiro { } block hands out
+	api(project(":oneiro-plugin-model"))
 	testImplementation(gradleTestKit())
 }
 

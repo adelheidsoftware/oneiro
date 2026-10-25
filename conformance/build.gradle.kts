@@ -31,6 +31,11 @@ tasks.test {
 	val stubsFixture = project(":oneiro-bindings-gen").file("src/test/stubs")
 	systemProperty("oneiro.stubsFixture", stubsFixture.absolutePath)
 	inputs.dir(stubsFixture).withPropertyName("stubsFixture")
+	// ClientNamesTest reads the compiler's own sources
+	val compilerSources = listOf("oneiro-lowering", "oneiro-frontend-java", "oneiro-frontend-kotlin")
+		.map { project(":$it").file("src/main") }
+	systemProperty("oneiro.compilerSources", compilerSources.joinToString(File.pathSeparator) { it.absolutePath })
+	inputs.files(compilerSources).withPropertyName("compilerSources").withPathSensitivity(PathSensitivity.RELATIVE)
 	// BlueprintHelperTest runs Blueprint-Helper's own tests, when that repository sits next to Oneiro's
 	val blueprintHelper = rootProject.file("../Blueprint-Helper")
 	systemProperty("oneiro.blueprintHelper", blueprintHelper.absolutePath)

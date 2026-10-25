@@ -1,4 +1,4 @@
-package org.adelheid.oneiro.gradle;
+package org.adelheid.oneiro.plugin;
 
 /** The permissions a plugin may request in its manifest, each of which puts it under review on Mod.io. */
 public enum Permission {
