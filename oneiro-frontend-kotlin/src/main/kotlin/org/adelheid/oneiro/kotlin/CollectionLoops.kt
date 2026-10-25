@@ -15,7 +15,6 @@ import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtConstantExpression
-import org.jetbrains.kotlin.psi.KtDestructuringDeclarationEntry
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
@@ -44,7 +43,8 @@ import org.jetbrains.kotlin.psi.KtQualifiedExpression
  * Kotlin runs each step over the whole collection before the next, and the loop runs every step on one element
  * before the next element, which differs only for lambdas whose side effects depend on that order. A loop is
  * statements, so a chain is the whole value of a local, an assignment or a return, or a `forEach` statement of its
- * own. Each lambda's parameter stands for the loop's current element, so the lambdas' code reads as written.
+ * own. Each lambda's parameter stands for the loop's current element, so the lambdas' code reads as written. A chain
+ * over a map's entries walks their keys and values, as [MapEntries] describes.
  */
 internal class CollectionLoops(private val body: BodyLowering) {
 
@@ -204,7 +204,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 	private enum class Collected { LIST, SET, ORDERED_SET }
 
 	/** One chain being lowered. */
-	private inner class Fusion(private val chain: Chain, private val destination: Destination) {
+	inner class Fusion(val chain: Chain, private val destination: Destination) {
 
 		// The locals the loop needs, which go before it: functions it calls, and what distinct, take and drop keep
 		private val before = mutableListOf<Statement>()
@@ -220,20 +220,17 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		private val stops = mutableListOf<Pair<Expression, Int>>()
 		// The flag that says so where nothing else does, once a stop needs one
 		private var stopped: String? = null
-		// Over a map's entries, the loop's names for the key and the value; while the element is an entry, element is
-		// the key's name
-		private var entryKey = "_"
-		private var entryValue = "_"
-		private var isEntry = false
+		// While the loop's element is a map's entry, the walk over the map's entries, whose key's name element is
+		private var entries: MapEntries? = null
 
 		fun lower(): List<Statement> {
 			if (chain.stages.isEmpty() && chain.terminal.name in SORTS && body.isStable(chain.source) &&
 				body.library.kind(type(chain.source)) == LibraryCalls.Kind.SEQUENCE) {
 				return sortedCopy()
 			}
-			val entries = entryMap(chain.source)
-			val source = if (entries != null) entrySource(entries) else source(chain.source)
-			if (entries == null) {
+			val walked = entryMap(chain.source)
+			val source = if (walked != null) entrySource(walked) else source(chain.source)
+			if (walked == null) {
 				element = elementName(0, source.defaultName)
 			}
 			val loopVariable = element
@@ -311,46 +308,25 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			return if (body.library.kind(type(source)) == LibraryCalls.Kind.MAP) source else null
 		}
 
-		/** A map's entries, which the loop walks as its keys and values: `for key, value in pairs(map) do`. */
+		/** A map's entries, which the loop walks as their keys and values: `for key, value in pairs(map) do`. */
 		private fun entrySource(map: KtExpression): Source {
-			val (key, value) = entryNames()
-			entryKey = key
-			entryValue = value
-			isEntry = true
-			element = key
-			used += value
-			val entries = Expression.call(Expression.name("pairs"), body.expression(map))
-			return Source(key) { _, loop ->
-				Statement.GenericFor(LibraryCalls.entryVariables(key, value, loop), listOf(entries), loop)
-			}
+			val walk = MapEntries(body, this, map, entryLambdas())
+			entries = walk
+			element = walk.key
+			used += walk.value
+			return Source(walk.key) { _, loop -> walk.loop(loop) }
 		}
 
 		/**
-		 * The names of the loop's key and value: the first a lambda destructures the entry into, other than `_`, so
-		 * that the lambdas' code reads as written; otherwise key and value.
+		 * The lambdas whose parameter is the map's entry: those of the calls that take one, up to the first step
+		 * after which the lambdas take the values it made instead.
 		 */
-		private fun entryNames(): Pair<String, String> {
-			var key: String? = null
-			var value: String? = null
-			for (consumer in chain.stages + chain.terminal) {
-				val lambda = argument(consumer) as? KtLambdaExpression
-				val parts = lambda?.functionLiteral?.valueParameters?.singleOrNull()?.destructuringDeclaration?.entries
-				if (consumer.name in ENTRY_LAMBDAS && parts != null && parts.size == 2) {
-					key = key ?: named(parts[0])
-					value = value ?: named(parts[1])
-				}
-				// After a map, the lambdas take values rather than entries
-				if (consumer.name in MAKES_VALUES) {
-					break
-				}
-			}
-			val where = chain.terminal.call
-			return (key ?: fresh("key", where)) to (value ?: fresh("value", where))
+		private fun entryLambdas(): List<KtLambdaExpression> {
+			val consumers = chain.stages + chain.terminal
+			val makesValues = consumers.indexOfFirst { it.name in MAKES_VALUES }
+			val takingEntries = if (makesValues < 0) consumers else consumers.take(makesValues + 1)
+			return takingEntries.filter { it.name in ENTRY_LAMBDAS }.mapNotNull { argument(it) as? KtLambdaExpression }
 		}
-
-		/** The Lua name of a destructured part of an entry, or null for `_`, which names nothing. */
-		private fun named(part: KtDestructuringDeclarationEntry): String? =
-			part.name?.takeIf { it != "_" }?.let { unit.localName(part, it) }
 
 		/** The variables of a loop that reads only values: `_, item`, or `_` when nothing reads them. */
 		private fun valueNames(item: String): List<String> = if (item == "_") listOf("_") else listOf("_", item)
@@ -385,21 +361,20 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			when (stage.name) {
 				"filter" -> steps += Step.Guard(test(function!!))
 				"filterNot" -> steps += Step.Guard(body.operators.negation(test(function!!)))
-				"filterKeys" -> steps += Step.Guard(partTest(function!!, entryKey))
-				"filterValues" -> steps += Step.Guard(partTest(function!!, entryValue))
+				"filterKeys", "filterValues" -> steps += Step.Guard(entries!!.test(stage, function!!))
 				"filterNotNull" -> notNil(stage)
 				"map" -> {
 					pending = mapped(function!!)
-					isEntry = false
+					entries = null
 				}
 				"mapNotNull" -> {
 					pending = mapped(function!!)
-					isEntry = false
+					entries = null
 					notNil(stage)
 				}
 				"distinct" -> {
-					if (isEntry) {
-						throw Rejection(stage.call, ENTRY_PARTS)
+					if (entries != null) {
+						throw Rejection(stage.call, MapEntries.ENTRY_PARTS)
 					}
 					distinct(stage, null)
 				}
@@ -485,19 +460,8 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			innerLoops++
 			steps += Step.Loop(innerLoop(collection, name), innerLoops)
 			element = name
-			isEntry = false
+			entries = null
 			used += name
-		}
-
-		/** `filterKeys { ... }` and `filterValues { ... }`: a test of the entry's key or value. */
-		private fun partTest(predicate: KtExpression, part: String): Expression {
-			if (predicate !is KtLambdaExpression) {
-				return applied(predicate, Expression.name(part))
-			}
-			val condition = body.lambdas.value(predicate, "A chain's test becomes an if inside the loop; write it as"
-				+ " one expression, { condition }.")
-			unit.alias(body.lambdas.parameter(predicate).declaration, part)
-			return body.expression(condition)
 		}
 
 		/** The loop over one element's collection, a list's, an array's, a set's or a range's elements. */
@@ -534,16 +498,19 @@ internal class CollectionLoops(private val body: BodyLowering) {
 				bindPending("value", selector)
 				applied(selector)
 			}
-			val name = fresh(preferred, where)
-			used += name
+			return bound(preferred, value, where)
+		}
+
+		/** A local inside the loop, under a name of its own, which the steps after it read: `local name = value`. */
+		fun bound(preferred: String, value: Expression, where: PsiElement): String {
+			val name = taken(preferred, where)
 			steps += Step.Bind(name, value)
 			return name
 		}
 
 		/** A local before the loop, under a name of its own. */
 		private fun localBefore(preferred: String, value: Expression, where: PsiElement): String {
-			val name = fresh(preferred, where)
-			used += name
+			val name = taken(preferred, where)
 			before += local(name, value)
 			return name
 		}
@@ -576,7 +543,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		}
 
 		/** A function's value for the current element: the lambda's expression, or a call of the function. */
-		private fun mapped(function: KtExpression): Expression {
+		fun mapped(function: KtExpression): Expression {
 			if (function is KtLambdaExpression) {
 				val value = body.lambdas.value(function, "A chain's map becomes a value inside the loop; write it as"
 					+ " one expression, { value }.")
@@ -592,8 +559,8 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		 */
 		private fun current(): Expression {
 			val value = pending
-			if (value == null && isEntry) {
-				throw Rejection(chain.terminal.call, ENTRY_PARTS)
+			if (value == null && entries != null) {
+				throw Rejection(chain.terminal.call, MapEntries.ENTRY_PARTS)
 			}
 			pending = null
 			return value ?: Expression.name(element)
@@ -604,11 +571,11 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		 * or `?.value`.
 		 */
 		private fun given(): Expression {
-			if (!isEntry || pending != null) {
+			val entries = entries
+			if (entries == null || pending != null) {
 				return current()
 			}
-			val part = chain.part ?: throw Rejection(chain.terminal.call, ENTRY_PARTS)
-			return Expression.name(if (part == "key") entryKey else entryValue)
+			return entries.found()
 		}
 
 		/** Gives a pending mapped value a local, so that it can be read more than once. */
@@ -618,14 +585,15 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			steps += Step.Bind(local, value)
 			used += local
 			element = local
-			isEntry = false
+			entries = null
 			pending = null
 		}
 
 		/** Makes a lambda's parameter stand for the current element, which a pending value is bound for first. */
 		private fun bindElement(lambda: KtLambdaExpression) {
-			if (isEntry) {
-				bindEntry(lambda)
+			val entries = entries
+			if (entries != null) {
+				entries.bind(lambda)
 				return
 			}
 			val parameter = body.lambdas.parameter(lambda)
@@ -634,26 +602,10 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		}
 
 		/**
-		 * Makes a lambda's parameter that is a map's entry stand for the loop's key and value: the names it
-		 * destructures the entry into, or `entry.key` and `entry.value`.
-		 */
-		private fun bindEntry(lambda: KtLambdaExpression) {
-			val literal = lambda.functionLiteral
-			val parameter = literal.valueParameters.singleOrNull()
-			val parts = parameter?.destructuringDeclaration?.entries
-			if (parts == null) {
-				unit.aliasEntry(parameter ?: literal, entryKey, entryValue)
-				return
-			}
-			parts.getOrNull(0)?.let { unit.alias(it, entryKey) }
-			parts.getOrNull(1)?.let { unit.alias(it, entryValue) }
-		}
-
-		/**
 		 * A function called on the current element, or on the argument given, opened where it is a reference's small
 		 * function; a function value the call cannot open goes into a local before the loop.
 		 */
-		private fun applied(function: KtExpression, argument: Expression? = null): Expression {
+		fun applied(function: KtExpression, argument: Expression? = null): Expression {
 			val lowered = body.expression(function)
 			if (lowered is Expression.FunctionExpression && argument == null) {
 				bindPending("value", function)
@@ -669,12 +621,19 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		}
 
 		/** A name of the function's own the loop's variables have not taken. */
-		private fun fresh(preferred: String, where: PsiElement): String {
+		fun fresh(preferred: String, where: PsiElement): String {
 			var name = body.invent(preferred, where)
 			var number = 2
 			while (name in used) {
 				name = preferred + number++
 			}
+			return name
+		}
+
+		/** A name of the function's own the loop's variables have not taken, which one of them now takes. */
+		fun taken(preferred: String, where: PsiElement): String {
+			val name = fresh(preferred, where)
+			used += name
 			return name
 		}
 
@@ -692,25 +651,15 @@ internal class CollectionLoops(private val body: BodyLowering) {
 				in STAGES -> {
 					stage(terminal)
 					// A map's filter gives a map, as Kotlin's does
-					if (isEntry && resultType()?.let(types::isMap) == true) {
-						stored(Expression.name(entryKey), Expression.name(entryValue), init, after)
+					val entries = entries
+					if (entries != null && resultType()?.let(types::isMap) == true) {
+						entries.filtered(init, after)
 					} else {
 						collected(Collected.LIST, init, after)
 					}
 				}
-				"mapValues", "mapKeys" -> {
-					if (!isEntry) {
-						throw unsupported(terminal)
-					}
-					val key = Expression.name(entryKey)
-					val value = Expression.name(entryValue)
-					val made = mapped(function!!)
-					if (terminal.name == "mapValues") {
-						stored(key, made, init, after)
-					} else {
-						stored(made, value, init, after)
-					}
-				}
+				"mapValues", "mapKeys" ->
+					entries?.transformed(terminal, function!!, init, after) ?: throw unsupported(terminal)
 				"toList", "toMutableList" -> collected(Collected.LIST, init, after)
 				// Kotlin's toSet() keeps the order the elements came in
 				"toSet", "toMutableSet" -> collected(Collected.ORDERED_SET, init, after)
@@ -760,8 +709,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val groups = accumulator("groups")
 			init += local(groups, helper(Helper.ORDERED_TABLE))
 			deliver(after, Expression.name(groups))
-			val group = fresh("group", terminal.call)
-			used += group
+			val group = taken("group", terminal.call)
 			val slot = Expression.Index(Expression.name(groups), Expression.name(key))
 			val absent = Expression.binary(Expression.name(group), BinaryOperator.EQUAL, Expression.Nil())
 			val next = Expression.Index(Expression.name(group), LibraryCalls.nextIndex(Expression.name(group)))
@@ -801,7 +749,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		 * The map `associate` and its kin give, which keeps its keys in the order they came, as Kotlin's does: each
 		 * element stores its value under its key.
 		 */
-		private fun stored(key: Expression, value: Expression, init: MutableList<Statement>,
+		fun stored(key: Expression, value: Expression, init: MutableList<Statement>,
 			after: MutableList<Statement>): Block {
 			body.library.checkKey(chain.terminal.call, keyType())
 			val map = accumulator("map")
@@ -900,11 +848,12 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val max = terminal.name.startsWith("max")
 			val byKey = terminal.name.startsWith("maxBy") || terminal.name.startsWith("minBy")
 			val withComparator = "With" in terminal.name
-			if (isEntry && withComparator) {
+			val entries = entries
+			if (entries != null && withComparator) {
 				throw Rejection.notYet(terminal.call, "maxWith and minWith over a map's entries")
 			}
-			if (isEntry && byKey) {
-				return entryExtreme(terminal, function!!, max, init, after)
+			if (entries != null && byKey) {
+				return entries.extreme(terminal, function!!, max, init, after)
 			}
 			if (!byKey && !withComparator && function != null) {
 				pending = mapped(function)
@@ -922,33 +871,6 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val unset = Expression.binary(Expression.name(best), BinaryOperator.EQUAL, Expression.Nil())
 			return Block.of(Statement.ifThen(Expression.binary(unset, BinaryOperator.OR, better),
 				Block.of(assign(best, Expression.name(element)))))
-		}
-
-		/**
-		 * `maxBy { ... }` and its kin over a map's entries, which give a part of the best entry, `?.key` or `?.value`:
-		 * that part, and the best entry's selected value, which the next entries compare with.
-		 */
-		private fun entryExtreme(terminal: Operation, selector: KtExpression, max: Boolean,
-			init: MutableList<Statement>, after: MutableList<Statement>): Block {
-			val part = given()
-			var selected = mapped(selector)
-			if (selected !is Expression.Name) {
-				val local = fresh("selected", terminal.call)
-				used += local
-				steps += Step.Bind(local, selected)
-				selected = Expression.name(local)
-			}
-			val best = accumulator("best")
-			val record = fresh(if (max) "most" else "least", terminal.call)
-			used += record
-			init += Statement.Local(listOf(best), listOf())
-			init += Statement.Local(listOf(record), listOf())
-			val unset = Expression.binary(Expression.name(record), BinaryOperator.EQUAL, Expression.Nil())
-			val better = if (max) Expression.binary(Expression.name(record), BinaryOperator.LESS, selected)
-			else Expression.binary(selected, BinaryOperator.LESS, Expression.name(record))
-			deliver(after, Expression.name(best))
-			return Block.of(Statement.ifThen(Expression.binary(unset, BinaryOperator.OR, better),
-				Block.of(assign(record, selected), assign(best, part))))
 		}
 
 		/**
@@ -1064,7 +986,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		 * The local a terminal builds its result in: the destination's own local when the result goes there as it is,
 		 * otherwise a new one.
 		 */
-		private fun accumulator(preferred: String): String {
+		fun accumulator(preferred: String): String {
 			val default = chain.default
 			if (destination is Destination.Local && (default == null || Branches.jumps(default))) {
 				return destination.name
@@ -1079,7 +1001,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		 * Hands the result to the destination after the loop: or the default `?:` gives, or when that leaves, after
 		 * leaving where the result is nil.
 		 */
-		private fun deliver(after: MutableList<Statement>, result: Expression) {
+		fun deliver(after: MutableList<Statement>, result: Expression) {
 			val default = chain.default
 			var value = result
 			if (default != null && Branches.jumps(default)) {
@@ -1163,11 +1085,6 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			"then forEach, toList, toSet, a sort, count, sum, sumOf, min, max and their By, Of and With forms, " +
 			"first, last, find, any, all, none, joinToString, groupBy, associate, associateBy, associateWith, " +
 			"mapValues or mapKeys"
-
-		/** Why a map's entry can be read only as its key and its value. */
-		const val ENTRY_PARTS = "In Lua a map's entry is its key and its value, which a loop walks, not a value of" +
-			" its own; read entry.key and entry.value, or destructure it, (key, value) ->, and take .key or .value of" +
-			" an entry a chain finds."
 
 		/** The steps a loop runs on each element before the terminal call. */
 		private val STAGES = setOf("filter", "filterNot", "filterKeys", "filterValues", "filterNotNull", "map",

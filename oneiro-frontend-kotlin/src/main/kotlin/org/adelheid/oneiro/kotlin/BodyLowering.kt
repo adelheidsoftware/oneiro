@@ -806,7 +806,7 @@ internal class BodyLowering(
 			when (val symbol = reference.resolveSymbol()) {
 				is KaLocalVariableSymbol, is KaValueParameterSymbol -> {
 					if (unit.entryAlias(declarationOf(symbol, reference)) != null) {
-						throw Rejection(reference, CollectionLoops.ENTRY_PARTS)
+						throw Rejection(reference, MapEntries.ENTRY_PARTS)
 					}
 					if (returnValues.isSplit(reference)) {
 						val example = returnValues.componentExample(reference)?.let { ", such as $it" }.orEmpty()
@@ -907,7 +907,7 @@ internal class BodyLowering(
 		when (symbol.name.asString()) {
 			"key" -> Expression.name(key)
 			"value" -> Expression.name(value)
-			else -> throw Rejection(receiver, CollectionLoops.ENTRY_PARTS)
+			else -> throw Rejection(receiver, MapEntries.ENTRY_PARTS)
 		}
 	}
 

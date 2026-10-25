@@ -120,9 +120,9 @@ settings the javac plugin reads and writes the Lua and its line map to the same 
   own: `Loops`, `Branches`, `Exceptions`, `Lambdas`, `ObjectExpressions`, `Operators`, `TypeTests` and
   `ReturnValues` (the several values of a `@LuaReturnValues` type). `ApiCalls` handles the RS3 bindings, reading their
   annotations through `Annotations`; `LibraryCalls` handles the Kotlin library, with `StringMembers`,
-  `CollectionCopies` and `LibraryReferences`; `CollectionLoops` fuses a chain of collection functions into one loop;
-  `Comparators` turns a comparator into the test `table.sort` takes; and `ReviewWarnings` warns at the uses
-  moderation reviews closely.
+  `CollectionCopies` and `LibraryReferences`; `CollectionLoops` fuses a chain of collection functions into one loop,
+  with `MapEntries` for a chain over a map's entries, which Lua walks as keys and values; `Comparators` turns a
+  comparator into the test `table.sort` takes; and `ReviewWarnings` warns at the uses moderation reviews closely.
 - **Rejections** work as in the Java front end: a `Rejection` skips the statement or member being lowered and becomes
   an error at its position, so one run reports every problem.
 
