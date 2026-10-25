@@ -63,6 +63,9 @@ subprojects {
 			// fails the build
 			addBooleanOption("Xdoclint:all,-missing", true)
 			addBooleanOption("Werror", true)
+			// No web fonts, which would make each Javadoc jar 4 MB, mostly fonts, against Maven Central's monthly limit
+			// on what a namespace publishes; the pages use the browser's own
+			addBooleanOption("-no-fonts", true)
 			quiet()
 		}
 	}
