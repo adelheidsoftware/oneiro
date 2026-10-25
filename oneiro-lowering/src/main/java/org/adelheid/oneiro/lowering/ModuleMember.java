@@ -20,6 +20,14 @@ public interface ModuleMember<K> {
 	/** Whether the member defines a function, whose body only runs when called. */
 	boolean function();
 
+	/**
+	 * Whether the member is a type's table, {@code local Cell = {}} and the lines after it, which a blank line
+	 * separates from what follows, as it does a function.
+	 */
+	default boolean type() {
+		return false;
+	}
+
 	/** The Lua local the member defines, or null for a table field or loose statements. */
 	@Nullable String localName();
 

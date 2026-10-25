@@ -170,7 +170,7 @@ internal class Functions(private val unit: FileLowering) {
 		val block = function.bodyBlockExpression
 		val expression = function.bodyExpression
 		return when {
-			block != null -> lowering.block(block)
+			block != null -> lowering.block(block, endsFunction = true)
 			expression != null && returnsUnit(function) ->
 				Block(lowering.expressionStatement(expression).map(Block.Entry::of), listOf())
 			// An expression body is the function's return, which a chain, a when or a scope function can be too

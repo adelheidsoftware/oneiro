@@ -290,7 +290,7 @@ internal class ClassLowering(private val unit: FileLowering) {
 		val declared = listOf(Block.Entry(Statement.Local(listOf(local), listOf(value)), trivia, origin)) + rest
 		val assigned = listOf(Block.Entry(Statement.assignment(Expression.name(local), value), trivia, origin)) + rest
 		val after: Set<PsiElement> = if (outer.isTopLevel()) setOf() else setOf(outer)
-		return Member(listOf(nested), false, local, declared, assigned, setOf(), after)
+		return Member(listOf(nested), false, local, declared, assigned, setOf(), after, isType = true)
 	}
 
 	/**

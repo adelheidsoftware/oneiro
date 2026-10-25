@@ -144,14 +144,17 @@ internal class BodyLowering(
 	 * A block's statements, each with the comments above it and after it, and the comments that close the block. With
 	 * [last], the final statement is lowered by it instead, as a branch that gives a value hands its last expression
 	 * on. A statement Oneiro rejects is reported, and the statements after it are still checked.
+	 *
+	 * @param endsFunction whether the block is a function's body, after whose last statement nothing runs
 	 */
-	fun block(block: KtBlockExpression, last: ((KtExpression) -> List<Statement>)? = null): Block {
+	fun block(block: KtBlockExpression, last: ((KtExpression) -> List<Statement>)? = null,
+		endsFunction: Boolean = false): Block {
 		val entries = mutableListOf<Block.Entry>()
 		val statements = block.statements
 		for ((index, statement) in statements.withIndex()) {
 			val lower = if (index == statements.lastIndex && last != null) lowerBy(last) else null
 			try {
-				entries += entries(statement, lower)
+				entries += entries(statement, lower, endsFunction && index == statements.lastIndex)
 			} catch (rejection: Rejection) {
 				unit.reject(rejection)
 			}
@@ -171,11 +174,13 @@ internal class BodyLowering(
 	 * bring comments of their own, as a finally block's statements do, keep them.
 	 *
 	 * @param lower how to lower the statement, when not as a statement of its own
+	 * @param endsFunction whether the statement is the last of a function's body
 	 */
-	private fun entries(statement: KtExpression, lower: ((KtExpression) -> List<Block.Entry>)?): List<Block.Entry> {
+	private fun entries(statement: KtExpression, lower: ((KtExpression) -> List<Block.Entry>)?,
+		endsFunction: Boolean = false): List<Block.Entry> {
 		val blankLine = source.blankLineBefore(statement)
 		val leading = source.leading(statement)
-		val lowered = hoistingInto(statement) { lower?.invoke(statement) ?: statementEntries(statement) }
+		val lowered = hoistingInto(statement) { lower?.invoke(statement) ?: statementEntries(statement, endsFunction) }
 		val trailing = source.trailing(statement)
 		val origin = source.position(unit.codeStart(statement))
 		return lowered.mapIndexed { index, entry ->
@@ -218,7 +223,7 @@ internal class BodyLowering(
 	 * A statement as block entries, which a `try` with a finally block and a scope function's lambda make with comments
 	 * of their own.
 	 */
-	private fun statementEntries(statement: KtExpression): List<Block.Entry> {
+	private fun statementEntries(statement: KtExpression, endsFunction: Boolean): List<Block.Entry> {
 		if (statement is KtTryExpression) {
 			return exceptions.tryStatement(statement)
 		}
@@ -228,7 +233,7 @@ internal class BodyLowering(
 		if (target != null && scope != null && isStable(target)) {
 			scopes.assigned(scope, assignmentTarget(target))?.let { return it }
 		}
-		return scopes.entries(statement) ?: statement(statement).map(Block.Entry::of)
+		return scopes.entries(statement, endsFunction) ?: statement(statement).map(Block.Entry::of)
 	}
 
 	/**

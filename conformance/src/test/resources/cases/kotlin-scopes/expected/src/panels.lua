@@ -171,11 +171,9 @@ end
 
 -- Logs what a tally of three comes to after adding two.
 function Panels.demo()
-    do
-        local tally = Tally.new(3)
-        tally:add(2)
-        log(formatStr("total {}", tally.total))
-    end
+    local tally = Tally.new(3)
+    tally:add(2)
+    log(formatStr("total {}", tally.total))
 end
 
 return Panels

@@ -368,12 +368,6 @@ internal class FileLowering(
 	/** The Lua names of the key and value that an entry's declaration stands for, or null for any other declaration. */
 	fun entryAlias(declaration: PsiElement?): Pair<String, String>? = declaration?.let(entryAliases::get)
 
-	// How many labels the file's chains have taken for leaving the loops inside their own
-	private var exitLabels = 0
-
-	/** A label for a chain to leave its loops at, `done`, then `done2` and up, so that no two in the file clash. */
-	fun exitLabel(): String = if (exitLabels++ == 0) "done" else "done$exitLabels"
-
 	/** The member, a function, a property or an `init` block of a class or of the file, that code is part of. */
 	private fun enclosingMember(element: PsiElement): PsiElement {
 		var current = element

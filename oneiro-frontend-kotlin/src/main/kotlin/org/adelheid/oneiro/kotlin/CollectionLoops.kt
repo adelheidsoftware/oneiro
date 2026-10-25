@@ -193,8 +193,11 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		/** A statement for each element that gets this far, such as counting it. */
 		class Do(val statement: Statement) : Step
 
-		/** A loop around everything after it, over the collection `flatMap` gives for each element. */
-		class Loop(val loop: (Block) -> Statement) : Step
+		/**
+		 * A loop around everything after it, over the collection `flatMap` gives for each element, at its depth among
+		 * the loops inside the source's.
+		 */
+		class Loop(val loop: (Block) -> Statement, val depth: Int) : Step
 	}
 
 	/** The table a chain collects its elements into. */
@@ -213,8 +216,10 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		private var pending: Expression? = null
 		// The loops inside the source's, one for each flatMap, which leaving the chain early must leave too
 		private var innerLoops = 0
-		// The label after the loops that leaving them all jumps to, once something does
-		private var exit: String? = null
+		// What says the chain ended early inside those loops, with the depth it ended at: each loop around tests it
+		private val stops = mutableListOf<Pair<Expression, Int>>()
+		// The flag that says so where nothing else does, once a stop needs one
+		private var stopped: String? = null
 		// Over a map's entries, the loop's names for the key and the value; while the element is an entry, element is
 		// the key's name
 		private var entryKey = "_"
@@ -237,17 +242,28 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val init = mutableListOf<Statement>()
 			val after = mutableListOf<Statement>()
 			val innermost = terminal(init, after)
-			val exitLabel = listOfNotNull(exit?.let { Statement.Label(it) })
-			return before + init + source.loop(loopVariable, nested(innermost)) + exitLabel + after
+			return before + init + source.loop(loopVariable, nested(innermost)) + after
 		}
 
-		/** Leaves the chain's loops: `break`, or with loops inside the source's, a `goto` to the label after them. */
-		private fun stop(): Statement {
+		/**
+		 * Ends the chain: `break`. Inside a loop of its own, each loop around then tests whether the chain ended, after
+		 * the loop inside it, and breaks too, as Lua's `break` leaves only the innermost loop.
+		 *
+		 * @param ended what says the chain ended, such as `taken == 5`, or null for one that leaves nothing that says
+		 *     so, which then sets a flag, `stopped`
+		 */
+		private fun stop(ended: Expression?): Block {
 			if (innerLoops == 0) {
-				return Statement.Break()
+				return Block.of(Statement.Break())
 			}
-			val label = exit ?: unit.exitLabel().also { exit = it }
-			return Statement.Goto(label)
+			if (ended != null) {
+				stops += ended to innerLoops
+				return Block.of(Statement.Break())
+			}
+			val flag = stopped ?: localBefore("stopped", Expression.BooleanLiteral(false), chain.terminal.call)
+				.also { stopped = it }
+			stops += Expression.name(flag) to innerLoops
+			return Block.of(assign(flag, Expression.BooleanLiteral(true)), Statement.Break())
 		}
 
 		// ---- The source
@@ -391,7 +407,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 				"take" -> take(stage)
 				"drop" -> drop(stage)
 				"takeWhile" -> steps += Step.Do(Statement.ifThen(body.operators.negation(test(function!!)),
-					Block.of(stop())))
+					stop(null)))
 				"dropWhile" -> dropWhile(stage, function!!)
 				"flatMap" -> flatten(stage, function!!)
 				else -> throw unsupported(stage)
@@ -421,7 +437,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val limit = limit(stage)
 			val taken = localBefore("taken", Expression.integer(0), stage.call)
 			val full = Expression.binary(Expression.name(taken), BinaryOperator.EQUAL, limit)
-			steps += Step.Do(Statement.ifThen(full, Block.of(stop())))
+			steps += Step.Do(Statement.ifThen(full, stop(full)))
 			steps += Step.Do(increment(taken))
 		}
 
@@ -466,8 +482,8 @@ internal class CollectionLoops(private val body: BodyLowering) {
 				+ " collection as one expression, { it.items }.")
 			bindElement(lambda)
 			val name = elementName((chain.stages + chain.terminal).indexOf(stage) + 1, "item")
-			steps += Step.Loop(innerLoop(collection, name))
 			innerLoops++
+			steps += Step.Loop(innerLoop(collection, name), innerLoops)
 			element = name
 			isEntry = false
 			used += name
@@ -954,7 +970,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val found = accumulator("first")
 			init += Statement.Local(listOf(found), listOf())
 			deliver(after, Expression.name(found))
-			return Block.of(assign(found, given()), stop())
+			return Block(listOf(Block.Entry.of(assign(found, given()))) + stop(null).entries(), listOf())
 		}
 
 		/** `last { ... }`, `lastOrNull()` and `findLast { ... }`: each element that passes, kept until the end. */
@@ -985,7 +1001,10 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val answer = accumulator(name)
 			init += local(answer, Expression.BooleanLiteral(!found))
 			deliver(after, Expression.name(answer))
-			return Block.of(assign(answer, Expression.BooleanLiteral(found)), stop())
+			// any's answer is true once it is decided, all's and none's false
+			val decided = if (found) Expression.name(answer) else body.operators.negation(Expression.name(answer))
+			val decision = Block.Entry.of(assign(answer, Expression.BooleanLiteral(found)))
+			return Block(listOf(decision) + stop(decided).entries(), listOf())
 		}
 
 		/**
@@ -1083,7 +1102,8 @@ internal class CollectionLoops(private val body: BodyLowering) {
 
 		/**
 		 * The steps around the terminal's code: each guard an if around what follows, consecutive guards one if, and
-		 * each inner loop a loop around what follows.
+		 * each inner loop a loop around what follows, after which the loop around it tests whether the chain ended
+		 * inside it.
 		 */
 		private fun nested(innermost: Block): Block {
 			var block = innermost
@@ -1096,7 +1116,14 @@ internal class CollectionLoops(private val body: BodyLowering) {
 					}
 					is Step.Do -> block = Block(listOf(Block.Entry.of(step.statement)) + block.entries(),
 						block.closingComments())
-					is Step.Loop -> block = Block.of(step.loop(block))
+					is Step.Loop -> {
+						val loop = Block.Entry.of(step.loop(block))
+						val ended = stops.filter { it.second >= step.depth }.map { it.first }.distinct()
+							.reduceOrNull { first, second -> Expression.binary(first, BinaryOperator.OR, second) }
+						block = if (ended == null) Block(listOf(loop), listOf())
+						else Block(listOf(loop, Block.Entry.of(Statement.ifThen(ended, Block.of(Statement.Break())))),
+							listOf())
+					}
 					is Step.Guard -> {
 						var condition = step.condition
 						// filter { a }.filter { b } is if a and b

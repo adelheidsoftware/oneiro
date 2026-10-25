@@ -60,6 +60,12 @@ object Loot {
 		return found
 	}
 
+	/** The first rare item any kill dropped, which stops looking once it finds one. */
+	fun firstRare(kills: List<Kill>, rare: Set<String>): String? {
+		val found = kills.flatMap { kill -> kill.drops }.map { drop -> drop.item }.firstOrNull { item -> item in rare }
+		return found
+	}
+
 	/** Each number and ten times it. */
 	fun tens(limit: Int): List<Int> {
 		return (1..limit).flatMap { n -> listOf(n, n * 10) }

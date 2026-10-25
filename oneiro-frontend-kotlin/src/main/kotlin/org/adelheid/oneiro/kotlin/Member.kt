@@ -16,7 +16,10 @@ internal class Member(
 	private val declaredAheadForm: List<Block.Entry> = statements,
 	private val uses: Set<PsiElement> = setOf(),
 	private val comesAfter: Set<PsiElement> = setOf(),
+	private val isType: Boolean = false,
 ) : ModuleMember<PsiElement> {
+
+	override fun type(): Boolean = isType
 
 	override fun elements(): List<PsiElement> = declarations
 

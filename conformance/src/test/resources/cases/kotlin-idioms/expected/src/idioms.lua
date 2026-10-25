@@ -70,6 +70,7 @@ local start
 local Steps = {}
 Steps.__index = Steps
 Idioms.Steps = Steps
+
 local SIZE = 3
 
 function Steps.new()

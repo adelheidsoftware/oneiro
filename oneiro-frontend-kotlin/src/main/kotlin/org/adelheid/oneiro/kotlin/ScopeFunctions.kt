@@ -95,13 +95,15 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 	/**
 	 * A scope function as a statement of its own, or as a local's value, as block entries that keep the comments in
 	 * its lambda; null for any other statement.
+	 *
+	 * @param endsFunction whether the statement is the last of a function's body, whose locals end with it anyway
 	 */
-	fun entries(statement: KtExpression): List<Block.Entry>? {
+	fun entries(statement: KtExpression, endsFunction: Boolean = false): List<Block.Entry>? {
 		if (statement is KtProperty) {
 			val scope = statement.initializer?.let(::scope) ?: return null
 			return local(unit.localName(statement, statement.name!!), scope)
 		}
-		return scope(statement)?.let(::effect)
+		return scope(statement)?.let { effect(it, endsFunction) }
 	}
 
 	/**
@@ -160,8 +162,11 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 		return listOf(first) + placed(code(scope, null))
 	}
 
-	/** A scope function whose value goes nowhere: the lambda's code on the receiver, in a block with its local. */
-	private fun effect(scope: Scope): List<Block.Entry> {
+	/**
+	 * A scope function whose value goes nowhere: the lambda's code on the receiver, in a block with its local, unless
+	 * it ends a function's body, after which nothing could see the local.
+	 */
+	private fun effect(scope: Scope, endsFunction: Boolean = false): List<Block.Entry> {
 		val receiverName = stableName(scope.receiver)
 		if (receiverName != null) {
 			bind(scope, receiverName)
@@ -171,6 +176,9 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 		val holder = Block.Entry.of(local(name, body.expression(scope.receiver)))
 		bind(scope, name)
 		val code = code(scope, null)
+		if (endsFunction && code.closingComments().isEmpty()) {
+			return listOf(holder) + code.entries()
+		}
 		return listOf(Block.Entry.of(Statement.Do(Block(listOf(holder) + code.entries(), code.closingComments()))))
 	}
 

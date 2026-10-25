@@ -473,8 +473,14 @@ final class UnitLowering {
 	 * @param after the declarations whose members must come first, such as the table of the member's own class
 	 */
 	record Member(List<Element> elements, boolean function, @Nullable String localName,
-			List<Block.Entry> entries, List<Block.Entry> assignForm, Set<Element> references, Set<Element> after)
-			implements ModuleMember<Element> {
+			List<Block.Entry> entries, List<Block.Entry> assignForm, Set<Element> references, Set<Element> after,
+			boolean type) implements ModuleMember<Element> {
+
+		/** A member that is no type's table. */
+		Member(List<Element> elements, boolean function, @Nullable String localName, List<Block.Entry> entries,
+				List<Block.Entry> assignForm, Set<Element> references, Set<Element> after) {
+			this(elements, function, localName, entries, assignForm, references, after, false);
+		}
 	}
 
 	/**
@@ -724,7 +730,7 @@ final class UnitLowering {
 		if (superclass != null && fileTypes.contains(superclass)) {
 			after.add(superclass);
 		}
-		return new Member(List.of(element), false, local, entries, assignForm, after, after);
+		return new Member(List.of(element), false, local, entries, assignForm, after, after, true);
 	}
 
 	private Member staticField(VariableTree field, TypeElement owner, String table, Trivia trivia) {

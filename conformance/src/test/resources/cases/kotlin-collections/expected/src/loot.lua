@@ -176,13 +176,15 @@ function Loot.firstFive(kills)
     for _, kill in ipairs(kills) do
         for _, item in ipairs(kill.drops) do
             if taken == 5 then
-                goto done
+                break
             end
             taken = taken + 1
             list[#list + 1] = item
         end
+        if taken == 5 then
+            break
+        end
     end
-    ::done::
     return list
 end
 
@@ -196,11 +198,36 @@ function Loot.dropped(kills, item)
         for _, it in ipairs(it.drops) do
             if it.item == item then
                 found = true
-                goto done2
+                break
             end
         end
+        if found then
+            break
+        end
     end
-    ::done2::
+    return found
+end
+
+-- The first rare item any kill dropped, which stops looking once it finds one.
+---@param kills table[]
+---@param rare table<string, true>
+---@return string?
+function Loot.firstRare(kills, rare)
+    local stopped = false
+    local found
+    for _, kill in ipairs(kills) do
+        for _, drop in ipairs(kill.drops) do
+            local item = drop.item
+            if rare[item] ~= nil then
+                found = item
+                stopped = true
+                break
+            end
+        end
+        if stopped then
+            break
+        end
+    end
     return found
 end
 

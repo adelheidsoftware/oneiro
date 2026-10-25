@@ -41,6 +41,8 @@ local five = Loot.firstFive(kills)
 assert(#five == 5 and five[5].item == "ashes", "take after flatMap leaves both loops")
 assert(Loot.dropped(kills, "ashes") and not Loot.dropped(kills, "logs"), "any after flatMap")
 assert(table.concat(Loot.tens(3), ",") == "1,10,2,20,3,30", "flatMap over a range")
+assert(Loot.firstRare(kills, { ashes = true, ["rune bar"] = true }) == "ashes" and Loot.firstRare(kills, {}) == nil,
+    "firstOrNull after flatMap stops both loops")
 
 local byItem = Loot.byItem(drops)
 local keys = {}

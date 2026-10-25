@@ -86,7 +86,7 @@ public final class ModuleLayout {
 					new Trivia(!entries.isEmpty(), List.of(note), null), null));
 		}
 		boolean first = true;
-		// A function ends with end, which a blank line separates from whatever follows
+		// A function ends with end, and a type's table opens the type: a blank line separates either from what follows
 		boolean afterFunction = false;
 		for (ModuleMember<K> member : ordered) {
 			// Declared ahead: assigned here, or, for a field without a value, the declaration stands alone
@@ -100,7 +100,7 @@ public final class ModuleLayout {
 			}
 			if (!memberEntries.isEmpty()) {
 				first = false;
-				afterFunction = member.function();
+				afterFunction = member.function() || member.type();
 			}
 		}
 		if (table != null) {
