@@ -146,7 +146,7 @@ repositories {
 oneiro {
     stubs {
         // The RS3 API's type information, from which Oneiro generates the RS3 bindings on your machine
-        remote("https://github.com/FriendlyDevelopment/runescape-api-stubs", "fe2272a5522944b9d3aa5015be51b9bca334630f")
+        remote("https://github.com/FriendlyDevelopment/runescape-api-stubs", "8733037f8b0ae59b0da063ab1fecc60849b0cc98")
     }
     plugin {
         name = "Coin Watch"

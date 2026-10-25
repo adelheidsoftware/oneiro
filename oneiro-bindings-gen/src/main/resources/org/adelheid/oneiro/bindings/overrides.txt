@@ -102,8 +102,6 @@ read-only AchievementTests                         # docs: game/config/achieveme
 field AchievementDescription.type AchievementDescriptionType        # docs: game/config/achievementtype.html, one entry of descriptions
 field AchievementDescription.text String           # docs: game/config/achievementtype.html; client 2026-10-23: { text = "Slay a combination of ...", type = 0 }
 read-only AchievementDescription                   # docs: game/config/achievementtype.html, "All properties are read-only."
-field MapElementType.showOnWorldMap Bool           # docs: game/config/mapelementtype.html lists it as a second showOnMiniMap; client 2026-10-23: showOnWorldMap reads true
-field MapElementType.flashSpriteID Int             # docs: the same page lists it as a second spriteID; client 2026-10-23: flashSpriteID reads -1
 
 # ---- Enum values: the stubs write each name as a string where the docs give numbers, or none
 

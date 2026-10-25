@@ -46,6 +46,7 @@ All notable changes to Oneiro are listed here. The format follows
 
 ### Changed
 
+- Stubs updated.
 - Threads, executors, futures and timers, and reading the current time, fail with an error that says what to write
   instead, counting the ticks of `Event.ServerLogic` or `Event.Logic`, rather than as not supported yet: the client
   runs plugins on one thread and gives them no clock.

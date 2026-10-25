@@ -28,7 +28,7 @@ import org.jspecify.annotations.Nullable;
 final class RemoteStubs {
 
 	/** The stubs commit this release of Oneiro was tested against; another builds with a warning. */
-	static final String TESTED_COMMIT = "fe2272a5522944b9d3aa5015be51b9bca334630f";
+	static final String TESTED_COMMIT = "8733037f8b0ae59b0da063ab1fecc60849b0cc98";
 	static final String DEFAULT_REMOTE = "https://github.com/FriendlyDevelopment/runescape-api-stubs";
 
 	private static final Pattern GITHUB = Pattern.compile("https://github\\.com/([\\w.-]+)/([\\w.-]+?)(?:\\.git)?/?");
