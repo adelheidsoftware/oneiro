@@ -46,4 +46,15 @@ tasks.test {
 		inputs.dir(stubs.resolve("csvs")).withPropertyName("stubsCsvs")
 		inputs.file(stubs.resolve("types.lua")).withPropertyName("stubsTypes")
 	}
+	// The LuaCATS reader's tests on real Lua run on the libraries and plugins checked out next to Oneiro
+	val blueprintHelper = rootProject.file("../Blueprint-Helper")
+	val zyklib = rootProject.file("../runescape-api-zyklib")
+	systemProperty("oneiro.blueprintHelper", blueprintHelper.absolutePath)
+	systemProperty("oneiro.zyklib", zyklib.absolutePath)
+	if (blueprintHelper.resolve("src").isDirectory) {
+		inputs.dir(blueprintHelper.resolve("src")).withPropertyName("blueprintHelperSources")
+	}
+	if (zyklib.resolve("src").isDirectory) {
+		inputs.dir(zyklib.resolve("src")).withPropertyName("zyklibSources")
+	}
 }

@@ -24,16 +24,17 @@ record Stubs(ApiModel model, Map<String, CsvConstants.Namespace> namespaces) {
 					+ " generated/ folder.");
 		}
 		ApiModel model = new ApiModel();
-		LuaCatsParser parser = new LuaCatsParser(model);
+		LuaCatsReader reader = new LuaCatsReader(model);
 		List<Path> files;
 		try (Stream<Path> walk = Files.walk(root.resolve("generated"))) {
 			files = new ArrayList<>(walk.filter(path -> path.toString().endsWith(".lua")).sorted().toList());
 		}
 		files.add(root.resolve("types.lua"));
 		for (Path file : files) {
-			parser.parseFile(file, root.relativize(file).toString().replace('\\', '/'));
+			String path = root.relativize(file).toString().replace('\\', '/');
+			reader.read(file, path, path.substring(0, path.length() - ".lua".length()));
 		}
-		parser.finish();
+		reader.finish();
 
 		Map<String, CsvConstants.Namespace> namespaces = new LinkedHashMap<>();
 		Path csvs = root.resolve("csvs");

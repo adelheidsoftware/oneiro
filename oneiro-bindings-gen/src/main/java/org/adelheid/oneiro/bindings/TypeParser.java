@@ -2,15 +2,20 @@ package org.adelheid.oneiro.bindings;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
- * Recursive-descent parser for the LuaCATS type expressions in the stubs.
+ * Recursive-descent parser for LuaCATS type expressions.
  *
  * <p>A type is followed by free text on the same line ({@code ---@field x Int The world tile X}), so the parser reads
  * one type from the start of the text and reports where it stopped. Whitespace is significant only at the top level:
- * inside {@code fun(...)}, {@code <...>} and {@code {...}} it is skipped, outside it ends the type.
+ * inside {@code fun(...)}, {@code <...>} and {@code {...}} it is skipped, and outside it ends the type, unless a
+ * {@code |} follows it, as in {@code "pending" | "done"}, which continues the union as LuaLS reads it.
  */
 final class TypeParser {
+
+	/** The start of a function type, {@code fun(} or {@code fun (}. */
+	private static final Pattern FUNCTION = Pattern.compile("fun\\s*\\(");
 
 	/** A parsed type and the index just after it in the source text. */
 	record Result(TypeRef type, int end) {
@@ -54,11 +59,29 @@ final class TypeParser {
 	private TypeRef union() {
 		List<TypeRef> options = new ArrayList<>();
 		options.add(postfix());
-		while (peekSymbol('|')) {
+		while (peekUnionBar()) {
 			pos++;
+			skipWhitespace();
 			options.add(postfix());
 		}
 		return options.size() == 1 ? options.getFirst() : new TypeRef.Union(options);
+	}
+
+	/** Whether a {@code |} comes next, after spaces at any depth; the spaces are skipped only when it does. */
+	private boolean peekUnionBar() {
+		int save = pos;
+		skipWhitespace();
+		if (pos < text.length() && text.charAt(pos) == '|') {
+			return true;
+		}
+		pos = save;
+		return false;
+	}
+
+	private void skipWhitespace() {
+		while (pos < text.length() && Character.isWhitespace(text.charAt(pos))) {
+			pos++;
+		}
 	}
 
 	private TypeRef postfix() {
@@ -82,7 +105,7 @@ final class TypeParser {
 			throw new ParseException("type expected at end of text");
 		}
 		char c = text.charAt(pos);
-		if (text.startsWith("fun(", pos)) {
+		if (FUNCTION.matcher(text).region(pos, text.length()).lookingAt()) {
 			return function();
 		}
 		if (c == '{') {
@@ -96,14 +119,22 @@ final class TypeParser {
 			depth--;
 			return inner;
 		}
-		if (c == '"') {
-			int close = text.indexOf('"', pos + 1);
+		if (c == '"' || c == '\'') {
+			int close = text.indexOf(c, pos + 1);
 			if (close < 0) {
 				throw new ParseException("unterminated string literal type");
 			}
 			String literal = text.substring(pos + 1, close);
 			pos = close + 1;
 			return new TypeRef.Literal(literal);
+		}
+		if (Character.isDigit(c) || (c == '-' && pos + 1 < text.length() && Character.isDigit(text.charAt(pos + 1)))) {
+			int start = pos;
+			pos++;
+			while (pos < text.length() && (Character.isLetterOrDigit(text.charAt(pos)) || text.charAt(pos) == '.')) {
+				pos++;
+			}
+			return new TypeRef.NumberLiteral(text.substring(start, pos));
 		}
 		String name = name();
 		List<TypeRef> args = new ArrayList<>();
@@ -122,7 +153,8 @@ final class TypeParser {
 	}
 
 	private TypeRef function() {
-		pos += "fun(".length();
+		// fun(, or fun ( as LuaLS also takes it
+		pos = text.indexOf('(', pos) + 1;
 		depth++;
 		List<TypeRef.Param> params = new ArrayList<>();
 		if (!peekSymbol(')')) {
@@ -170,9 +202,15 @@ final class TypeParser {
 			return new TypeRef.Param("...", TypeRef.Named.of("any"));
 		}
 		String name = name();
+		// fun(a?: T): a parameter that can be left out takes nil
+		boolean optional = pos < text.length() && text.charAt(pos) == '?';
+		if (optional) {
+			pos++;
+		}
 		if (peekSymbol(':')) {
 			pos++;
-			return new TypeRef.Param(name, union());
+			TypeRef type = union();
+			return new TypeRef.Param(name, optional && !type.isNullable() ? new TypeRef.Optional(type) : type);
 		}
 		pos = save;
 		return new TypeRef.Param("", union());

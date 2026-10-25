@@ -144,8 +144,11 @@ permission check. When the client changes one of them, the compiler changes ther
 
 The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` runs it.
 
-1. `Stubs` reads a checkout. `LuaCatsParser` and `TypeParser` turn the LuaCATS files into an `ApiModel`, and
-   `CsvConstants` reads the name lists behind `id`, `config` and `var`.
+1. `Stubs` reads a checkout. `LuaCatsReader` turns the LuaCATS files into an `ApiModel`: `LuaSyntax` parses each
+   file as Lua 5.4, from the tokens of `LuaLexer`, comments included, and the reader reads the annotations before
+   each statement and what the statement declares, with `TypeParser` for the types they give. It reads annotated
+   code as well as definition files, so that it can read a library as LuaLS does. `CsvConstants` reads the name lists
+   behind `id`, `config` and `var`.
 2. `Overrides` reads `overrides.txt`, which states what the stubs do not: which tables are singletons, which values
    can be `nil`, which fields are read-only or hand out copies, which members need a permission or draw moderation's
    closer review, and the Java names for Lua names Java cannot use; its notes add what the client does that the

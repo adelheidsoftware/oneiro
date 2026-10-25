@@ -8,9 +8,10 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Everything the stubs declare, in the shape the generator needs: classes with fields and functions (and how each
- * function is called), enums, aliases, global functions, and the lines the parser did not understand. Classes are
- * merged by name, because several files repeat {@code ---@class ui} and add to it.
+ * Everything a set of LuaCATS files declares, in the shape the generator needs: classes with fields and functions (and
+ * how each function is called), enums, aliases, global functions, the modules the files export, and the lines the
+ * reader did not understand. Classes are merged by name, because several files repeat {@code ---@class ui} and add to
+ * it.
  */
 final class ApiModel {
 
@@ -39,6 +40,12 @@ final class ApiModel {
 		Binding binding = Binding.NONE;
 		final List<FieldDef> fields = new ArrayList<>();
 		final List<FunctionDef> functions = new ArrayList<>();
+		/**
+		 * The tables the class's own table holds, by field name, each by the class or enum it is: the modules a module
+		 * requires into its fields, as {@code zyklib.reactive}, and the classes and enums declared in its fields, as
+		 * {@code disposable.DisposableGroup}.
+		 */
+		final Map<String, String> tables = new LinkedHashMap<>();
 		final List<String> files = new ArrayList<>();
 
 		ClassDef(String name) {
@@ -47,9 +54,18 @@ final class ApiModel {
 	}
 
 	/**
-	 * A {@code ---@field}; {@code readOnly} comes from the "(Read-only)" the docs put at the start of the description.
+	 * A {@code ---@field}, or a field that code assigns; {@code readOnly} comes from the "(Read-only)" the docs put at
+	 * the start of the description.
 	 */
-	record FieldDef(String name, TypeRef type, String description, boolean readOnly) {
+	record FieldDef(String name, TypeRef type, String description, boolean readOnly, boolean deprecated) {
+
+		FieldDef withName(String newName) {
+			return new FieldDef(newName, type, description, readOnly, deprecated);
+		}
+
+		FieldDef withType(TypeRef newType) {
+			return new FieldDef(name, newType, description, readOnly, deprecated);
+		}
 	}
 
 	/** A {@code ---@param}. An optional parameter has a nullable type or a name ending in {@code ?}. */
@@ -67,6 +83,7 @@ final class ApiModel {
 	/**
 	 * A {@code function Owner.Name(...)} or {@code function Owner:Name(...)} with its annotations. {@code owner} is the
 	 * resolved class name, or the raw table expression when it matched no class; empty for a global function.
+	 * {@code typeParams} are the names its {@code ---@generic} declares.
 	 */
 	record FunctionDef(
 			String owner,
@@ -78,13 +95,16 @@ final class ApiModel {
 			List<TypeRef> overloads,
 			boolean varargs,
 			String description,
-			String file) {
+			String file,
+			List<String> typeParams,
+			boolean deprecated) {
 
 		FunctionDef {
 			luaParams = List.copyOf(luaParams);
 			params = List.copyOf(params);
 			returns = List.copyOf(returns);
 			overloads = List.copyOf(overloads);
+			typeParams = List.copyOf(typeParams);
 		}
 
 		/**
@@ -100,32 +120,32 @@ final class ApiModel {
 					function.params().stream().map(TypeRef.Param::name).toList(),
 					params.stream().map(param -> new ParamDef(param.name(), param.type(), "", false)).toList(),
 					function.returns().stream().map(returned -> new ReturnDef(returned, "", "")).toList(),
-					List.of(), params.size() < function.params().size(), description, file);
+					List.of(), params.size() < function.params().size(), description, file, List.of(), false);
 		}
 
 		FunctionDef withOwner(String newOwner) {
 			return new FunctionDef(newOwner, name, style, luaParams, params, returns, overloads, varargs, description,
-					file);
+					file, typeParams, deprecated);
 		}
 
 		FunctionDef withReturns(List<ReturnDef> newReturns) {
 			return new FunctionDef(owner, name, style, luaParams, params, newReturns, overloads, varargs, description,
-					file);
+					file, typeParams, deprecated);
 		}
 
 		FunctionDef withName(String newName) {
 			return new FunctionDef(owner, newName, style, luaParams, params, returns, overloads, varargs, description,
-					file);
+					file, typeParams, deprecated);
 		}
 
 		FunctionDef withOverloads(List<TypeRef> newOverloads) {
 			return new FunctionDef(owner, name, style, luaParams, params, returns, newOverloads, varargs, description,
-					file);
+					file, typeParams, deprecated);
 		}
 
 		FunctionDef withParams(List<ParamDef> newParams) {
 			return new FunctionDef(owner, name, style, luaParams, newParams, returns, overloads, varargs, description,
-					file);
+					file, typeParams, deprecated);
 		}
 	}
 
@@ -138,11 +158,18 @@ final class ApiModel {
 		}
 	}
 
-	/** A {@code ---@enum}. */
-	record EnumDef(String name, String description, List<EnumValue> values, String file) {
+	/**
+	 * A {@code ---@enum}. With {@code keys}, from {@code ---@enum (key)}, a value of the enum's type is one of its
+	 * keys, {@code "HEAD"}, rather than what a key holds.
+	 */
+	record EnumDef(String name, String description, List<EnumValue> values, String file, boolean keys) {
 
 		EnumDef {
 			values = List.copyOf(values);
+		}
+
+		EnumDef withValues(List<EnumValue> newValues) {
+			return new EnumDef(name, description, newValues, file, keys);
 		}
 
 		/** Whether the values are numbers rather than strings. */
@@ -165,7 +192,15 @@ final class ApiModel {
 	record AliasDef(String name, TypeRef target, String file) {
 	}
 
-	/** A line the parser could not place, with a normalised pattern used to group similar lines. */
+	/**
+	 * A module: a file that returns a table, which {@code require(path)} gives. {@code export} names the class of that
+	 * table: the class the file declares for it, or, for a table it declares no class for, a class named by the path,
+	 * {@code src/core/seeds}, which holds what the file defines on the table.
+	 */
+	record ModuleDef(String path, String export, String file) {
+	}
+
+	/** A line the reader could not place, with a normalised pattern used to group similar lines. */
 	record Unparsed(String pattern, String file, int line, String text) {
 	}
 
@@ -173,9 +208,9 @@ final class ApiModel {
 	final Map<String, EnumDef> enums = new LinkedHashMap<>();
 	final Map<String, AliasDef> aliases = new LinkedHashMap<>();
 	final List<FunctionDef> globalFunctions = new ArrayList<>();
+	/** The modules by their {@code require} path. */
+	final Map<String, ModuleDef> modules = new LinkedHashMap<>();
 	final List<Unparsed> unparsed = new ArrayList<>();
-	/** Global tables declared without a {@code ---@class}, such as {@code World.RemoveRoof}. */
-	final List<String> implicitTables = new ArrayList<>();
 
 	ClassDef classNamed(String name) {
 		return classes.computeIfAbsent(name, ClassDef::new);

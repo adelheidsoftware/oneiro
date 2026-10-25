@@ -43,6 +43,9 @@ final class TypeMapping {
 			case TypeRef.Function function -> functional(function);
 			case TypeRef.Table table -> table(table);
 			case TypeRef.Literal _ -> JType.reference("String");
+			case TypeRef.NumberLiteral literal -> literal.isInteger()
+					? JType.primitive("int", "Integer")
+					: JType.primitive("double", "Double");
 		};
 	}
 

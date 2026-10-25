@@ -68,8 +68,7 @@ final class ModelCorrections {
 			for (int index = 0; index < owner.fields.size(); index++) {
 				ApiModel.FieldDef field = owner.fields.get(index);
 				if (field.name().equals(oldName)) {
-					owner.fields.set(index, new ApiModel.FieldDef(newName, field.type(), field.description(),
-							field.readOnly()));
+					owner.fields.set(index, field.withName(newName));
 					renamed = true;
 				}
 			}
@@ -128,8 +127,7 @@ final class ModelCorrections {
 						+ " names values the stubs lack: " + String.join(", ", given.keySet()) + ".");
 			}
 			overrides.applied(entry, agrees);
-			model.enums.put(enumDef.name(), new ApiModel.EnumDef(enumDef.name(), enumDef.description(), values,
-					enumDef.file()));
+			model.enums.put(enumDef.name(), enumDef.withValues(values));
 		}
 	}
 
@@ -149,8 +147,7 @@ final class ModelCorrections {
 					ApiModel.FieldDef field = owner.fields.get(index);
 					if (field.name().equals(member)) {
 						overrides.applied(entry, field.type().equals(type));
-						owner.fields.set(index, new ApiModel.FieldDef(field.name(), type, field.description(),
-								field.readOnly()));
+						owner.fields.set(index, field.withType(type));
 						applied = true;
 					}
 				}
@@ -218,13 +215,13 @@ final class ModelCorrections {
 				ApiModel.FieldDef field = owner.fields.get(index);
 				if (field.name().equals(name)) {
 					overrides.applied(entry, field.type().equals(type));
-					owner.fields.set(index, new ApiModel.FieldDef(name, type, field.description(), field.readOnly()));
+					owner.fields.set(index, field.withType(type));
 					present = true;
 				}
 			}
 			if (!present) {
 				overrides.applied(entry, false);
-				owner.fields.add(new ApiModel.FieldDef(name, type, "", false));
+				owner.fields.add(new ApiModel.FieldDef(name, type, "", false, false));
 			}
 		}
 	}

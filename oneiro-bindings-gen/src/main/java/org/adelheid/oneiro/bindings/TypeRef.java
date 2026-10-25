@@ -65,6 +65,14 @@ sealed interface TypeRef {
 	record Literal(String text) implements TypeRef {
 	}
 
+	/** A number literal type such as {@code 4} or {@code -1}, as written. */
+	record NumberLiteral(String text) implements TypeRef {
+
+		boolean isInteger() {
+			return text.matches("-?(0[xX][0-9a-fA-F]+|[0-9]+)");
+		}
+	}
+
 	/** One parameter of a {@link Function} type; {@code name} is empty when the stub gives only a type. */
 	record Param(String name, TypeRef type) {
 	}
@@ -116,7 +124,7 @@ sealed interface TypeRef {
 						return key == null ? Stream.of(entry.value()) : Stream.of(key, entry.value());
 					})
 					.toList();
-			case Literal _ -> List.of();
+			case Literal _, NumberLiteral _ -> List.of();
 		};
 	}
 
@@ -144,6 +152,7 @@ sealed interface TypeRef {
 					})
 					.collect(Collectors.joining(", ")) + " }";
 			case Literal literal -> "\"" + literal.text() + "\"";
+			case NumberLiteral literal -> literal.text();
 		};
 	}
 
