@@ -24,6 +24,16 @@ assert(not ok and message:find("level 0", 1, true), "require fails with its mess
 ok, message = pcall(Idioms.level, 99)
 assert(not ok and message:find("Check failed.", 1, true), "check fails with Kotlin's message")
 
+assert(Idioms.herbName({ [5] = "guam" }, 5) == "guam", "requireNotNull gives the value")
+ok, message = pcall(Idioms.herbName, {}, 7)
+assert(not ok and message:find("no herb 7", 1, true), "requireNotNull fails with its message")
+assert(Idioms.seed({ guam = 5291 }, "guam") == 5291, "requireNotNull as a statement, and checkNotNull as a value")
+ok, message = pcall(Idioms.seed, {}, "guam")
+assert(not ok and message:find("Required value was null.", 1, true), "requireNotNull fails with Kotlin's message")
+assert(Idioms.enabled(false) == false and Idioms.enabled(true) == true, "?: error() keeps a false")
+ok, message = pcall(Idioms.enabled, nil)
+assert(not ok and message:find("The setting is unknown.", 1, true), "?: error() fails on nil")
+
 local counts = { 0 }
 local work = Idioms.counter(counts)
 work()

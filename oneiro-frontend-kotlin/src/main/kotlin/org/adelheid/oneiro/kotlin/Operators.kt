@@ -163,6 +163,10 @@ internal class Operators(private val body: BodyLowering) {
 	 */
 	fun orElse(value: Expression, type: KaType?, default: KtExpression): Expression {
 		if (type != null && types.isBoolean(type)) {
+			// The helper works out its default first, which would raise every time
+			if (with(unit.session) { default.expressionType }?.let(types::isNothing) == true) {
+				throw Rejection(default, Preconditions.FALSE_IS_NOT_NULL)
+			}
 			// A nullable flag with a fixed default compares with the other value
 			when ((default as? KtConstantExpression)?.text) {
 				"true" -> return Expression.binary(value, BinaryOperator.NOT_EQUAL, Expression.BooleanLiteral(false))

@@ -10,6 +10,7 @@ import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.LuaNames
+import org.adelheid.oneiro.lua.NameUses
 import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.UnaryOperator
 import org.jetbrains.kotlin.KtNodeTypes
@@ -252,19 +253,34 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		}
 		return when (name) {
 			"forEach" -> {
+				val entry = if (kind == Kind.MAP) entryNames(lambda) else null
 				val inlined = body.lambdas.inline(lambda, name)
 				val walk = if (kind == Kind.SEQUENCE) "ipairs" else "pairs"
-				val names = if (kind == Kind.SEQUENCE) listOf("_") + inlined.parameters else inlined.parameters
-				if (kind == Kind.MAP && names.size != 2) {
-					throw Rejection.notYet(lambda, "A forEach over a map that does not destructure its entries; write"
-						+ " forEach { (key, value) -> ... }")
-				}
-				listOf(Statement.GenericFor(names, listOf(Expression.call(Expression.name(walk),
-					body.expression(receiver))), inlined.code))
+				val names = entry ?: if (kind == Kind.SEQUENCE) listOf("_") + inlined.parameters else inlined.parameters
+				val walked = Expression.call(Expression.name(walk), body.expression(receiver))
+				val code = inlined.code
+				val variables = if (kind == Kind.MAP) entryVariables(names[0], names[1], code) else names
+				listOf(Statement.GenericFor(variables, listOf(walked), code))
 			}
 			"removeAll", "removeIf" -> listOf(removed(where, name, kind, receiver, lambda))
 			else -> null
 		}
+	}
+
+	/**
+	 * For `forEach { entry -> ... }` over a map, the loop's key and value, which `entry.key` and `entry.value` read, as
+	 * Lua has no entry of its own; null for a lambda that destructures the entry, or takes the key and the value.
+	 */
+	private fun entryNames(lambda: KtLambdaExpression): List<String>? {
+		val literal = lambda.functionLiteral
+		val parameter = literal.valueParameters.singleOrNull()
+		if (parameter?.destructuringDeclaration != null || literal.valueParameters.size > 1) {
+			return null
+		}
+		val key = body.invent("key", lambda)
+		val value = body.invent("value", lambda)
+		unit.aliasEntry(parameter ?: literal, key, value)
+		return listOf(key, value)
 	}
 
 	/**
@@ -842,6 +858,15 @@ internal class LibraryCalls(private val body: BodyLowering) {
 
 		const val CHAIN_IN_STATEMENT = "In Lua a chain of collection functions is a loop, which runs as statements; " +
 			"make the chain the whole value of a local, an assignment or a return, or a forEach statement of its own."
+
+		/**
+		 * The variables of a loop over a map's entries, `for key, value in pairs(map)`, as Lua writes them: a key the
+		 * body never reads is `_`, and a value it never reads is left out.
+		 */
+		fun entryVariables(key: String, value: String, body: Block): List<String> {
+			val keyName = if (NameUses.mentions(body, key)) key else "_"
+			return if (NameUses.mentions(body, value)) listOf(keyName, value) else listOf(keyName)
+		}
 
 		/** The limits of Kotlin's integers, which Lua's integers, of 64 bits, hold. */
 		private val LIMITS: Map<String, (LibraryCalls) -> Expression> = mapOf(

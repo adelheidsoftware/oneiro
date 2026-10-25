@@ -57,6 +57,9 @@ internal class KotlinTypes(
 
 	fun isBoolean(type: KaType): Boolean = classId(type) == StandardClassIds.Boolean
 
+	/** `Nothing`, the type of code that never gives a value, such as `throw` and `error(...)`. */
+	fun isNothing(type: KaType): Boolean = classId(type) == StandardClassIds.Nothing
+
 	/** The type's Lua Language Server name, with `?` when it can be null. */
 	fun luaType(type: KaType): String {
 		val base = when {

@@ -30,7 +30,7 @@ object Gaps {
 	}
 
 	fun inside(value: Int): Int {
-		return 1 + when (value) {
+		return maxOf(value, 0) + when (value) {
 			1 -> 10
 			else -> 20
 		}
@@ -108,8 +108,8 @@ object Gaps {
 		return 'é' - 'a'
 	}
 
-	fun unique(names: List<String>): List<String> {
-		return names.distinct()
+	fun chunks(names: List<String>): List<List<String>> {
+		return names.chunked(2)
 	}
 
 	fun counted(names: List<String>): Int {

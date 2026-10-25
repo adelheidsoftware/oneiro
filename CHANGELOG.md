@@ -24,7 +24,14 @@ All notable changes to Oneiro are listed here. The format follows
   and sets that keep the order Kotlin promises. The RS3 bindings generated for such a plugin have a `Subscribe` for
   each callback a hook takes, so a hook's callback is a trailing lambda, `label.Subscribe(ui.Hook.ONCLICK) { ... }`.
   Its jar bundles the Kotlin Analysis API, so a plugin's build needs only Maven Central.
-
+- Kotlin's own constructs: extension functions, which take their receiver first as `self`; the scope functions `let`,
+  `also`, `apply`, `run` and `with`, whose code runs where they are called, so that
+  `ui.Text(parent).apply { SetPos(10, 20) }` configures the new component in place; an `if` or `when` with blocks
+  inside an expression, whose value a local before the statement takes; chains over a map or its entries, such as
+  `counts.maxByOrNull { it.value }?.key`, and loops that read `entry.key` and `entry.value`; the collection functions
+  `distinct`, `take`, `drop`, `takeWhile`, `dropWhile`, `flatMap`, `groupBy` and `associate`, and the string functions
+  `padStart`, `padEnd`, `removePrefix`, `removeSuffix`, `substringBefore`, `substringAfter`, `isBlank`, `trimStart`
+  and `trimEnd`; and `requireNotNull` and `checkNotNull`. An expression body can be anything a `return` can.
 - `LuaString`, Lua's string patterns where Java and Kotlin have regular expressions: `match`, `captures`, `find`,
   `gsub` and `gmatch`, each Lua's string function of its name, with the pattern syntax in its Javadoc. The errors for
   regular expressions named it before it existed.

@@ -128,6 +128,40 @@ function Idioms.level(value)
     return value
 end
 
+-- The name of a herb, which the map must hold.
+---@param names table<integer, string>
+---@param id integer
+---@return string
+function Idioms.herbName(names, id)
+    local name = names[id]
+    if name == nil then
+        error(formatStr("no herb {}", id))
+    end
+    return name
+end
+
+-- The seed of a herb, which the map must hold.
+---@param seeds table<string, integer>
+---@param herb string
+---@return integer
+function Idioms.seed(seeds, herb)
+    if seeds[herb] == nil then
+        error("Required value was null.")
+    end
+    return seeds[herb] or error("Required value was null.")
+end
+
+-- Whether a setting is on, which must be known.
+---@param setting boolean?
+---@return boolean
+function Idioms.enabled(setting)
+    local on = setting
+    if on == nil then
+        error("The setting is unknown.")
+    end
+    return on
+end
+
 -- Work for later, a Runnable made from a lambda.
 ---@param counts integer[]
 ---@return function

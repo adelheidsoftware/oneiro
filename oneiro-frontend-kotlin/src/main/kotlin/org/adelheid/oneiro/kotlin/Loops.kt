@@ -112,7 +112,10 @@ internal class Loops(private val body: BodyLowering) {
 		}
 		val walk = if (kind == LibraryCalls.Kind.SEQUENCE) "ipairs" else "pairs"
 		val iterated = body.expression(view?.map ?: collection)
-		return Statement.GenericFor(names, listOf(Expression.call(Expression.name(walk), iterated)), loopBody(loop))
+		val code = loopBody(loop)
+		val entries = kind == LibraryCalls.Kind.MAP || view?.selector == "entries"
+		val walked = if (entries) LibraryCalls.entryVariables(names[0], names[1], code) else names
+		return Statement.GenericFor(walked, listOf(Expression.call(Expression.name(walk), iterated)), code)
 	}
 
 	/** The text and pattern of `LuaString.gmatch(text, pattern)`, whose iterator a loop walks; null for others. */
@@ -210,12 +213,18 @@ internal class Loops(private val body: BodyLowering) {
 	private fun single(loop: KtForExpression, variables: List<String>): String =
 		variables.singleOrNull() ?: throw Rejection.notYet(loop, "Destructuring each element of this collection")
 
-	/** A map's key and value: `for ((key, value) in map)`. */
+	/**
+	 * A map's key and value: `for ((key, value) in map)`, or for `for (entry in map)`, a key and a value that
+	 * `entry.key` and `entry.value` read, as Lua has no entry of its own.
+	 */
 	private fun pair(loop: KtForExpression, variables: List<String>): List<String> {
-		if (variables.size != 2) {
-			throw Rejection.notYet(loop, "A loop over a map's entries that does not destructure them; write for ((key,"
-				+ " value) in map) instead")
+		if (variables.size == 2) {
+			return variables
 		}
-		return variables
+		val entry = loop.loopParameter ?: throw Rejection(loop, "This loop is incomplete and does not compile.")
+		val key = body.invent("key", loop)
+		val value = body.invent("value", loop)
+		unit.aliasEntry(entry, key, value)
+		return listOf(key, value)
 	}
 }

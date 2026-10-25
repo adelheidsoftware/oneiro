@@ -41,6 +41,24 @@ object Idioms {
 		return value
 	}
 
+	/** The name of a herb, which the map must hold. */
+	fun herbName(names: Map<Int, String>, id: Int): String {
+		val name = requireNotNull(names[id]) { "no herb $id" }
+		return name
+	}
+
+	/** The seed of a herb, which the map must hold. */
+	fun seed(seeds: Map<String, Int>, herb: String): Int {
+		requireNotNull(seeds[herb])
+		return checkNotNull(seeds[herb])
+	}
+
+	/** Whether a setting is on, which must be known. */
+	fun enabled(setting: Boolean?): Boolean {
+		val on = setting ?: error("The setting is unknown.")
+		return on
+	}
+
 	/** Work for later, a Runnable made from a lambda. */
 	fun counter(counts: IntArray): Runnable {
 		return Runnable { counts[0]++ }

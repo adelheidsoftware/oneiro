@@ -19,7 +19,8 @@ import org.adelheid.oneiro.lua.UnaryOperator;
 
 /**
  * Small Lua functions for translations that no single expression can say, such as Java's integer division. A module
- * defines only the helpers it uses, near its top, each with a comment naming the Java behaviour it reproduces.
+ * defines only the helpers it uses, near its top, each with a comment naming the behaviour of the plugin's language
+ * that it reproduces. A few serve functions only Kotlin has, such as {@code padStart}.
  */
 public enum Helper {
 
@@ -242,6 +243,38 @@ public enum Helper {
 			    last = key
 			end
 			return last"""),
+	PAD_START("padStart", "The text after as many padChar as make it length long, as Kotlin's padStart; longer text"
+			+ " stays as it is.", "text, length, padChar", """
+			return padChar:rep(length - #text) .. text"""),
+	PAD_END("padEnd", "The text before as many padChar as make it length long, as Kotlin's padEnd; longer text stays"
+			+ " as it is.", "text, length, padChar", """
+			return text .. padChar:rep(length - #text)"""),
+	REMOVE_PREFIX("removePrefix", "The text without the prefix when it starts with it, as Kotlin's removePrefix.",
+			"text, prefix", """
+			if text:sub(1, #prefix) == prefix then
+			    return text:sub(#prefix + 1)
+			end
+			return text"""),
+	REMOVE_SUFFIX("removeSuffix", "The text without the suffix when it ends with it, as Kotlin's removeSuffix.",
+			"text, suffix", """
+			if suffix ~= "" and text:sub(-#suffix) == suffix then
+			    return text:sub(1, -#suffix - 1)
+			end
+			return text"""),
+	SUBSTRING_BEFORE("substringBefore", "The text before the first delimiter, or all of it when there is none, as"
+			+ " Kotlin's substringBefore.", "text, delimiter", """
+			local first = text:find(delimiter, 1, true)
+			if first == nil then
+			    return text
+			end
+			return text:sub(1, first - 1)"""),
+	SUBSTRING_AFTER("substringAfter", "The text after the first delimiter, or all of it when there is none, as"
+			+ " Kotlin's substringAfter.", "text, delimiter", """
+			local _, last = text:find(delimiter, 1, true)
+			if last == nil then
+			    return text
+			end
+			return text:sub(last + 1)"""),
 	SORTED_TABLE("sortedTable", "A table whose pairs walks its keys in sorted order, as Java's TreeMap and TreeSet"
 			+ " do; comesBefore orders them, and Lua's < when it is nil.", "comesBefore", """
 			return setmetatable({}, {
@@ -349,6 +382,8 @@ public enum Helper {
 			case VALUES_OF -> "The table's values as a list, in the order pairs gives them, as Kotlin copies a map's"
 					+ " values into a list.";
 			case ADD_ELEMENTS, ADD_KEYS, COPY_ENTRIES, PUT_ENTRIES -> comment;
+			// Kotlin's own string functions, which only the Kotlin front end uses
+			case PAD_START, PAD_END, REMOVE_PREFIX, REMOVE_SUFFIX, SUBSTRING_BEFORE, SUBSTRING_AFTER -> comment;
 			case FIRST_KEY -> "The first key pairs gives, as a sorted set's first() or a sorted map's firstKey(); nil"
 					+ " for an empty table, where Kotlin throws.";
 			case LAST_KEY -> "The last key pairs gives, as a sorted set's last() or a sorted map's lastKey(); nil for"

@@ -336,6 +336,40 @@ internal class FileLowering(
 		aliases[declaration] = lua
 	}
 
+	/** The Lua names receivers stand for, by the function or lambda they are the `this` of; see [aliasReceiver]. */
+	private val receiverAliases = mutableMapOf<PsiElement, String>()
+
+	/**
+	 * Makes the receiver of a function or lambda, its `this`, stand for a Lua name: a scope function's receiver, which
+	 * members named without a receiver are read on, `apply { SetPos(1, 2) }`.
+	 */
+	fun aliasReceiver(function: PsiElement, lua: String) {
+		receiverAliases[function] = lua
+	}
+
+	/** The Lua name the receiver of a function or lambda stands for, or null for one without an alias. */
+	fun receiverAlias(function: PsiElement?): String? = function?.let(receiverAliases::get)
+
+	/** The Lua names of a map entry's key and value, by the declaration of the parameter that is the entry. */
+	private val entryAliases = mutableMapOf<PsiElement, Pair<String, String>>()
+
+	/**
+	 * Makes a lambda's parameter that is a map's entry stand for the key and the value of the loop its code is opened
+	 * in, which `entry.key` and `entry.value` read; Lua has no entry of its own to pass around.
+	 */
+	fun aliasEntry(declaration: PsiElement, key: String, value: String) {
+		entryAliases[declaration] = key to value
+	}
+
+	/** The Lua names of the key and value that an entry's declaration stands for, or null for any other declaration. */
+	fun entryAlias(declaration: PsiElement?): Pair<String, String>? = declaration?.let(entryAliases::get)
+
+	// How many labels the file's chains have taken for leaving the loops inside their own
+	private var exitLabels = 0
+
+	/** A label for a chain to leave its loops at, `done`, then `done2` and up, so that no two in the file clash. */
+	fun exitLabel(): String = if (exitLabels++ == 0) "done" else "done$exitLabels"
+
 	/** The member, a function, a property or an `init` block of a class or of the file, that code is part of. */
 	private fun enclosingMember(element: PsiElement): PsiElement {
 		var current = element

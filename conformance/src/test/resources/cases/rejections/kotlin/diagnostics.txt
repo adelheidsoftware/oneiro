@@ -10,9 +10,9 @@ plugin/Gaps.kt:27: error: In Lua, the private members and nested classes of the 
 		private fun helper(): Int {
 		^
 
-plugin/Gaps.kt:33: error: In Lua when is a statement, not a value; give its value to a return, a local or an assignment of its own.
-		return 1 + when (value) {
-		           ^
+plugin/Gaps.kt:33: error: In Lua this when is a statement, which can run before the code around it only where nothing would see the difference; give its value to a local of its own first, val x = when ...
+		return maxOf(value, 0) + when (value) {
+		                         ^
 
 plugin/Gaps.kt:40: error: Lua has no runtime type information, so a value has no class to read; test it with is instead.
 		return value::class.simpleName
@@ -70,8 +70,8 @@ plugin/Gaps.kt:108: error: A Lua string holds bytes, and 'é' takes several, so 
 		return 'é' - 'a'
 		       ^
 
-plugin/Gaps.kt:112: error: Calling kotlin.collections.distinct is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
-		return names.distinct()
+plugin/Gaps.kt:112: error: Calling kotlin.collections.chunked is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+		return names.chunked(2)
 		       ^
 
 plugin/Gaps.kt:116: error: In Lua a chain of collection functions is a loop, which runs as statements; make the chain the whole value of a local, an assignment or a return, or a forEach statement of its own.

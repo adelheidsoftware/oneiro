@@ -23,9 +23,12 @@ import org.jetbrains.kotlin.psi.KtParameter
  */
 internal class Functions(private val unit: FileLowering) {
 
-	/** A function of an object or companion object: `function Table.name(...)`, or a local when it is private. */
+	/**
+	 * A function of an object or companion object: `function Table.name(...)`, or a local when it is private. An
+	 * extension function takes its receiver first, as `self`: `function Texts.shout(self)`.
+	 */
 	fun static(function: KtNamedFunction, table: String, isPrivate: Boolean): Member {
-		val body = body(function, null, false, listOf())
+		val body = body(function, null, false, receiver(function))
 		return if (isPrivate) {
 			local(function, body)
 		} else {
@@ -35,6 +38,9 @@ internal class Functions(private val unit: FileLowering) {
 
 	/** A method: `function Table:name(...)`, or `local function name(self, ...)` when it is private. */
 	fun method(function: KtNamedFunction, table: String, isPrivate: Boolean): Member {
+		if (function.receiverTypeReference != null) {
+			throw Rejection.notYet(function, "An extension function inside a class with objects")
+		}
 		val owner = function.parent.parent as KtClassOrObject
 		return if (isPrivate) {
 			local(function, body(function, owner, true, listOf("self")))
@@ -58,7 +64,19 @@ internal class Functions(private val unit: FileLowering) {
 		if (parameters != null) {
 			return local(function, FunctionBody.of(parameters, functionBlock(function, lowering)))
 		}
-		return local(function, functionBody(function, listOf(), lowering))
+		return local(function, functionBody(function, receiver(function), lowering))
+	}
+
+	/**
+	 * The parameter an extension function takes its receiver in, `self`, which its `this` stands for; none for any
+	 * other function.
+	 */
+	private fun receiver(function: KtNamedFunction): List<String> {
+		if (function.receiverTypeReference == null) {
+			return listOf()
+		}
+		unit.aliasReceiver(function, "self")
+		return listOf("self")
 	}
 
 	/** `local function name(...)`, which `function name(...)` assigns when it is declared ahead. */
@@ -155,7 +173,8 @@ internal class Functions(private val unit: FileLowering) {
 			block != null -> lowering.block(block)
 			expression != null && returnsUnit(function) ->
 				Block(lowering.expressionStatement(expression).map(Block.Entry::of), listOf())
-			expression != null -> Block.of(Statement.Return(listOf(lowering.expression(expression))))
+			// An expression body is the function's return, which a chain, a when or a scope function can be too
+			expression != null -> Block(lowering.returned(expression).map(Block.Entry::of), listOf())
 			function.hasModifier(KtTokens.EXTERNAL_KEYWORD) -> throw Rejection(function, "Only a @LuaModule"
 				+ " declaration has external functions; they stand for Lua functions that exist already.")
 			else -> throw Rejection(function, "A function without a body has no Lua; give it one.")
@@ -190,6 +209,9 @@ internal class Functions(private val unit: FileLowering) {
 		val lines = unit.source.leading(function).toMutableList()
 		val doc = function.docComment ?: return lines
 		KDocText.description(doc).forEach { lines += Comment.line(it) }
+		function.symbol.receiverParameter?.let { receiver ->
+			lines += Comment.annotation("@param self ${unit.types.luaType(receiver.returnType)}")
+		}
 		lines += parameterAnnotations(function.valueParameters, doc)
 		val returned = function.symbol.returnType
 		val values = returned.expandedSymbol?.takeIf { unit.annotations.has(it, Annotations.LUA_RETURN_VALUES) }

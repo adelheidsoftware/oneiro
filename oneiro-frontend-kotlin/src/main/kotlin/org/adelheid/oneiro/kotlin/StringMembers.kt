@@ -62,6 +62,19 @@ internal class StringMembers(private val body: BodyLowering) {
 				}
 			}
 			"repeat" -> Expression.methodCall(text, "rep", body.expression(arguments[0]))
+			"padStart" -> helper(Helper.PAD_START, text, body.expression(arguments[0]), padChar(arguments))
+			"padEnd" -> helper(Helper.PAD_END, text, body.expression(arguments[0]), padChar(arguments))
+			"removePrefix" -> helper(Helper.REMOVE_PREFIX, text, body.expression(arguments[0]))
+			"removeSuffix" -> helper(Helper.REMOVE_SUFFIX, text, body.expression(arguments[0]))
+			"substringBefore", "substringAfter" -> {
+				if (arguments.size != 1) {
+					throw Rejection.notYet(where, "$name with a value for text without the delimiter")
+				}
+				val helper = if (name == "substringBefore") Helper.SUBSTRING_BEFORE else Helper.SUBSTRING_AFTER
+				helper(helper, text, body.expression(arguments[0]))
+			}
+			"take" -> Expression.methodCall(text, "sub", Expression.integer(1), body.expression(arguments[0]))
+			"drop" -> Expression.methodCall(text, "sub", IndexArithmetic.plusOne(body.expression(arguments[0])))
 			"trimIndent", "trimMargin" -> trimmed(where, name, receiver, arguments)
 			"get" -> body.library.characterAt(text, arguments[0])
 			"split" -> split(where, text, arguments)
@@ -76,6 +89,13 @@ internal class StringMembers(private val body: BodyLowering) {
 		"uppercase" -> Expression.methodCall(text, "upper")
 		"lowercase" -> Expression.methodCall(text, "lower")
 		"trim" -> helper(Helper.TRIM, text)
+		// Lua's %s and %S know ASCII's whitespace only, as its other character classes know ASCII only
+		"trimStart" -> Expression.methodCall(text, "match", Expression.string("^%s*(.*)"))
+		"trimEnd" -> Expression.methodCall(text, "match", Expression.string("^(.-)%s*$"))
+		"isBlank" -> Expression.binary(Expression.methodCall(text, "find", Expression.string("%S")),
+			BinaryOperator.EQUAL, Expression.Nil())
+		"isNotBlank" -> Expression.binary(Expression.methodCall(text, "find", Expression.string("%S")),
+			BinaryOperator.NOT_EQUAL, Expression.Nil())
 		"toString" -> text
 		"reversed" -> Expression.methodCall(text, "reverse")
 		"first" -> Expression.methodCall(text, "sub", Expression.integer(1), Expression.integer(1))
@@ -142,6 +162,10 @@ internal class StringMembers(private val body: BodyLowering) {
 		val other = Expression.methodCall(body.expression(arguments[0]), "lower")
 		return Expression.binary(Expression.methodCall(text, "lower"), BinaryOperator.EQUAL, other)
 	}
+
+	/** The char `padStart` and `padEnd` pad with, a space unless the call gives one. */
+	private fun padChar(arguments: LibraryArguments): Expression =
+		arguments.byName["padChar"]?.let(body::expression) ?: Expression.string(" ")
 
 	private fun call(function: String, vararg arguments: Expression): Expression {
 		unit.useGlobal(function)

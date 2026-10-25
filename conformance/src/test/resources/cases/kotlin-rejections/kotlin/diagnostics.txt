@@ -1,0 +1,43 @@
+plugin/Refused.kt:12: error: An extension function inside a class with objects is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+		fun String.tagged(): String = this + total
+		^
+
+plugin/Refused.kt:16: error: Lua's or would fail a false here as well as a nil; give the value to a local of its own, val x = ..., which Oneiro tests for nil alone.
+	fun flag(setting: Boolean?): String = "flag " + requireNotNull(setting)
+	                                                ^
+
+plugin/Refused.kt:19: error: Lua's or would fail a false here as well as a nil; give the value to a local of its own, val x = ..., which Oneiro tests for nil alone.
+	fun known(setting: Boolean?): String = "known " + (setting ?: throw IllegalStateException("unknown"))
+	                                                              ^
+
+plugin/Refused.kt:22: error: In Lua a map's entry is its key and its value, which a loop walks, not a value of its own; read entry.key and entry.value, or destructure it, (key, value) ->, and take .key or .value of an entry a chain finds.
+	fun entries(stock: Map<String, Int>): List<Map.Entry<String, Int>> = stock.entries.filter { it.value > 0 }
+	                                                                                   ^
+
+plugin/Refused.kt:25: error: In Lua a map's entry is its key and its value, which a loop walks, not a value of its own; read entry.key and entry.value, or destructure it, (key, value) ->, and take .key or .value of an entry a chain finds.
+	fun best(stock: Map<String, Int>): Map.Entry<String, Int>? = stock.maxByOrNull { it.value }
+	                                                                   ^
+
+plugin/Refused.kt:29: error: In Lua a map's entry is its key and its value, which a loop walks, not a value of its own; read entry.key and entry.value, or destructure it, (key, value) ->, and take .key or .value of an entry a chain finds.
+		stock.forEach { log(it) }
+		                    ^
+
+plugin/Refused.kt:33: error: associate with a pair that is not written key to value is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+	fun lengths(items: List<String>): Map<String, Int> = items.associate { Pair(it, it.length) }
+	                                                                       ^
+
+plugin/Refused.kt:36: error: Oneiro reads the Kotlin library's members only on a value the code names; write this.uppercase(...) here.
+	fun String.shout(): String = uppercase()
+	                             ^
+
+plugin/Refused.kt:39: error: In Lua the code of apply runs as statements; give its value to a local, val x = ..., a return or an assignment of its own.
+	fun logged(text: String): Int = text.apply { log(this) }.length
+	                                ^
+
+plugin/Refused.kt:45: error: Lua runs the code of let in place, where a return@label would leave the function around it; give the lambda its value at its end, using if where it differs.
+				return@let "empty"
+				^
+
+plugin/Refused.kt:53: error: In Lua this when is a statement, which can run before the code around it only where nothing would see the difference; give its value to a local of its own first, val x = when ...
+	fun calm(ready: Boolean, mood: Int): Boolean = ready && when (mood) {
+	                                                        ^
