@@ -24,6 +24,7 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import org.adelheid.oneiro.lowering.Inlining;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Expression;
@@ -417,17 +418,22 @@ final class StreamLoops {
 			body.alias(parameter, element);
 		}
 
-		/** A function called on the current element; a function expression the call cannot open goes into a local. */
+		/** A function called on the current element, opened where it is a method reference's small function. */
 		private Expression applied(ExpressionTree function) {
 			Expression lowered = body.expression(function);
 			Expression argument = current();
-			Expression applied = body.lambdas().applied(lowered, List.of(argument));
-			if (applied instanceof Expression.Call call && call.function() instanceof Expression.FunctionExpression) {
-				String local = body.invent("action", function);
-				functions.add(new Statement.Local(List.of(local), List.of(lowered)));
+			Expression opened = Inlining.value(lowered, List.of(argument));
+			return opened != null ? opened : called(lowered, argument, function);
+		}
+
+		/** A function value called on the argument; a function expression goes into a local before the loop first. */
+		private Expression called(Expression function, Expression argument, Tree where) {
+			if (function instanceof Expression.FunctionExpression) {
+				String local = body.invent("action", where);
+				functions.add(new Statement.Local(List.of(local), List.of(function)));
 				return new Expression.Call(name(local), List.of(argument));
 			}
-			return applied;
+			return new Expression.Call(function, List.of(argument));
 		}
 
 		// ---- The terminal operation
@@ -482,7 +488,18 @@ final class StreamLoops {
 					return inlined.body();
 				}
 			}
-			return Block.of(new Statement.CallStatement(applied(action)));
+			Expression lowered = body.expression(action);
+			Expression argument = current();
+			// A method reference's small function is opened into what it does: a call, or an assignment such as
+			// list::add's
+			Statement opened = Inlining.statement(lowered, List.of(argument));
+			if (opened != null) {
+				return Block.of(opened);
+			}
+			if (Inlining.value(lowered, List.of(argument)) != null) {
+				throw new Rejection(action, "In Lua a statement is a call; this method's value would go nowhere.");
+			}
+			return Block.of(new Statement.CallStatement(called(lowered, argument, action)));
 		}
 
 		/** {@code toList()}, {@code collect(Collectors.toList())} or {@code toSet()}: a table the loop fills. */

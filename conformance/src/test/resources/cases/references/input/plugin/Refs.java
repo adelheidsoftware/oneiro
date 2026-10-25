@@ -76,4 +76,11 @@ public final class Refs {
 	public static List<String> shouted(List<String> texts) {
 		return texts.stream().map(String::toUpperCase).toList();
 	}
+
+	/** The long names, collected by the list's add. */
+	public static List<String> longNames(List<String> names) {
+		List<String> found = new ArrayList<>();
+		names.stream().filter(name -> name.length() > 3).forEach(found::add);
+		return found;
+	}
 }

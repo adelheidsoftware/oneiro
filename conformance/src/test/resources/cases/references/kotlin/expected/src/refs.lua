@@ -120,4 +120,17 @@ function Refs.shouted(texts)
     return list
 end
 
+-- The long names, collected by the list's add.
+---@param names string[]
+---@return string[]
+function Refs.longNames(names)
+    local found = {}
+    for _, name in ipairs(names) do
+        if #name > 3 then
+            found[#found + 1] = name
+        end
+    end
+    return found
+end
+
 return Refs

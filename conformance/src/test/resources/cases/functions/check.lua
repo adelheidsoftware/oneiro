@@ -7,3 +7,5 @@ assert(Functions.matching({ 5, 6 }, function(value)
     return value > 5
 end) == 1, "a plugin interface with one method is a plain function")
 assert(Functions.applied(3) == 15, "twice(3) plus the length of \"functions\"")
+local found = Functions.collected({ 4, 5 })
+assert(#found == 2 and found[2] == 5, "list::add given to a plugin interface whose method returns nothing")

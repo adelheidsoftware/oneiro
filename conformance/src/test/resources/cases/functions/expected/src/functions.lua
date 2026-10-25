@@ -53,4 +53,18 @@ function Functions.applied(start)
     return sum(twice(start), #name())
 end
 
+function Functions.each(values, sink)
+    for _, value in ipairs(values) do
+        sink(value)
+    end
+end
+
+function Functions.collected(values)
+    local found = {}
+    Functions.each(values, function(value)
+        found[#found + 1] = value
+    end)
+    return found
+end
+
 return Functions

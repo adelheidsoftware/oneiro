@@ -196,7 +196,7 @@ final class MethodReferences {
 						throw unsupported(reference);
 					}
 					Expression slot = new Expression.Index(collection, LibraryCalls.nextIndex(collection));
-					yield statementFunction(List.of("value"), Statement.assignment(slot, value));
+					yield statementFunction(reference, name, Statement.assignment(slot, value));
 				}
 				case "contains" -> {
 					unit.use(Helper.LIST_CONTAINS);
@@ -209,7 +209,7 @@ final class MethodReferences {
 			return switch (name) {
 				case "add" -> {
 					Expression member = new Expression.Index(collection, value);
-					yield statementFunction(List.of("value"),
+					yield statementFunction(reference, name,
 							Statement.assignment(member, new Expression.BooleanLiteral(true)));
 				}
 				case "contains" -> function(List.of("value"), binary(new Expression.Index(collection, value),
@@ -265,8 +265,19 @@ final class MethodReferences {
 		return new Expression.FunctionExpression(FunctionBody.of(parameters, Block.of(statement)));
 	}
 
-	private static Expression statementFunction(List<String> parameters, Statement statement) {
-		return new Expression.FunctionExpression(FunctionBody.of(parameters, Block.of(statement)));
+	/**
+	 * {@code function(value) statement end}, for a reference whose value nothing reads: one passed where the method of
+	 * the functional interface returns nothing, as {@code forEach}'s {@code Consumer} does. Anywhere else the code
+	 * would read a value that Lua's assignment does not give.
+	 */
+	private Expression statementFunction(MemberReferenceTree reference, String method, Statement statement) {
+		if (!types.returnsNothing(unit.type(reference))) {
+			throw new Rejection(reference, "In Lua, " + reference + " is an assignment, which gives no value, where"
+					+ " Java's " + method + " tells whether the collection changed; so it works only where nothing"
+					+ " reads that, as in forEach(" + reference + "). Write a lambda here, which can test the"
+					+ " collection first.");
+		}
+		return new Expression.FunctionExpression(FunctionBody.of(List.of("value"), Block.of(statement)));
 	}
 
 	private boolean isTypeName(@Nullable ExpressionTree qualifier) {

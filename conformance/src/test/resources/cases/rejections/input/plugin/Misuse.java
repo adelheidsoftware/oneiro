@@ -1,5 +1,9 @@
 package plugin;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 /** Interop features used where Lua cannot follow. */
 public final class Misuse {
 
@@ -25,5 +29,10 @@ public final class Misuse {
 
 	public static int hashOf(Integer count) {
 		return count.hashCode();
+	}
+
+	public static List<String> firstSeen(List<String> names) {
+		Set<String> seen = new HashSet<>();
+		return names.stream().filter(seen::add).toList();
 	}
 }

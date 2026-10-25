@@ -110,6 +110,10 @@ plugin/Misuse.kt:20: error: Calling kotlin.Any.hashCode is not supported yet; ht
 		return count.hashCode()
 		       ^
 
+plugin/Misuse.kt:25: error: In Lua, seen::add is an assignment, which gives no value, where Kotlin's add tells whether the collection changed; so it works only where nothing reads that, as in forEach(seen::add). Write a lambda here, which can test the collection first.
+		return names.filter(seen::add)
+		                    ^
+
 plugin/Pair.kt:7: error: Lua has one module per file; move Second into a file of its own.
 class Second
 ^

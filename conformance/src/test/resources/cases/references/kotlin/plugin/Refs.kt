@@ -68,4 +68,11 @@ object Refs {
 	fun shouted(texts: List<String>): List<String> {
 		return texts.map(String::uppercase)
 	}
+
+	/** The long names, collected by the list's add. */
+	fun longNames(names: List<String>): List<String> {
+		val found = ArrayList<String>()
+		names.filter { name -> name.length > 3 }.forEach(found::add)
+		return found
+	}
 }

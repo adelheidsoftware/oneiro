@@ -19,4 +19,9 @@ object Misuse {
 	fun hashOf(count: Int): Int {
 		return count.hashCode()
 	}
+
+	fun firstSeen(names: List<String>): List<String> {
+		val seen = mutableSetOf<String>()
+		return names.filter(seen::add)
+	}
 }

@@ -9,6 +9,8 @@ import org.adelheid.oneiro.lua.Statement
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaNamedFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolModality
+import org.jetbrains.kotlin.analysis.api.types.KaFunctionType
 import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtExpression
@@ -84,16 +86,16 @@ internal class LibraryReferences(private val body: BodyLowering) {
 		val present = Expression.binary(member, BinaryOperator.NOT_EQUAL, Expression.Nil())
 		val kind = body.library.kind(with(unit.session) { receiver.expressionType })
 		return when {
-			kind == LibraryCalls.Kind.SEQUENCE && name == "add" && parameters == 1 -> action(value,
+			kind == LibraryCalls.Kind.SEQUENCE && name == "add" && parameters == 1 -> action(reference, name, value,
 				Statement.assignment(Expression.Index(collection, LibraryCalls.nextIndex(collection)), element))
 			kind == LibraryCalls.Kind.SEQUENCE && name == "contains" -> {
 				unit.use(Helper.LIST_CONTAINS)
 				function(value, Helper.LIST_CONTAINS.invoke(collection, element))
 			}
 			kind == LibraryCalls.Kind.SET && name == "add" ->
-				action(value, Statement.assignment(member, Expression.BooleanLiteral(true)))
-			kind == LibraryCalls.Kind.SET && name == "remove" -> action(value, Statement.assignment(member,
-				Expression.Nil()))
+				action(reference, name, value, Statement.assignment(member, Expression.BooleanLiteral(true)))
+			kind == LibraryCalls.Kind.SET && name == "remove" ->
+				action(reference, name, value, Statement.assignment(member, Expression.Nil()))
 			kind == LibraryCalls.Kind.SET && name == "contains" -> function(value, present)
 			kind == LibraryCalls.Kind.MAP && name == "get" -> function(value, member)
 			kind == LibraryCalls.Kind.MAP && name == "containsKey" -> function(value, present)
@@ -115,9 +117,34 @@ internal class LibraryReferences(private val body: BodyLowering) {
 	private fun function(parameter: String, value: Expression): Expression =
 		Expression.FunctionExpression(FunctionBody.of(listOf(parameter), Block.of(Statement.Return(listOf(value)))))
 
-	/** `function(parameter) statement end`, for a function whose value nothing reads. */
-	private fun action(parameter: String, statement: Statement): Expression =
-		Expression.FunctionExpression(FunctionBody.of(listOf(parameter), Block.of(statement)))
+	/**
+	 * `function(parameter) statement end`, for a reference whose value nothing reads: one passed where a function that
+	 * returns nothing is expected, as `forEach`'s action is. Anywhere else the code would read a value that Lua's
+	 * assignment does not give.
+	 */
+	private fun action(reference: KtCallableReferenceExpression, name: String, parameter: String,
+		statement: Statement): Expression {
+		if (!returnsNothing(reference)) {
+			throw Rejection(reference, "In Lua, ${reference.text} is an assignment, which gives no value, where"
+				+ " Kotlin's $name tells whether the collection changed; so it works only where nothing reads that, as"
+				+ " in forEach(${reference.text}). Write a lambda here, which can test the collection first.")
+		}
+		return Expression.FunctionExpression(FunctionBody.of(listOf(parameter), Block.of(statement)))
+	}
+
+	/**
+	 * Whether the function a reference is expected to be returns nothing: a function type's, or the one abstract
+	 * function of a fun interface, Kotlin's or Java's.
+	 */
+	private fun returnsNothing(reference: KtCallableReferenceExpression): Boolean = with(unit.session) {
+		val expected = reference.expectedType ?: return false
+		if (expected is KaFunctionType) {
+			return expected.returnType.isUnitType
+		}
+		val function = expected.expandedSymbol?.memberScope?.callables?.filterIsInstance<KaNamedFunctionSymbol>()
+			?.singleOrNull { it.modality == KaSymbolModality.ABSTRACT }
+		function?.returnType?.isUnitType == true
+	}
 
 	private fun unsupported(reference: KtCallableReferenceExpression): Rejection =
 		Rejection(reference, "Oneiro has no Lua function for this reference; write it as a lambda, { ... }, which it"

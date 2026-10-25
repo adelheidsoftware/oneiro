@@ -138,21 +138,25 @@ plugin/Gaps.java:223: error: Lua has no regular expressions; use LuaString.match
 		return text.matches("\\d+");
 		       ^
 
-plugin/Misuse.java:16: error: Only a @LuaModule declaration has native methods; they stand for Lua functions that exist already.
+plugin/Misuse.java:20: error: Only a @LuaModule declaration has native methods; they stand for Lua functions that exist already.
 	public static native int outside();
 	^
 
-plugin/Misuse.java:19: error: A record is a plain Lua table without a toString(); put its components into the text instead.
+plugin/Misuse.java:23: error: A record is a plain Lua table without a toString(); put its components into the text instead.
 		return "point " + point;
 		                  ^
 
-plugin/Misuse.java:23: error: A @LuaModule declaration has no Java constructor; call the module's own constructor, declared as a static native method with @LuaName("new").
+plugin/Misuse.java:27: error: A @LuaModule declaration has no Java constructor; call the module's own constructor, declared as a static native method with @LuaName("new").
 		return new Store();
 		       ^
 
-plugin/Misuse.java:27: error: Calling hashCode on a boxed value is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/java-subset.md lists the Java that is.
+plugin/Misuse.java:31: error: Calling hashCode on a boxed value is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/java-subset.md lists the Java that is.
 		return count.hashCode();
 		       ^
+
+plugin/Misuse.java:36: error: In Lua, seen::add is an assignment, which gives no value, where Java's add tells whether the collection changed; so it works only where nothing reads that, as in forEach(seen::add). Write a lambda here, which can test the collection first.
+		return names.stream().filter(seen::add).toList();
+		                             ^
 
 plugin/Pair.java:11: error: Lua has one module per file; move Second into a file of its own.
 final class Second {

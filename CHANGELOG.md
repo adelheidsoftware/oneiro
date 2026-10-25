@@ -65,6 +65,11 @@ All notable changes to Oneiro are listed here. The format follows
   itself no longer hides it in the function the reference becomes.
 - A record with methods stores each component under the name its accessor reads. A component named like a Lua global,
   such as `type`, was stored as `self.type_` and read back as `nil`.
+- A reference to `list.add` or `set.add` whose value the code reads, as `stream.filter(seen::add)` does, is now an
+  error that says to write a lambda. Its Lua function, an assignment, gave no value, so the filter kept nothing. Where
+  nothing reads the value, a stream's `forEach(found::add)` is now opened in place, `found[#found + 1] = item`, and a
+  stream's `forEach(String::length)`, whose value would go nowhere, is an error instead of a failure inside the
+  compiler.
 
 ## [0.1.0] - 2026-10-24
 

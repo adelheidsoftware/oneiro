@@ -636,13 +636,17 @@ internal class CollectionLoops(private val body: BodyLowering) {
 				bindPending("value", function)
 			}
 			val value = argument ?: current()
-			Inlining.value(lowered, listOf(value))?.let { return it }
-			if (lowered is Expression.FunctionExpression) {
-				val local = taken("action", function)
-				before += Statement.Local(listOf(local), listOf(lowered))
+			return Inlining.value(lowered, listOf(value)) ?: called(lowered, value, function)
+		}
+
+		/** A function value called on the value; a function expression goes into a local before the loop first. */
+		private fun called(function: Expression, value: Expression, where: PsiElement): Expression {
+			if (function is Expression.FunctionExpression) {
+				val local = taken("action", where)
+				before += Statement.Local(listOf(local), listOf(function))
 				return Expression.Call(Expression.name(local), listOf(value))
 			}
-			return Expression.Call(lowered, listOf(value))
+			return Expression.Call(function, listOf(value))
 		}
 
 		/** A name of the function's own the loop's variables have not taken. */
@@ -791,11 +795,17 @@ internal class CollectionLoops(private val body: BodyLowering) {
 				bindElement(action)
 				return body.lambdas.inline(action, "forEach").code
 			}
-			val call = applied(action)
-			if (call !is Expression.Call && call !is Expression.MethodCall) {
+			val lowered = body.expression(action)
+			if (lowered is Expression.FunctionExpression) {
+				bindPending("value", action)
+			}
+			val value = current()
+			// A reference's small function is opened into what it does: a call, or an assignment such as list::add's
+			Inlining.statement(lowered, listOf(value))?.let { return Block.of(it) }
+			if (Inlining.value(lowered, listOf(value)) != null) {
 				throw Rejection(action, "In Lua a statement is a call; this function's value would go nowhere.")
 			}
-			return Block.of(Statement.CallStatement(call))
+			return Block.of(Statement.CallStatement(called(lowered, value, action)))
 		}
 
 		/** `toList()`, `toSet()` or a sort, and the list a chain ending in a step gives: a table the loop fills. */

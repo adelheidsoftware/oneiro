@@ -8,6 +8,11 @@ object Functions {
 		fun test(value: Int): Boolean
 	}
 
+	/** Where values go, one at a time. */
+	fun interface Sink {
+		fun take(value: Int)
+	}
+
 	fun <T> keep(items: List<T>, keep: (T) -> Boolean): List<T> {
 		val kept = ArrayList<T>()
 		for (item in items) {
@@ -50,5 +55,17 @@ object Functions {
 		val nothing = {}
 		nothing()
 		return sum(twice(start), name().length)
+	}
+
+	fun each(values: List<Int>, sink: Sink) {
+		for (value in values) {
+			sink.take(value)
+		}
+	}
+
+	fun collected(values: List<Int>): List<Int> {
+		val found = ArrayList<Int>()
+		each(values, found::add)
+		return found
 	}
 }

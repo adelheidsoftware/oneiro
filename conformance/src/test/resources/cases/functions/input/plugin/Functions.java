@@ -15,6 +15,11 @@ public final class Functions {
 		boolean test(int value);
 	}
 
+	/** Where values go, one at a time. */
+	public interface Sink {
+		void take(int value);
+	}
+
 	private Functions() {
 	}
 
@@ -61,5 +66,17 @@ public final class Functions {
 		};
 		nothing.run();
 		return sum.apply(twice.apply(start), name.get().length());
+	}
+
+	public static void each(List<Integer> values, Sink sink) {
+		for (int value : values) {
+			sink.take(value);
+		}
+	}
+
+	public static List<Integer> collected(List<Integer> values) {
+		List<Integer> found = new ArrayList<>();
+		each(values, found::add);
+		return found;
 	}
 }

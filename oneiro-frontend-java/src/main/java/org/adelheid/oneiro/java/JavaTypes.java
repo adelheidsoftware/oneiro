@@ -243,6 +243,20 @@ final class JavaTypes {
 				&& elements.isFunctionalInterface(type) && !isImplemented(type);
 	}
 
+	/**
+	 * Whether a functional interface's method returns nothing, as {@code Consumer.accept} does, so that nothing reads
+	 * the value of a function that stands for it; false for any other type.
+	 */
+	boolean returnsNothing(TypeMirror type) {
+		if (!(type instanceof DeclaredType declared) || !(declared.asElement() instanceof TypeElement element)
+				|| !elements.isFunctionalInterface(element)) {
+			return false;
+		}
+		return ElementFilter.methodsIn(elements.getAllMembers(element)).stream()
+				.filter(method -> method.getModifiers().contains(Modifier.ABSTRACT))
+				.anyMatch(method -> method.getReturnType().getKind() == TypeKind.VOID);
+	}
+
 	/** The plugin class a type names, or null for library types, arrays and primitives. */
 	@Nullable TypeElement pluginType(TypeMirror type) {
 		if (type.getKind() != TypeKind.DECLARED) {
