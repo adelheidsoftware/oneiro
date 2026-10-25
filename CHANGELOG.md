@@ -4,6 +4,8 @@ All notable changes to Oneiro are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
 ## [0.2.0] - 2026-10-25
 
 ### Added
@@ -104,5 +106,6 @@ The first release.
 - Compile-time checks against the manifest: code that needs a permission or an icon does not compile unless the build
   declares it, and development-only members such as `ExecuteConsoleCommand` compile only in the dev source set.
 
+[Unreleased]: https://github.com/adelheidsoftware/oneiro/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/adelheidsoftware/oneiro/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/adelheidsoftware/oneiro/releases/tag/v0.1.0
