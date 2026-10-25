@@ -144,8 +144,8 @@ The plugin keeps the same shape: a class that extends `Plugin`, with `@Subscribe
 a type error is reported as Kotlin reports it; then `oneiroKotlin` lowers the sources with Oneiro's Kotlin front end,
 which runs on the Kotlin Analysis API in a worker process of its own on JDK 25, and reports each rejection as kotlinc
 reports an error, `e: file:///.../HerbPlugin.kt:12:5 message`, which IDEs link to the line. A plugin is written in one
-language: one with both Java and Kotlin sources fails to build. The Kotlin front end is in progress, and
-[kotlin-subset.md](kotlin-subset.md) lists what it accepts so far.
+language: one with both Java and Kotlin sources fails to build. [kotlin-subset.md](kotlin-subset.md) lists the Kotlin
+it accepts, as [java-subset.md](java-subset.md) lists the Java.
 
 ## The plugin class, events and settings
 

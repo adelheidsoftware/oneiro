@@ -1,7 +1,7 @@
 # Contributing to Oneiro
 
-Thank you for helping. This page covers building Oneiro, running its tests, adding to the Java it supports, and the
-code style. [docs/architecture.md](docs/architecture.md) explains how the compiler is put together.
+Thank you for helping. This page covers building Oneiro, running its tests, adding to the Java and Kotlin it supports,
+and the code style. [docs/architecture.md](docs/architecture.md) explains how the compiler is put together.
 
 For anything larger than a small fix, please open an issue first, so that we can agree on the approach before you
 spend time on it.
@@ -44,10 +44,11 @@ includeBuild("../oneiro")
 The first `includeBuild` provides the Gradle plugin; the second provides the modules it adds to the plugin's build.
 Each build of the plugin then uses Oneiro as it is in the checkout.
 
-## Supporting more Java
+## Supporting more Java and Kotlin
 
-Each construct Oneiro accepts, and each one it rejects, is a row in [docs/java-subset.md](docs/java-subset.md) and a
-case in the conformance suite. A change to the supported language comes with both.
+Each construct Oneiro accepts, and each one it rejects, is a row in [docs/java-subset.md](docs/java-subset.md) or
+[docs/kotlin-subset.md](docs/kotlin-subset.md) and a case in the conformance suite. A change to a supported language
+comes with both.
 
 A case is a folder under `conformance/src/test/resources/cases/`:
 
@@ -60,6 +61,9 @@ A case is a folder under `conformance/src/test/resources/cases/`:
 | `lua/` | Optional. Hand-written Lua modules that the case's Java declares with `@LuaModule`. |
 | `case.properties` | Optional. The plugin's identifier (`id`), its `permissions` and manifest `flags`, and `dev=true` for a dev source set. |
 | `kotlin/` | Optional. The same plugin in Kotlin, the case's twin, which must give the same Lua as `expected/`, and passes the same `check.lua`; with its own `diagnostics.txt` when it has any, and its own `expected/` for a module where idiomatic Kotlin reads differently. |
+
+A case for what only Kotlin has, such as `kotlin-scopes`, has no `input/`: its sources are in `kotlin/` alone, beside
+`expected/`, `check.lua` and, in `kotlin/`, any `diagnostics.txt`.
 
 Write the expected Lua by hand, in the style described below, as a careful person would write it. Never copy it from
 Oneiro's output: the case exists to check that output against what it should be.

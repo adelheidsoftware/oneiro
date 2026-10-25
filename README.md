@@ -1,24 +1,21 @@
 # Oneiro
 
-Write RuneScape 3 plugins in Java, the way you would write a RuneLite plugin, and get readable Lua for the
-[RS3 Client Plugin API](https://developer.runescape.com/rs/index.html).
+[![Maven Central](https://img.shields.io/maven-central/v/org.adelheid/oneiro-gradle-plugin?label=Maven%20Central)](https://central.sonatype.com/artifact/org.adelheid/oneiro-gradle-plugin)
 
-Named after the Oneiromancer of Lunar Isle.
+Write RuneScape 3 plugins in Java or Kotlin, similar to the way you would write a RuneLite plugin, and get readable Lua for the [RS3 Client Plugin API](https://developer.runescape.com/rs/index.html).
 
-> **Status:** early development; 0.1.0 is the first release. Plugins written in Java compile to Lua and build into the
-> folder and zip that go to Mod.io ([what is supported](docs/java-subset.md)). Plugins written in Kotlin build the same
-> way, for the part of the language [kotlin-subset.md](docs/kotlin-subset.md) lists so far; the rest is in progress.
+Named after the [Oneiromancer](https://runescape.wiki/w/Oneiromancer).
+
+> **Status:** early development. Plugins written in Java or Kotlin compile to Lua and build into the folder and zip
+> that go to Mod.io; what each language supports is in [java-subset.md](docs/java-subset.md) and
+> [kotlin-subset.md](docs/kotlin-subset.md). 0.1.0, the first release, builds plugins written in Java; Kotlin comes
+> with 0.2.0.
 
 ## What it does
 
-RS3 client plugins are Lua 5.4 scripts, which Jagex's moderators review before they are published on Mod.io. Oneiro
-lets you write them in Java, with the tools you know: Gradle, your IDE, type checking and completion for the whole RS3
-API. It compiles the Java into Lua that reads as if written by hand, one module per file, with comments carried over,
-Lua Language Server annotations, and direct calls to the RS3 API. There is no runtime library. Only the Lua is
-submitted and moderated.
+RS3 client plugins are Lua 5.4 scripts, which Jagex's moderators review before they are published on [Mod.io](https://mod.io/g/runescape). Oneiro lets you write them in Java or Kotlin, with the tools you know: Gradle, your IDE, type checking and completion for the whole RS3 API. It compiles your code into Lua that reads as if written by hand, one module per file, with comments carried over, Lua Language Server annotations, and direct calls to the RS3 API. There is no runtime library. Only the Lua is submitted and moderated.
 
-The source keeps the shape of a RuneLite plugin, a `Plugin` class with `@Subscribe` methods and a settings interface,
-and calls the RS3 API by the names Jagex documents:
+The source keeps the shape of a RuneLite plugin, a `Plugin` class with `@Subscribe` functions and a settings interface, and calls the RS3 API by the names it documents. In Java:
 
 ```java
 package com.example.coins;
@@ -53,7 +50,41 @@ public final class CoinWatch extends Plugin {
 }
 ```
 
-becomes `main.lua`:
+In Kotlin:
+
+```kotlin
+package com.example.coins
+
+import org.adelheid.oneiro.api.Plugin
+import org.adelheid.oneiro.api.Subscribe
+import org.adelheid.oneiro.rs3.Globals.log
+import org.adelheid.oneiro.rs3.Inventory
+import org.adelheid.oneiro.rs3.InventoryUpdatedEventPayload
+import org.adelheid.oneiro.rs3.config
+import org.adelheid.oneiro.rs3.id
+
+/** Logs the coins in your backpack whenever the amount changes. */
+class CoinWatch : Plugin() {
+
+    private lateinit var settings: CoinSettings
+    private var shown = -1
+
+    @Subscribe
+    fun onInventoryUpdated(event: InventoryUpdatedEventPayload) {
+        // The bank and other inventories send updates too
+        if (event.inv.id != id.Inv.RS3_INV || !settings.enabled()) {
+            return
+        }
+        val coins = Inventory.Find(config.Inv.RS3_INV).GetTotal(config.Obj.RS3_COINS)
+        if (coins != shown) {
+            shown = coins
+            log("Coins in the backpack: $coins")
+        }
+    }
+}
+```
+
+Either becomes this `main.lua`:
 
 ```lua
 -- main.lua
@@ -118,6 +149,7 @@ rootProject.name = "coin-watch"
 
 ```kotlin
 plugins {
+    // For a plugin written in Kotlin, with Oneiro 0.2.0 or later: kotlin("jvm") version "2.4.21"
     id("org.adelheid.oneiro") version "0.1.0"
 }
 
@@ -139,8 +171,8 @@ oneiro {
 }
 ```
 
-Put `CoinWatch.java` from above in `src/main/java/com/example/coins/`, and its settings interface next to it as
-`CoinSettings.java`:
+Put `CoinWatch.java` from above in `src/main/java/com/example/coins/`, or `CoinWatch.kt` in
+`src/main/kotlin/com/example/coins/`, and its settings interface next to it. As `CoinSettings.java`:
 
 ```java
 package com.example.coins;
@@ -159,6 +191,25 @@ public interface CoinSettings {
 }
 ```
 
+As `CoinSettings.kt`:
+
+```kotlin
+package com.example.coins
+
+import org.adelheid.oneiro.api.ConfigGroup
+import org.adelheid.oneiro.api.ConfigItem
+
+/** Coin Watch's settings. */
+@ConfigGroup("coinwatch")
+interface CoinSettings {
+
+    @ConfigItem(keyName = "enabled", name = "Log the coins")
+    fun enabled(): Boolean = true
+}
+```
+
+A plugin is written in one language; the build fails when it has both Java and Kotlin sources.
+
 Then build the plugin and link it into the client:
 
 ```sh
@@ -172,7 +223,7 @@ The zip for Mod.io is `build/distributions/coin-watch-1.0.0.zip`. On Windows, `l
 
 In the client's console, `prf` finds the newly linked plugin and `pon coin-watch` enables it. After each build,
 `prl coin-watch` reloads it. When the console shows an error from the plugin, copy it into a file and run
-`./gradlew explainError --input=console.txt`: it shows the Java lines the error came from.
+`./gradlew explainError --input=console.txt`: it shows the lines of your source that the error came from.
 
 ## Documentation
 
@@ -180,7 +231,8 @@ In the client's console, `prf` finds the newly linked plugin and `pon coin-watch
   notifiers and timers become, and how the rules differ between the games.
 - [The plugin model and the build](docs/plugin-model.md): the project layout, the `oneiro { }` block, the tasks and
   the checks.
-- [Supported Java](docs/java-subset.md): every construct Oneiro accepts, the Lua it becomes, and what it rejects.
+- [Supported Java](docs/java-subset.md) and [supported Kotlin](docs/kotlin-subset.md): every construct Oneiro
+  accepts, the Lua it becomes, and what it rejects.
 - [Architecture](docs/architecture.md): how Oneiro is put together, for contributors.
 - The [RS3 Client Plugin API documentation](https://developer.runescape.com/rs/index.html) and Jagex's
   [plugin guidelines](https://developer.runescape.com/rs/submission/guidelines.html).
@@ -201,7 +253,7 @@ in the plugin's `settings.gradle.kts` and apply the plugin without a version, as
 ## Contributing
 
 Contributions are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) explains how to build, test and add to the supported
-Java. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+languages. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Licence
 
