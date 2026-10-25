@@ -18,8 +18,8 @@ import org.jspecify.annotations.Nullable;
  * its first line, which Oneiro makes the file's path, so a place in the Lua reads
  * {@code [string "-- src/core/row.lua..."]:12}. Each error of the plugin is shown with its message and the calls that
  * led to it, innermost first, each as the Java file and line it came from with that line's code, in the
- * {@code file:line: text} form that IDEs link. Errors of other plugins, whose files can share a path with this
- * plugin's, are left out.
+ * {@code file:line: text} form that IDEs link, and, for a message of the client's own, what it means. Errors of other
+ * plugins, whose files can share a path with this plugin's, are left out.
  */
 public final class ConsoleErrors {
 
@@ -113,15 +113,17 @@ public final class ConsoleErrors {
 	}
 
 	/**
-	 * The message with its place in front, then the place of each call: Lua's own calls, such as error, have none.
+	 * The message with its place in front, then the place of each call: Lua's own calls, such as error, and the
+	 * client's have none. Last, what a message of the client's own means, when it is one {@link ClientMessages} knows.
 	 *
 	 * @return whether the error names a place in the Lua
 	 */
 	private boolean appendError(StringBuilder text, String message, List<String> calls) {
 		Matcher place = PLACE.matcher(message);
 		boolean placed = place.lookingAt();
+		String rest = message;
 		if (placed) {
-			String rest = message.substring(place.end()).replaceFirst("^: ", "");
+			rest = message.substring(place.end()).replaceFirst("^: ", "");
 			text.append(shown(place, false)).append(": ").append(rest).append('\n');
 		} else {
 			text.append(message).append('\n');
@@ -132,6 +134,10 @@ public final class ConsoleErrors {
 				placed = true;
 				text.append("\tat ").append(shown(callPlace, true)).append('\n');
 			}
+		}
+		String explanation = ClientMessages.explain(rest, calls);
+		if (explanation != null) {
+			text.append('\t').append(explanation).append('\n');
 		}
 		text.append('\n');
 		return placed;

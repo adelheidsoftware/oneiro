@@ -294,3 +294,15 @@ Each place is the Java file and line it came from, with that line's code, in the
 plugin's errors by its name and leaves out everything else, including other plugins' errors, whose files can share
 a path with this plugin's. It reads the line maps of the latest build, so it explains the Lua that build wrote: after
 changing the code, build and reload the plugin, and reproduce the error, before explaining it.
+
+An error that the client raises itself names C++ types rather than Java's. Most come from a part of the API that the
+client has differently from the docs, which Oneiro's bindings follow, for instance after a client update. For the
+client's messages that Oneiro knows, the task adds what the message means and what to do instead: an argument the
+client requires and the call leaves out, a form of a function the client lacks, a value a field does not take, a
+field of a value the client handed out, and a name the client lacks.
+
+```text
+stack index 4, expected number, received no value: not a numeric type (bad argument into 'void(float, float, unsigned char)')
+	at src/main/java/com/example/herbs/Growth.java:22: progress.Start(0, 10);
+	In the client, Start requires argument 3, which this call leaves out: Oneiro's bindings follow the docs, which let it be left out. Pass it.
+```

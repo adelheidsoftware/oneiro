@@ -200,7 +200,7 @@ param ui.NPCCustomisation.SetModelSlot translation Vector3          # client 202
 param ui.NPCCustomisation.SetModelSlot rotationYawPitchRoll Vector3 # client 2026-10-23: the same
 java-name ui.Line.width thickness                  # client 2026-10-23: on a line, width is the thickness (10 after line.width = 10, while size.width stays 200), not Component.width
 skip ShapeEntity.drawDistances                     # client 2026-10-23: reads nil, even after SetDrawDistance(100, 200)
-skip ui.ModelCamera.new                            # client 2026-10-24: ui.ModelCamera is nil, so ui.ModelCamera.new() raises "attempt to index a nil value (field 'ModelCamera')"; ModelGroup:GetCamera and activeCamera still hand out cameras
+skip ui.ModelCamera.new                            # client 2026-10-24: ui.ModelCamera is nil, so ui.ModelCamera.new() raises "attempt to index a nil value (field 'ModelCamera')"; ModelGroup:GetCamera and activeCamera still name the type
 skip ui.Text.lineSpacing                           # client 2026-10-25: reads nil on a text, and is not in its metatable
 skip ui.Text.shadowColour                          # client 2026-10-25: the same
 skip ui.Text.shadowRGBA                            # client 2026-10-25: the same

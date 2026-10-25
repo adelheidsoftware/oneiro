@@ -229,6 +229,7 @@ game world, it registers shapes, which the client draws.
 | `PluginPanel` behind a `NavigationButton` | The content layer behind the plugin's icon in the Plugins ribbon: `ribbonIcon = true`, and `ContentLayerReady`, which hands out an empty layer each time it opens |
 | Tile markers, NPC highlights, `OverlayUtil.renderPolygon` | Shapes in the world: `ShapeData`, drawn by a `ShapeEntity` (a fixed marker), a `ShapeInstance` (one that moves), or `ShapeList.Draw` in `Draw` or `EntityDraw` (for one frame) |
 | Hiding NPCs or players | `EntityDraw`, whose callback returns `false` to hide one |
+| `RuneLiteObject` with a model from `client.loadModel` | No counterpart: nothing puts a model into the world. Shapes draw geometry of the plugin's own; a real model can be a `ui.Model` laid over the scene, as described below |
 
 A line of text at the top of the game window, which clicks pass through:
 
@@ -289,6 +290,14 @@ if (marker != null) {
     marker.colour = 0x40FF40FFL;
 }
 ```
+
+RS3 has no `RuneLiteObject`: the API puts no model into the scene, and an NPC, player or loc has no member that
+changes how it looks. Geometry of the plugin's own is a shape, as above. A real model can be shown by a `ui.Model` on
+the plugin layer, moved in `Draw` to the place on screen that `ScreenConvert.Vector3ToScreen` gives for its spot in the
+world. Being a component, it is drawn above everything, the player and NPCs included. In the client, `SetTransform`
+does not turn a lone model; to turn it, show it as an NPC whose `ui.NPCCustomisation` replaces the NPC's models with
+it, and set the rotation of the customisation's model slot. The Javadoc of `ui.Model` and `SetModelSlot` has what the
+client was found to do.
 
 Jagex's [UI pages](https://developer.runescape.com/rs/ui/index.html) describe the components, and the
 [ShapeList page](https://developer.runescape.com/rs/game/list/shapelist.html) the shapes.
@@ -419,7 +428,7 @@ simple to read.
 | --- | --- |
 | Run the client from the IDE, with the plugin loaded | `./gradlew build`, then `./gradlew linkDevPlugin` once; the beta client loads the plugin from its `dev_plugins` folder |
 | Restart the client to try a change | `prl <id>` in the client's console after each build |
-| A stack trace in the IDE | An error in the client's console, against the Lua; `./gradlew explainError --input=console.txt` shows the Java lines |
+| A stack trace in the IDE | An error in the client's console, against the Lua; `./gradlew explainError --input=console.txt` shows the Java lines, and what the client's own messages mean |
 | Test on a live world | Test on the beta world |
 | Code only for development | `src/dev/java`, such as cheats with `ExecuteConsoleCommand`; it never ships |
 

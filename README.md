@@ -226,7 +226,8 @@ The zip for Mod.io is `build/distributions/coin-watch-1.0.0.zip`. On Windows, `l
 
 In the client's console, `prf` finds the newly linked plugin and `pon coin-watch` enables it. After each build,
 `prl coin-watch` reloads it. When the console shows an error from the plugin, copy it into a file and run
-`./gradlew explainError --input=console.txt`: it shows the lines of your source that the error came from.
+`./gradlew explainError --input=console.txt`: it shows the lines of your source that the error came from, and what the
+client's own messages mean.
 
 ## Documentation
 

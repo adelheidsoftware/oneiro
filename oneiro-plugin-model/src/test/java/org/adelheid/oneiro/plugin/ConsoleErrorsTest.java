@@ -141,6 +141,32 @@ class ConsoleErrorsTest {
 				""", explanation.text());
 	}
 
+	@Test
+	void aMessageOfTheClientsOwnIsExplained() throws IOException {
+		// Rich Death's console as it was, newest line first, with its main.lua for the file; the Java line stands in
+		// for the one that assigned a ui.Model's rotation
+		javaFile("Hat.java", Map.of(12, "\t\tmodel.rotation = new Vector3(0.5f, 0.2f, 0f);"));
+		lines = new LuaLineMap(Map.of("main.lua",
+				Map.of(80, new LuaLineMap.Source("org/adelheid/oneiro/errorprobe/Hat.java", 12))));
+		String message = "stack index 3, expected userdata, received sol.jag::math::Vector3T: value at this index does"
+				+ " not properly reflect the desired type (bad argument into 'void(const jag::math::Vector3T&)')";
+		ConsoleErrors.Explanation explanation = explain("""
+				[ERROR] in Oneiro Error Probe(-1): Event Draw callback error
+
+				[ERROR] in Oneiro Error Probe(-1): %s
+				stack traceback:
+				\t[C]: in metamethod 'newindex'
+				\t[string "-- main.lua..."]:80: in function
+				""".formatted(message));
+		assertEquals("Event Draw callback error\n\n" + message + "\n"
+				+ "\tat " + FOLDER + "Hat.java:12: model.rotation = new Vector3(0.5f, 0.2f, 0f);\n"
+				+ "\tThe client does not take this value for the field: it wants a value of another C++ type, although"
+				+ " the console can show the two by the same name, as it leaves out the part of a name between < and"
+				+ " >. Oneiro's bindings follow the docs, which give the field this type. The field cannot be set this"
+				+ " way; where its type has a method that sets the same thing, use that.\n\n", explanation.text());
+		assertEquals(1, explanation.errors());
+	}
+
 	private ConsoleErrors.Explanation explain(String console) {
 		return ConsoleErrors.explain(console, PLUGIN, lines, List.of(project.resolve("src/main/java")), project);
 	}
