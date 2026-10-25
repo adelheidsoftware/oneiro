@@ -108,7 +108,7 @@ internal class NonNegative(private val unit: FileLowering) {
 		}
 		val scope = when {
 			property.isLocal -> property.parent
-			property.hasModifier(KtTokens.PRIVATE_KEYWORD) -> unit.file
+			property.isPrivateInLua() -> unit.file
 			// Code in other files may lower a property they can see
 			else -> return false
 		}

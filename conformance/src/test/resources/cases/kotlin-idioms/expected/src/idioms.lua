@@ -63,6 +63,31 @@ end
 
 local Idioms = {}
 
+-- Declared ahead: used above their definitions below.
+local start
+
+-- Steps of a size a private companion keeps, which only the class reaches.
+local Steps = {}
+Steps.__index = Steps
+Idioms.Steps = Steps
+local SIZE = 3
+
+function Steps.new()
+    local self = setmetatable({}, Steps)
+    return self
+end
+
+-- How far the steps go, from the start.
+---@param count integer
+---@return integer
+function Steps:total(count)
+    return count * SIZE + start()
+end
+
+function start()
+    return 1
+end
+
 -- A test a class gives, which Lua calls as the function every Test is.
 local AtLeast = {}
 AtLeast.__index = AtLeast
@@ -227,6 +252,20 @@ function Idioms.beforeNegative(values)
         total = total + value
     end
     return total
+end
+
+-- A value known to be text, as text.
+---@param value any
+---@return string
+function Idioms.asText(value)
+    return value
+end
+
+-- A value as text when it is text, and null otherwise.
+---@param value any
+---@return string?
+function Idioms.textOrNull(value)
+    return type(value) == "string" and value or nil
 end
 
 -- Logs a tick, with a lambda that never reads its parameter.

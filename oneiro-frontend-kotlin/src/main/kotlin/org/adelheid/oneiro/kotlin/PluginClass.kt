@@ -7,7 +7,6 @@ import org.adelheid.oneiro.lowering.PluginLifecycle
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Comment
 import org.adelheid.oneiro.lua.Expression
-import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.Trivia
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
 import org.jetbrains.kotlin.lexer.KtTokens
@@ -161,14 +160,21 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 		val initializer = property.initializer
 			?: throw Rejection.notYet(property, "A property of the plugin class without a value")
 		val name = unit.names.luaName(property.name!!)
-		val value = BodyLowering(unit, type, false).expression(initializer)
-		val trivia = Trivia(apart || unit.source.blankLineBefore(property), unit.source.leading(property) +
-			listOfNotNull(property.docComment).flatMap(KDocText::description).map(Comment::line),
-			unit.source.trailing(property))
+		val lowered = BodyLowering(unit, type, false).assigned(initializer, Expression.name(name))
+		val leading = unit.source.leading(property) +
+			listOfNotNull(property.docComment).flatMap(KDocText::description).map(Comment::line)
+		val trailing = unit.source.trailing(property)
 		val origin = unit.source.position(unit.codeStart(property))
-		val declared = Block.Entry(Statement.Local(listOf(name), listOf(value)), trivia, origin)
-		val assigned = Block.Entry(Statement.assignment(Expression.name(name), value), trivia, origin)
-		return Member(listOf(property), false, name, listOf(declared), listOf(assigned), References.of(unit, property))
+		// The property's comments lead its first statement, and the one after it ends its last
+		val assigned = lowered.mapIndexed { index, entry ->
+			val own = entry.trivia()
+			val trivia = Trivia(index == 0 && (apart || unit.source.blankLineBefore(property)),
+				if (index == 0) leading + own.leading() else own.leading(),
+				if (index == lowered.lastIndex && trailing != null) trailing else own.trailing())
+			Block.Entry(entry.statement(), trivia, entry.origin() ?: origin)
+		}
+		return Member(listOf(property), false, name, declaredLocal(name, assigned), assigned,
+			References.of(unit, property))
 	}
 
 	/**

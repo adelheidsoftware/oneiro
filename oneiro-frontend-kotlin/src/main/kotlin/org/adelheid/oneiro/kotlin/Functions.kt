@@ -75,7 +75,7 @@ internal class Functions(private val unit: FileLowering) {
 		if (function.receiverTypeReference == null) {
 			return listOf()
 		}
-		unit.aliasReceiver(function, "self")
+		unit.aliasReceiver(function, Expression.name("self"))
 		return listOf("self")
 	}
 

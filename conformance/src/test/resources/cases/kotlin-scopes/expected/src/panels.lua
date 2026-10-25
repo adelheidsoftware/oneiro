@@ -25,6 +25,39 @@ function Tally:add(amount)
     self.total = self.total + amount
 end
 
+-- A panel, whose label is built as the panel is made.
+local Panel = {}
+Panel.__index = Panel
+Panels.Panel = Panel
+
+function Panel.new(parent)
+    local self = setmetatable({}, Panel)
+    self.label = ui.Text.new(parent)
+    self.label.content = "Ready"
+    self.label:SetPos(5, 5)
+    return self
+end
+
+-- The label's text.
+---@return string
+function Panel:text()
+    return self.label.content
+end
+
+local shared
+
+-- A tally kept between calls, made on the first.
+---@return Tally
+function Panels.sharedTally()
+    local tally = shared
+    if tally == nil then
+        tally = Tally.new(0)
+        tally:add(10)
+        shared = tally
+    end
+    return tally
+end
+
 -- A label under the parent, placed and filled in.
 ---@param parent ui.ComponentCollection
 ---@param words string

@@ -5,6 +5,11 @@ import org.adelheid.oneiro.rs3.Globals.log
 /** What Kotlin's own constructs cannot do in Lua, each refused with the reason. */
 object Refused {
 
+	/** Names in pairs, which a class's property works out in a way Lua cannot yet. */
+	class Pairs(names: List<String>) {
+		private val pairs = names.chunked(2)
+	}
+
 	/** A running total. */
 	class Tally(var total: Int) {
 

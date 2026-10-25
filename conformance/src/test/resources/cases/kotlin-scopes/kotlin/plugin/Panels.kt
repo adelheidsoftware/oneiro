@@ -6,6 +6,8 @@ import org.adelheid.oneiro.rs3.ui
 /** Kotlin's scope functions, opened where they are called: let, also, apply, run and with. */
 object Panels {
 
+	private var shared: Tally? = null
+
 	/** A running total. */
 	class Tally(var total: Int) {
 
@@ -13,6 +15,28 @@ object Panels {
 		fun add(amount: Int) {
 			total += amount
 		}
+	}
+
+	/** A panel, whose label is built as the panel is made. */
+	class Panel(parent: ui.ComponentCollection) {
+
+		private val label = ui.Text(parent).apply {
+			content = "Ready"
+			SetPos(5, 5)
+		}
+
+		/** The label's text. */
+		fun text(): String = label.content
+	}
+
+	/** A tally kept between calls, made on the first. */
+	fun sharedTally(): Tally {
+		var tally = shared
+		if (tally == null) {
+			tally = Tally(0).apply { add(10) }
+			shared = tally
+		}
+		return tally
 	}
 
 	/** A label under the parent, placed and filled in. */

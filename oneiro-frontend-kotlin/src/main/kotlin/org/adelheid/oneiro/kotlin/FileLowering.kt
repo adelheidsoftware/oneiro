@@ -178,11 +178,15 @@ internal class FileLowering(
 			reject(rejection)
 			null
 		}
-		for (comment in source.unclaimed()) {
-			warning(comment, "This comment could not be placed in the Lua and was left out; move it onto its own line"
-				+ " above a statement.")
+		val failed = diagnostics.any { it.severity() == Diagnostic.Severity.ERROR }
+		// The code an error stopped leaves its comments unplaced, which says nothing new
+		if (!failed) {
+			for (comment in source.unclaimed()) {
+				warning(comment, "This comment could not be placed in the Lua and was left out; move it onto its own"
+					+ " line above a statement.")
+			}
 		}
-		return if (diagnostics.any { it.severity() == Diagnostic.Severity.ERROR }) null else module
+		return if (failed) null else module
 	}
 
 	/**
@@ -336,19 +340,19 @@ internal class FileLowering(
 		aliases[declaration] = lua
 	}
 
-	/** The Lua names receivers stand for, by the function or lambda they are the `this` of; see [aliasReceiver]. */
-	private val receiverAliases = mutableMapOf<PsiElement, String>()
+	/** The Lua receivers stand for, by the function or lambda they are the `this` of; see [aliasReceiver]. */
+	private val receiverAliases = mutableMapOf<PsiElement, Expression>()
 
 	/**
-	 * Makes the receiver of a function or lambda, its `this`, stand for a Lua name: a scope function's receiver, which
-	 * members named without a receiver are read on, `apply { SetPos(1, 2) }`.
+	 * Makes the receiver of a function or lambda, its `this`, stand for a Lua name or property: a scope function's
+	 * receiver, which members named without a receiver are read on, `apply { SetPos(1, 2) }`.
 	 */
-	fun aliasReceiver(function: PsiElement, lua: String) {
+	fun aliasReceiver(function: PsiElement, lua: Expression) {
 		receiverAliases[function] = lua
 	}
 
-	/** The Lua name the receiver of a function or lambda stands for, or null for one without an alias. */
-	fun receiverAlias(function: PsiElement?): String? = function?.let(receiverAliases::get)
+	/** The Lua the receiver of a function or lambda stands for, or null for one without an alias. */
+	fun receiverAlias(function: PsiElement?): Expression? = function?.let(receiverAliases::get)
 
 	/** The Lua names of a map entry's key and value, by the declaration of the parameter that is the entry. */
 	private val entryAliases = mutableMapOf<PsiElement, Pair<String, String>>()
@@ -401,8 +405,7 @@ internal class FileLowering(
 			}
 			val owner = PsiTreeUtil.getParentOfType(declaration, KtClassOrObject::class.java)
 			val ownerIsEntry = owner == entry || owner?.parent?.parent == entry && entry != null
-			val local = declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) || declaration.parent is KtFile ||
-				ownerIsEntry
+			val local = declaration.isPrivateInLua() || declaration.parent is KtFile || ownerIsEntry
 			if (local && declaration.parent.let { it is KtClassBody || it is KtFile }) {
 				used += names.luaName(declaration.name ?: continue)
 				continue

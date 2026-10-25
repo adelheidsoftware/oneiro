@@ -12,7 +12,6 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaNamedFunctionSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
-import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBreakExpression
 import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtClass
@@ -227,7 +226,7 @@ internal class Lambdas(private val body: BodyLowering) {
 			return library.function(reference, function, receiver)
 		}
 		val declaration = function.psi as? KtNamedFunction
-		val isPrivate = declaration?.hasModifier(KtTokens.PRIVATE_KEYWORD) == true
+		val isPrivate = declaration?.isPrivateInLua() == true
 		// The function's parameters, named where the reference is, and apart from the object it calls the function on
 		val receiverName = (receiver as? KtNameReferenceExpression)?.getReferencedName()?.let(unit.names::luaName)
 		val parameters = function.valueParameters.map {

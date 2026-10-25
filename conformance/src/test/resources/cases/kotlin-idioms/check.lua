@@ -62,5 +62,8 @@ local prices = Idioms.prices()
 assert(prices.guam == 10 and prices.ranarr == 7000, "hashMapOf is a plain table")
 
 assert(Idioms.beforeNegative({ 1, 2, -1, 5 }) == 3, "a labelled break of the innermost loop")
+assert(Idioms.Steps.new():total(2) == 7, "a private companion's members are locals of the file")
+assert(Idioms.asText("guam") == "guam", "as gives the value as it is")
+assert(Idioms.textOrNull("guam") == "guam" and Idioms.textOrNull(5) == nil, "as? gives nil for another type")
 Idioms.ticker()(1)
 assert(logged[1] == "tick", "a lambda that never reads its parameter")

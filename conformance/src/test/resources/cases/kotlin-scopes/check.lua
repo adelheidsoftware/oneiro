@@ -40,3 +40,7 @@ assert(logged[#logged - 1] == "GUAM" and logged[#logged] == "RANARR", "let as a 
 assert(Panels.nameLength("guam") == "length 4", "let inside an expression")
 Panels.demo()
 assert(logged[#logged] == "total 5", "apply on a new object, whose value goes nowhere")
+
+assert(Panels.Panel.new(parent):text() == "Ready", "apply in a class's property")
+local first = Panels.sharedTally()
+assert(first.total == 10 and Panels.sharedTally() == first, "apply assigned to a variable, and an object's private var")

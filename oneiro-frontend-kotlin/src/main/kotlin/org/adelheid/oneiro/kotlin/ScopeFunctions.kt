@@ -146,6 +146,20 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 		return body.expression(single)
 	}
 
+	/**
+	 * `target = receiver.apply { ... }`, and a class's property of that value: the target, a name or a property, takes
+	 * the receiver, and the lambda's code works on it there, `self.box:SetSize(110, 32)`. Null for a scope function
+	 * that gives its lambda's value, and for `also` on a target that is no name, which its parameter could stand for.
+	 */
+	fun assigned(scope: Scope, target: Expression): List<Block.Entry>? {
+		if (scope.givesLambdaValue || scope.passesReceiver && target !is Expression.Name) {
+			return null
+		}
+		val first = Block.Entry.of(Statement.assignment(target, body.expression(scope.receiver)))
+		bind(scope, target)
+		return listOf(first) + placed(code(scope, null))
+	}
+
 	/** A scope function whose value goes nowhere: the lambda's code on the receiver, in a block with its local. */
 	private fun effect(scope: Scope): List<Block.Entry> {
 		val receiverName = stableName(scope.receiver)
@@ -205,7 +219,10 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 	 * stands for it, and so does the `this` of the others'. The code runs in place, which a `return@let` cannot leave
 	 * early.
 	 */
-	private fun bind(scope: Scope, name: String) {
+	private fun bind(scope: Scope, name: String) = bind(scope, Expression.name(name))
+
+	/** As [bind] with a name, for a receiver that stands for a property, which only `this` can: `self.box`. */
+	private fun bind(scope: Scope, receiver: Expression) {
 		val literal = scope.lambda.functionLiteral
 		unit.inlinedLambdas += literal
 		for (returned in PsiTreeUtil.collectElementsOfType(literal, KtReturnExpression::class.java)) {
@@ -221,9 +238,9 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 			if (parameter?.destructuringDeclaration != null) {
 				throw Rejection.notYet(parameter, "A lambda parameter that destructures")
 			}
-			unit.alias(parameter ?: literal, name)
+			unit.alias(parameter ?: literal, (receiver as Expression.Name).name())
 		} else {
-			unit.aliasReceiver(literal, name)
+			unit.aliasReceiver(literal, receiver)
 		}
 	}
 

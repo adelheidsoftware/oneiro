@@ -31,7 +31,8 @@ All notable changes to Oneiro are listed here. The format follows
   `counts.maxByOrNull { it.value }?.key`, and loops that read `entry.key` and `entry.value`; the collection functions
   `distinct`, `take`, `drop`, `takeWhile`, `dropWhile`, `flatMap`, `groupBy` and `associate`, and the string functions
   `padStart`, `padEnd`, `removePrefix`, `removeSuffix`, `substringBefore`, `substringAfter`, `isBlank`, `trimStart`
-  and `trimEnd`; and `requireNotNull` and `checkNotNull`. An expression body can be anything a `return` can.
+  and `trimEnd`; `requireNotNull` and `checkNotNull`; and the casts `as` and `as?`. An expression body can be anything
+  a `return` can, and a class's property can be built with `apply`.
 - `LuaString`, Lua's string patterns where Java and Kotlin have regular expressions: `match`, `captures`, `find`,
   `gsub` and `gmatch`, each Lua's string function of its name, with the pattern syntax in its Javadoc. The errors for
   regular expressions named it before it existed.

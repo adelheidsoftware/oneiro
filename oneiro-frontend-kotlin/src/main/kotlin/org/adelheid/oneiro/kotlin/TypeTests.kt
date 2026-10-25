@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
 import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.StandardClassIds
+import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtIsExpression
 
@@ -27,6 +28,29 @@ internal class TypeTests(private val body: BodyLowering) {
 		val type = test.typeReference?.type ?: throw Rejection(test, "This type test names no type.")
 		val tested = typeTest(body.expression(test.leftHandSide), type, test)
 		if (test.isNegated) Expression.Unary(UnaryOperator.NOT, tested) else tested
+	}
+
+	/**
+	 * `x as T`, the value itself: Lua checks no casts, so a value of another type goes on where Kotlin would throw. And
+	 * `x as? T`, the value when it passes the type's test and nil otherwise, `test and x or nil`, which reads the value
+	 * twice, so it must be a name or a property read, and must not be a `Boolean`, whose false `and` would turn to nil.
+	 */
+	fun cast(cast: KtBinaryExpressionWithTypeRHS): Expression = with(unit.session) {
+		val value = cast.left
+		if (cast.operationReference.getReferencedNameElementType() != KtTokens.AS_SAFE) {
+			return body.expression(value)
+		}
+		val type = cast.right?.type ?: throw Rejection(cast, "This cast names no type.")
+		if (!body.isStable(value)) {
+			throw Rejection(cast, "Lua reads this value twice, to test its type and to give it; store it in a local"
+				+ " first.")
+		}
+		if (unit.types.isBoolean(type)) {
+			throw Rejection(cast, "Lua's and would turn a false into nil here; test the value with is instead.")
+		}
+		val lowered = body.expression(value)
+		val passed = Expression.binary(typeTest(lowered, type, cast), BinaryOperator.AND, lowered)
+		Expression.binary(passed, BinaryOperator.OR, Expression.Nil())
 	}
 
 	/** A test that a value is of a type, as Kotlin's `is`. */

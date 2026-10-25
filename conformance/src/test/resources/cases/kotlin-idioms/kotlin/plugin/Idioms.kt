@@ -11,6 +11,20 @@ object Idioms {
 		fun passes(value: Int): Boolean
 	}
 
+	/** Steps of a size a private companion keeps, which only the class reaches. */
+	class Steps {
+
+		/** How far the steps go, from the start. */
+		fun total(count: Int): Int = count * SIZE + start()
+
+		private companion object {
+
+			const val SIZE = 3
+
+			fun start(): Int = 1
+		}
+	}
+
 	/** A test a class gives, which Lua calls as the function every Test is. */
 	class AtLeast(private val minimum: Int) : Test {
 		override fun passes(value: Int): Boolean {
@@ -102,6 +116,12 @@ object Idioms {
 		}
 		return total
 	}
+
+	/** A value known to be text, as text. */
+	fun asText(value: Any): String = value as String
+
+	/** A value as text when it is text, and null otherwise. */
+	fun textOrNull(value: Any): String? = value as? String
 
 	/** Logs a tick, with a lambda that never reads its parameter. */
 	fun ticker(): (Int) -> Unit {

@@ -72,11 +72,11 @@ internal class DeclarationChecks(private val unit: FileLowering) {
 		}
 		val instance = declaration is KtClass
 		val properties = declaration.declarations.filterIsInstance<KtProperty>()
-			.filter { instance || !it.hasModifier(KtTokens.PRIVATE_KEYWORD) }.mapNotNull { it.name } +
+			.filter { instance || !it.isPrivateInLua() }.mapNotNull { it.name } +
 			declaration.primaryConstructorParameters.filter { it.hasValOrVar() }.mapNotNull { it.name }
 		for (function in declaration.declarations.filterIsInstance<KtNamedFunction>()) {
 			val name = function.name ?: continue
-			if (name in properties && !function.hasModifier(KtTokens.PRIVATE_KEYWORD)) {
+			if (name in properties && !function.isPrivateInLua()) {
 				unit.error(function, "The property $name and the function $name() would share one slot in the Lua"
 					+ " table; rename one.")
 			}
@@ -103,7 +103,7 @@ internal class DeclarationChecks(private val unit: FileLowering) {
 			val isObject = declaration is KtObjectDeclaration
 			val functions = mutableSetOf<String>()
 			for (member in declaration.declarations) {
-				val private = member.hasModifier(KtTokens.PRIVATE_KEYWORD)
+				val private = member.isPrivateInLua()
 				val function = (member as? KtNamedFunction)?.takeIf { !it.hasModifier(KtTokens.OVERRIDE_KEYWORD) }
 				val property = member as? KtProperty
 				val settings = property?.let(unit::isSettingsProperty) == true

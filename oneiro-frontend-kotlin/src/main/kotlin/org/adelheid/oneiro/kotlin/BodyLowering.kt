@@ -41,6 +41,7 @@ import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.psi.KtAnonymousInitializer
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
+import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBreakExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
@@ -221,7 +222,22 @@ internal class BodyLowering(
 		if (statement is KtTryExpression) {
 			return exceptions.tryStatement(statement)
 		}
+		// target = receiver.apply { ... } on a target that reading again gives the same, a name or a property
+		val target = (statement as? KtBinaryExpression)?.takeIf { it.operationToken == KtTokens.EQ }?.left
+		val scope = (statement as? KtBinaryExpression)?.right?.let(scopes::scope)
+		if (target != null && scope != null && isStable(target)) {
+			scopes.assigned(scope, assignmentTarget(target))?.let { return it }
+		}
 		return scopes.entries(statement) ?: statement(statement).map(Block.Entry::of)
+	}
+
+	/**
+	 * A value assigned to a target, such as a class's property, `self.box = ...`: a scope function's code works on the
+	 * target, and an if's, a when's or a chain's value is assigned in each branch.
+	 */
+	fun assigned(value: KtExpression, target: Expression): List<Block.Entry> {
+		scopes.scope(value)?.let { scope -> scopes.assigned(scope, target)?.let { return it } }
+		return handedOn(value) { Statement.assignment(target, it) }.map(Block.Entry::of)
 	}
 
 	fun statement(statement: KtExpression): List<Statement> = when (statement) {
@@ -438,15 +454,7 @@ internal class BodyLowering(
 	private fun assignment(assignment: KtBinaryExpression): List<Statement> {
 		val targetTree = assignment.left ?: throw Rejection(assignment, EMPTY)
 		val valueTree = assignment.right ?: throw Rejection(assignment, EMPTY)
-		val assigned = with(unit.session) {
-			((targetTree as? KtDotQualifiedExpression)?.selectorExpression ?: targetTree)
-				.let { it as? KtNameReferenceExpression }?.resolveSymbol()?.psi
-		}
-		if (assigned is KtProperty && unit.isSettingsProperty(assigned)) {
-			throw Rejection(targetTree, PluginClass.SETTINGS_VALUE + "assignment.")
-		}
-		checkAssigned(targetTree)
-		val target = expression(targetTree)
+		val target = assignmentTarget(targetTree)
 		if (assignment.operationToken == KtTokens.EQ) {
 			delivered(valueTree) { Statement.assignment(target, it) }?.let { return it }
 		}
@@ -470,6 +478,19 @@ internal class BodyLowering(
 			else -> throw Rejection.notYet(assignment, "The operator ${assignment.operationReference.text}")
 		}
 		return listOf(Statement.assignment(target, Expression.binary(target, operator, value)))
+	}
+
+	/** What an assignment assigns to, which must be no property of settings, and no field of a copy. */
+	private fun assignmentTarget(targetTree: KtExpression): Expression {
+		val assigned = with(unit.session) {
+			((targetTree as? KtDotQualifiedExpression)?.selectorExpression ?: targetTree)
+				.let { it as? KtNameReferenceExpression }?.resolveSymbol()?.psi
+		}
+		if (assigned is KtProperty && unit.isSettingsProperty(assigned)) {
+			throw Rejection(targetTree, PluginClass.SETTINGS_VALUE + "assignment.")
+		}
+		checkAssigned(targetTree)
+		return expression(targetTree)
 	}
 
 	/**
@@ -530,6 +551,7 @@ internal class BodyLowering(
 		is KtArrayAccessExpression -> index(expression)
 		is KtIfExpression -> conditional(expression)
 		is KtIsExpression -> typeTests.isExpression(expression)
+		is KtBinaryExpressionWithTypeRHS -> typeTests.cast(expression)
 		is KtPostfixExpression -> postfix(expression)
 		is KtLambdaExpression -> lambdas.lambda(expression)
 		is KtObjectLiteralExpression -> objects.literal(expression)
@@ -859,7 +881,7 @@ internal class BodyLowering(
 			return Expression.name(unit.names.luaName(name))
 		}
 		if (ownerClass.classKind == KaClassKind.OBJECT || ownerClass.classKind == KaClassKind.COMPANION_OBJECT) {
-			val local = declaration is KtProperty && declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) &&
+			val local = declaration is KtProperty && declaration.isPrivateInLua() &&
 				declaration.containingFile == unit.file
 			if (local) {
 				return Expression.name(unit.names.luaName(name))
@@ -1011,7 +1033,7 @@ internal class BodyLowering(
 		receivers.firstNotNullOfOrNull { receiver ->
 			val owner = ((receiver as? KaImplicitReceiverValue)?.symbol as? KaReceiverParameterSymbol)
 				?.owningCallableSymbol?.psi
-			unit.receiverAlias(owner)?.let(Expression::name)
+			unit.receiverAlias(owner)
 		}
 	}
 
@@ -1022,7 +1044,7 @@ internal class BodyLowering(
 			is KaFunctionSymbol -> symbol.psi
 			else -> return null
 		}
-		unit.receiverAlias(owner)?.let(Expression::name)
+		unit.receiverAlias(owner)
 	}
 
 	private fun isOrExtends(declaration: KtClassOrObject, type: KaClassSymbol): Boolean = with(unit.session) {
@@ -1147,7 +1169,7 @@ internal class BodyLowering(
 			?: throw Rejection.notYet(call, "Calling an extension function on this receiver")
 		val name = unit.memberName(function)
 		val declaration = function.psi
-		val isPrivate = declaration is KtNamedFunction && declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) &&
+		val isPrivate = declaration is KtNamedFunction && declaration.isPrivateInLua() &&
 			declaration.containingFile == unit.file
 		val callee = when {
 			(ownerClass.psi as? KtClassOrObject) == unit.entry || isPrivate -> Expression.name(unit.names.luaName(name))
@@ -1283,7 +1305,7 @@ internal class BodyLowering(
 		val name = unit.memberName(function)
 		val ownerDeclaration = ownerClass.psi as? KtClassOrObject
 		val declaration = function.psi
-		val isPrivate = declaration is KtNamedFunction && declaration.hasModifier(KtTokens.PRIVATE_KEYWORD) &&
+		val isPrivate = declaration is KtNamedFunction && declaration.isPrivateInLua() &&
 			declaration.containingFile == unit.file
 		return when {
 			// An object expression that is a Lua function has no methods to call

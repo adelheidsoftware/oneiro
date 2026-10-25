@@ -138,21 +138,40 @@ internal class ClassLowering(private val unit: FileLowering) {
 		return Member(listOf(initializer), false, null, entries, listOf(), References.of(unit, initializer))
 	}
 
+	/**
+	 * An object's property: a field of its table, or a local when it is private, which a value of one expression
+	 * declares and any other value's statements assign after the local is declared.
+	 */
 	private fun staticProperty(property: KtProperty, table: String): Member {
 		val initializer = property.initializer ?: throw Rejection.notYet(property, "A property without a value")
-		val value = BodyLowering(unit, null, false).expression(initializer)
-		val trivia = Trivia(unit.source.blankLineBefore(property), declarationComments(property), null)
-		val origin = unit.source.position(unit.codeStart(property))
+		val body = BodyLowering(unit, null, false)
+		val blankLine = unit.source.blankLineBefore(property)
 		if (isPrivate(property)) {
 			val name = unit.names.luaName(property.name!!)
-			val local = Block.Entry(Statement.Local(listOf(name), listOf(value)), trivia, origin)
-			val assigned = Block.Entry(Statement.assignment(Expression.name(name), value), trivia, origin)
-			return Member(listOf(property), false, name, listOf(local), listOf(assigned), References.of(unit, property))
+			val assigned = propertyEntries(body.assigned(initializer, Expression.name(name)), property, blankLine)
+			return Member(listOf(property), false, name, declaredLocal(name, assigned), assigned,
+				References.of(unit, property))
 		}
 		val field = Expression.field(Expression.name(table), unit.memberName(property))
-		val assignment = Statement.assignment(field, value)
-		return Member(listOf(property), false, null, listOf(Block.Entry(assignment, trivia, origin)), listOf(),
-			References.of(unit, property))
+		return Member(listOf(property), false, null, propertyEntries(body.assigned(initializer, field), property,
+			blankLine), listOf(), References.of(unit, property))
+	}
+
+	/**
+	 * The statements of a property's value, with the property's comments: those above it lead the first statement,
+	 * and the one after it ends the last.
+	 */
+	private fun propertyEntries(lowered: List<Block.Entry>, property: KtProperty, blankLine: Boolean = false):
+		List<Block.Entry> {
+		val origin = unit.source.position(unit.codeStart(property))
+		val leading = declarationComments(property)
+		val trailing = unit.source.trailing(property)
+		return lowered.mapIndexed { index, entry ->
+			val own = entry.trivia()
+			val trivia = Trivia(index == 0 && blankLine, if (index == 0) leading + own.leading() else own.leading(),
+				if (index == lowered.lastIndex && trailing != null) trailing else own.trailing())
+			Block.Entry(entry.statement(), trivia, entry.origin() ?: origin)
+		}
 	}
 
 	/**
@@ -168,8 +187,9 @@ internal class ClassLowering(private val unit: FileLowering) {
 			try {
 				when (member) {
 					is KtProperty, is KtAnonymousInitializer -> if (!constructorPlaced) {
-						members += constructor(declaration)
+						// Placed once, where it is first needed, even when Oneiro rejects it
 						constructorPlaced = true
+						members += constructor(declaration)
 					}
 					// An abstract function has no code, which its subclasses give
 					is KtNamedFunction -> if (!member.hasModifier(KtTokens.ABSTRACT_KEYWORD)) {
@@ -318,26 +338,28 @@ internal class ClassLowering(private val unit: FileLowering) {
 		}
 		// The comments after an init block's last statement lead the statement after it
 		val pending = mutableListOf<Comment>()
+		// A property or init block Oneiro rejects is reported, and the ones after it are still checked
 		for (member in declaration.declarations) {
-			when (member) {
-				is KtProperty -> {
-					val initializer = member.initializer ?: continue
-					val value = body.expression(initializer)
-					val assignment = Statement.assignment(Expression.field(self, unit.memberName(member)), value)
-					val trivia = Trivia(false, declarationComments(member), unit.source.trailing(member))
-					add(entries, listOf(Block.Entry(assignment, trivia, unit.source.position(unit.codeStart(member)))),
-						pending)
+			try {
+				when (member) {
+					is KtProperty -> {
+						val initializer = member.initializer ?: continue
+						val lowered = body.assigned(initializer, Expression.field(self, unit.memberName(member)))
+						add(entries, propertyEntries(lowered, member), pending)
+					}
+					is KtAnonymousInitializer -> {
+						val block = member.body as? KtBlockExpression
+							?: throw Rejection(member, "An init block without a body does not compile.")
+						val lowered = body.block(block)
+						// The comments above the block come before those above its first statement
+						pending += unit.source.leading(member)
+						add(entries, initializerEntries(lowered, unit.source.blankLineBefore(member)), pending)
+						pending += lowered.closingComments()
+					}
+					else -> {}
 				}
-				is KtAnonymousInitializer -> {
-					val block = member.body as? KtBlockExpression
-						?: throw Rejection(member, "An init block without a body does not compile.")
-					val lowered = body.block(block)
-					// The comments above the block come before those above its first statement
-					pending += unit.source.leading(member)
-					add(entries, initializerEntries(lowered, unit.source.blankLineBefore(member)), pending)
-					pending += lowered.closingComments()
-				}
-				else -> {}
+			} catch (rejection: Rejection) {
+				unit.reject(rejection)
 			}
 		}
 		add(entries, listOf(Block.Entry.of(Statement.Return(listOf(self)))), pending)
@@ -477,10 +499,40 @@ internal class ClassLowering(private val unit: FileLowering) {
 		unit.source.leading(declaration) +
 			listOfNotNull(declaration.docComment).flatMap(KDocText::description).map(Comment::line)
 
-	private fun isPrivate(declaration: KtDeclaration): Boolean = declaration.hasModifier(KtTokens.PRIVATE_KEYWORD)
+	private fun isPrivate(declaration: KtDeclaration): Boolean = declaration.isPrivateInLua()
 
 	private fun isObjectEnum(declaration: KtClass): Boolean =
 		with(unit.session) { declaration.classSymbol }?.let(unit::isObjectEnum) == true
+}
+
+/**
+ * Whether a declaration is a local in Lua rather than a field of a table: one declared private, or a member of a
+ * private companion object, which only its class's code can reach.
+ */
+internal fun KtDeclaration.isPrivateInLua(): Boolean {
+	if (hasModifier(KtTokens.PRIVATE_KEYWORD)) {
+		return true
+	}
+	val companion = (parent?.parent as? KtObjectDeclaration)?.takeIf { it.isCompanion() }
+	return companion?.hasModifier(KtTokens.PRIVATE_KEYWORD) == true
+}
+
+/**
+ * The entries that declare a local with the value the assignments give it: `local name = value` for one value, `local
+ * name` for nil, which a local starts as, and otherwise `local name` before the statements that assign it.
+ */
+internal fun declaredLocal(name: String, assigned: List<Block.Entry>): List<Block.Entry> {
+	val first = assigned.first()
+	val value = (assigned.singleOrNull()?.statement() as? Statement.Assignment)?.values()?.singleOrNull()
+	if (value != null) {
+		val values = if (value is Expression.Nil) listOf() else listOf(value)
+		return listOf(Block.Entry(Statement.Local(listOf(name), values), first.trivia(), first.origin()))
+	}
+	val trivia = first.trivia()
+	val declared = Block.Entry(Statement.Local(listOf(name), listOf()),
+		Trivia(trivia.blankLineBefore(), trivia.leading(), null), first.origin())
+	val firstAssigned = Block.Entry(first.statement(), Trivia(false, listOf(), trivia.trailing()), first.origin())
+	return listOf(declared, firstAssigned) + assigned.drop(1)
 }
 
 /**
