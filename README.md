@@ -8,8 +8,7 @@ Named after the [Oneiromancer](https://runescape.wiki/w/Oneiromancer).
 
 > **Status:** early development. Plugins written in Java or Kotlin compile to Lua and build into the folder and zip
 > that go to Mod.io; what each language supports is in [java-subset.md](docs/java-subset.md) and
-> [kotlin-subset.md](docs/kotlin-subset.md). 0.1.0, the first release, builds plugins written in Java; Kotlin comes
-> with 0.2.0.
+> [kotlin-subset.md](docs/kotlin-subset.md). Versions will remain unstable until the RS3 API reaches stability at 1.0.0. We will not update this to 1.0.0 until that happens at a minimum.
 
 ## What it does
 

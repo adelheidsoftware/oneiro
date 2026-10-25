@@ -35,7 +35,7 @@ final class Overrides {
 	private static final Set<String> FACTS = Set.of("singleton", "instance", "constructible", "not-constructible",
 			"nullable", "not-nullable", "read-only", "writable", "copied", "not-copied", "java-name", "rename",
 			"values", "type", "field", "function", "param", "superclass", "hook", "operator", "returns", "permission",
-			"manifest-flag", "review", "dev-only", "skip", "element-table", "no-from-id");
+			"manifest-flag", "review", "dev-only", "skip", "element-table", "no-from-id", "note");
 
 	private final List<Entry> entries;
 	private final Set<Entry> used = new HashSet<>();
@@ -74,6 +74,9 @@ final class Overrides {
 				if (words.size() < 2 || !FACTS.contains(words.getFirst())) {
 					throw new IOException("overrides.txt:" + number + ": expected <fact> <target>, with a fact from "
 							+ FACTS.stream().sorted().toList() + ": " + line);
+				}
+				if (words.getFirst().equals("note") && words.size() < 3) {
+					throw new IOException("overrides.txt:" + number + ": a note needs its text: " + line);
 				}
 				entries.add(new Entry(words.get(0), words.get(1), words.subList(2, words.size()), number));
 			}
@@ -114,6 +117,18 @@ final class Overrides {
 	/** Records that an entry was applied, and whether the stubs already said the same there. */
 	void applied(Entry entry, boolean stubsAgree) {
 		(stubsAgree ? agreed : corrected).add(entry);
+	}
+
+	/** The text of each {@code note} line about the target, in the file's order. */
+	List<String> notes(String target) {
+		List<String> notes = new ArrayList<>();
+		for (Entry entry : entries) {
+			if (entry.fact().equals("note") && entry.target().equals(target)) {
+				used.add(entry);
+				notes.add(String.join(" ", entry.arguments()));
+			}
+		}
+		return notes;
 	}
 
 	/** Every entry of one fact, each marked as used. */

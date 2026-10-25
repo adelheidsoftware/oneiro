@@ -113,6 +113,7 @@ final class MemberBindings {
 		boolean copied = !isStatic && isCopied(owner, field);
 		out.append("\n");
 		List<String> doc = new ArrayList<>(JavaText.lines(field.description()));
+		doc.addAll(bindings.notes(target));
 		String luaName = field.name();
 		doc.add("<p>Lua: {@code " + receiver(owner, isStatic) + "." + luaName + "}" + (readOnly ? ", read-only" : "")
 				+ (copied ? ", a copy: change a local copy and assign it back" : ""));
@@ -198,6 +199,7 @@ final class MemberBindings {
 			}
 			out.append("\n");
 			List<String> doc = new ArrayList<>(JavaText.lines(function.description()));
+			doc.addAll(bindings.notes(target));
 			doc.add("<p>Lua: {@code " + receiver(owner, isStatic) + (colon ? ":" : ".") + function.name() + "("
 					+ luaArguments(form.params(), function.varargs()) + ")}");
 			paramDocs(doc, form.params());

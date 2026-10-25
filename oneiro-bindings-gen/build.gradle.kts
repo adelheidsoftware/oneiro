@@ -14,9 +14,32 @@ dependencies {
 	implementation(libs.jspecify)
 }
 
+// The real stubs, checked out next to Oneiro, for the test against them and for the audit of the client's members
+val stubs = rootProject.file("../runescape-api-stubs")
+
+// The audit of the client's members (ClientAudit), which Oneiro's maintainers run after a client update; it is no part
+// of the published jar
+val audit: SourceSet = sourceSets.create("audit") {
+	compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
+	runtimeClasspath += output + compileClasspath + sourceSets.main.get().runtimeClasspath
+}
+sourceSets.test {
+	compileClasspath += audit.output
+	runtimeClasspath += audit.output
+}
+
+tasks.register<JavaExec>("auditClient") {
+	description = "Compares the members the API probe listed from the client's objects with the bindings: " +
+		"--args=<log>, a path from Oneiro's folder."
+	group = "verification"
+	classpath = audit.runtimeClasspath
+	mainClass = "org.adelheid.oneiro.bindings.ClientAudit"
+	workingDir = rootProject.projectDir
+	systemProperty("oneiro.stubs", stubs.absolutePath)
+}
+
 tasks.test {
 	// The test against the real stubs runs when they are checked out next to Oneiro, at ../runescape-api-stubs
-	val stubs = rootProject.file("../runescape-api-stubs")
 	systemProperty("oneiro.stubs", stubs.absolutePath)
 	if (stubs.resolve("types.lua").isFile) {
 		inputs.dir(stubs.resolve("generated")).withPropertyName("stubsGenerated")

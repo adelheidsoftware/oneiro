@@ -524,7 +524,7 @@ final class JavaBindings {
 		// A global table with no function of its own, only methods, is never reached: its objects come from the API,
 		// as ui.ComponentOpConfig's come from a component's opConfig
 		boolean hasTableFunctions = classDef.functions.stream()
-				.anyMatch(function -> function.style() == ApiModel.CallStyle.DOT);
+				.anyMatch(function -> function.style() == ApiModel.CallStyle.DOT && isBound(classDef, function));
 		return hasTableFunctions ? Shape.INSTANCE : Shape.TYPE;
 	}
 
@@ -629,7 +629,9 @@ final class JavaBindings {
 		String luaName = luaPath(classDef.name);
 		EventInfo payload = node.payloadOf;
 		List<String> doc = new ArrayList<>(JavaText.lines(classDef.description));
-		boolean hasNew = classDef.functions.stream().anyMatch(JavaBindings::isConstructor);
+		doc.addAll(notes(classDef.name));
+		boolean hasNew = classDef.functions.stream()
+				.anyMatch(function -> isConstructor(function) && isBound(classDef, function));
 		doc.add(switch (shape) {
 			case NAMESPACE -> "<p>Lua: the global table {@code " + luaName + "}.";
 			case INSTANCE -> "<p>Lua: the global table {@code " + luaName + "}" + (hasNew
@@ -749,7 +751,7 @@ final class JavaBindings {
 		boolean publicNoArguments = false;
 		if (shape == Shape.INSTANCE) {
 			for (ApiModel.FunctionDef function : classDef.functions) {
-				if (!isConstructor(function)) {
+				if (!isConstructor(function) || !isBound(classDef, function)) {
 					continue;
 				}
 				for (Form form : memberBindings.forms(classDef.name, function)) {
@@ -759,6 +761,7 @@ final class JavaBindings {
 					publicNoArguments |= form.params().isEmpty() && !function.varargs();
 					StringBuilder constructor = new StringBuilder();
 					List<String> doc = new ArrayList<>(JavaText.lines(function.description()));
+					doc.addAll(notes(classDef.name + ".new"));
 					doc.add("<p>Lua: {@code " + luaPath(classDef.name) + ".new("
 							+ MemberBindings.luaArguments(form.params()) + ")}");
 					MemberBindings.paramDocs(doc, form.params());
@@ -791,6 +794,19 @@ final class JavaBindings {
 		} else {
 			out.append(String.join("\n", written));
 		}
+	}
+
+	/** Whether the overrides leave a function of the class unbound, with a {@code skip} line. */
+	private boolean isBound(ApiModel.ClassDef classDef, ApiModel.FunctionDef function) {
+		return !overrides.has("skip", classDef.name + "." + function.name());
+	}
+
+	/**
+	 * The paragraphs the {@code note} lines add to the Javadoc of a class or member: what the client does that its
+	 * description does not say.
+	 */
+	List<String> notes(String target) {
+		return overrides.notes(target).stream().map(note -> "<p>In the client: " + JavaText.escape(note)).toList();
 	}
 
 	/**

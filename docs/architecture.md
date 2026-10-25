@@ -142,8 +142,9 @@ The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` r
    `CsvConstants` reads the name lists behind `id`, `config` and `var`.
 2. `Overrides` reads `overrides.txt`, which states what the stubs do not: which tables are singletons, which values
    can be `nil`, which fields are read-only or hand out copies, which members need a permission or draw moderation's
-   closer review, and the Java names for Lua names Java cannot use. The file's own header describes its format.
-   `ModelCorrections` applies its corrections to the model.
+   closer review, and the Java names for Lua names Java cannot use; its notes add what the client does that the
+   docs do not say to a member's Javadoc. The file's own header describes its format. `ModelCorrections` applies its
+   corrections to the model.
 3. `JavaBindings` writes the sources, with `MemberBindings` for fields and methods, `TypeMapping` for types,
    `ConstantTables` for enums, hooks and constant namespaces, and `SourceFiles` for the files that do not come from a
    table. The plugin's language (`BindingsGenerator.Language`) decides how a member that takes a hook types the
@@ -152,6 +153,11 @@ The generator lives in `org.adelheid.oneiro.bindings`, and `BindingsGenerator` r
    `ConstantChunks` writes them straight to class files with the JDK's ClassFile API, as a chain of chunk classes
    that each extend the one before, which is also far faster than compiling them from Java. `Jars` packs everything
    into reproducible jars.
+
+`ClientAudit`, in a source set of its own that is not published, compares the members the client's objects have, as
+a development plugin logs them from their metatables, with the bindings: `./gradlew :oneiro-bindings-gen:auditClient
+--args=<log>` lists, for each type, the members the bindings lack and those the client lacks. Run after a client
+update, each difference it finds ends as an overrides line.
 
 ## Tests
 

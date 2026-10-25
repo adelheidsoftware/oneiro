@@ -161,6 +161,37 @@ class FixtureStubsTest {
 		assertTrue(warnings.stream().anyMatch(warning -> warning.contains(partial)), warnings::toString);
 	}
 
+	/**
+	 * A class whose {@code new} the overrides skip is a type the client hands out, with no constructor, and a note adds
+	 * its sentence to the Javadoc of the class or member it names; one that names nothing is a warning.
+	 */
+	@Test
+	void skippedConstructorsAndNotes() throws IOException {
+		String lines = """
+				skip ui.Text.new
+				note ui.Text Made by the client only.
+				note ui.Component.SetPos Moves it the other way.
+				note ui.Component.SetPos Twice as far.
+				note ui.Text.Missing Matches nothing.
+				""";
+		Overrides overrides;
+		try (InputStream bundled = Objects.requireNonNull(Overrides.class.getResourceAsStream("overrides.txt"))) {
+			String text = new String(bundled.readAllBytes(), StandardCharsets.UTF_8) + lines;
+			overrides = Overrides.parse(new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
+		}
+		BindingsGenerator.Result run = BindingsGenerator.generate(STUBS, Path.of("build", "fixture-bindings-notes"),
+				overrides, BindingsGenerator.Language.JAVA);
+		String ui = source(run, "ui.java");
+		assertTrue(ui.contains("\t * <p>In the client: Made by the client only.\n\t *\n\t * <p>Lua: values of the type"
+				+ " {@code ui.Text}, which the client hands out.\n\t */\n\t@LuaType(\"ui.Text\")"), ui);
+		assertFalse(ui.contains("public Text(ui.Component parent)"), "the skipped new is no constructor");
+		assertTrue(ui.contains("\t\t * <p>In the client: Moves it the other way.\n\t\t *\n\t\t * <p>In the client:"
+				+ " Twice as far.\n\t\t *\n\t\t * <p>Lua: {@code component:SetPos(x, y)}"), ui);
+		assertTrue(run.warnings().stream().anyMatch(warning -> warning.matches(
+				"overrides\\.txt:\\d+: note ui\\.Text\\.Missing matches nothing in these stubs\\.")),
+				run.warnings()::toString);
+	}
+
 	@Test
 	void membersCarryTheirLuaShape() throws IOException {
 		String persistent = source("PersistentDB.java");

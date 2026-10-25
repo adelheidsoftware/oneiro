@@ -40,7 +40,9 @@
 #   review <member|event> <area> moderation reviews calling the function, assigning the field or subscribing to
 #                                the event closely: the compiler warns there, naming what it looks at in the area
 #   dev-only <member>            allowed only in a plugin's dev source set
-#   skip <class|member>          not bound at all
+#   skip <class|member>          not bound at all; a skipped new leaves a class of objects the client hands out
+#   note <class|member> <text>   a sentence for the Javadoc: what the client does that the docs do not say, shown
+#                                "In the client:", until the docs say it
 #   element-table <class> <Type> <name...>  the stubs describe one element of the table as the table itself
 #
 # The generator warns about any line that names something the stubs do not have. A line the stubs have caught up with
@@ -59,9 +61,22 @@ rename AchievementType.achievements requirements   # docs: game/config/achieveme
 rename LocType.IsActive isActive                   # client 2026-10-23: IsActive reads nil, isActive true, as NPCType's
 rename ui.RadioGroup.SetEntries SetOptions         # docs: ui/interactive_components/radio_group.html's headings and examples; client 2026-10-23: SetEntries reads nil
 rename ui.RadioGroup.HasEntry HasOption            # docs: the same page; client 2026-10-23: HasEntry reads nil
+rename NPCType.attackOpPriority attackOpHasPriority   # docs: game/config/npctype.html names it attackOpPriority; client 2026-10-25: attackOpPriority reads nil, attackOpHasPriority true for Hans
 
 # ---- Members the stubs lack
 
+field NPCType.paramCount Int                       # client 2026-10-25: in NPCType's metatable (the API probe's metatable audit), and reads 0 for Hans; docs: game/config/npctype.html leaves it out
+field LocType.paramCount Int                       # client 2026-10-25: in LocType's metatable, and reads 0 for a loc by Lumbridge Castle
+field ObjType.paramCount Int                       # client 2026-10-25: in ObjType's metatable, and reads 3 for coins
+field ObjType.isValid Bool                         # client 2026-10-25: in ObjType's metatable, and reads true for coins; docs: game/config/objtype.html leaves it out
+field CoordGrid.valid Bool                         # client 2026-10-25: in CoordGrid's metatable, and reads true for the player's tile; docs: game/coordgrid.html leaves it out
+read-only CoordGrid.valid                          # client 2026-10-25: whether the coordinate is valid, which assigning it could not change
+field CoordFine.valid Bool                         # client 2026-10-25: in CoordFine's metatable, and reads true for the player's tile
+read-only CoordFine.valid                          # client 2026-10-25: as CoordGrid.valid
+field ShapeEntity.drawDistance Float               # client 2026-10-25: reads 10240.0 on a new entity, and 100.0, the near distance, after SetDrawDistance(100, 200); the docs' drawDistances pair reads nil
+read-only ShapeEntity.drawDistance                 # docs: game/list/shapelist.html, SetDrawDistance() sets the draw distances
+field MiniMenuEntryAddedEventPayload.miniMenu MiniMenu   # client 2026-10-25: in the payload's metatable, and reads the menu the entry joins; docs: core/events.html lists only entry
+field LocEntity.aabb AABB                          # client 2026-10-25: in LocEntity's metatable (the API probe's metatable audit), and reads an AABB; docs: game/entity/locentity.html leaves it out, while NPCEntity's and PlayerEntity's pages have it
 field LocListFilterSettings.parentConfig LocType   # docs: game/list/loclist.html, a Filter test, as NPCListFilterSettings has; client 2026-10-23: a filter on parentConfigID runs
 field LocListFilterSettings.parentConfigID Int     # docs: game/list/loclist.html, a Filter test
 function LocList.ByParentConfig fun(locType: LocType): LocEntity[]    # docs: game/list/loclist.html; client 2026-10-23: a function
@@ -122,7 +137,6 @@ type ui.TextData.shadowRGBA Long                   # client 2026-10-23: as ui.Co
 type ui.SpriteData.rgba Long                       # client 2026-10-23: as ui.Component.rgba
 type ui.SpriteData.shadowRGBA Long                 # client 2026-10-23: as ui.Component.rgba
 type ui.Sprite.shadowRGBA Long                     # client 2026-10-23: as ui.Component.rgba
-type ui.Text.shadowRGBA Long                       # client 2026-10-23: as ui.Component.rgba
 type ui.ComboField.mouseoverForegroundRGBA Long    # client 2026-10-23: as ui.Component.rgba
 type ui.ComboField.mouseoverBackgroundRGBA Long    # client 2026-10-23: as ui.Component.rgba
 type ui.ComboField.selectedForegroundRGBA Long     # client 2026-10-23: as ui.Component.rgba
@@ -180,11 +194,18 @@ param log format any                               # docs: core/index.html, the 
 superclass ui.PagedLayerHeader ui.Component        # docs: ui/layout_components/paged_layer.html, its example calls header:SetSize; client 2026-10-23: a header has SetSize
 function ui.Interface:GetComponent fun(staticID: Uint): ui.Component?   # docs: ui/interface.html's parameter table and example; client 2026-10-23: (staticID) works, (interfaceID, staticID) raises "no matching function call"
 function ui.Interface:GetComponent fun(staticID: Uint, categoryID: Uint, dynamicID: Uint): ui.Component?   # docs: the same table
+function ui.ModelGroup:AddCamera fun(camera: ui.ModelCamera): Int   # client 2026-10-25: AddCamera() raises "no matching function call takes this number of arguments", where the docs give it with and without a camera
 param ui.NPCCustomisation.SetModelSlot scale Float # client 2026-10-23: SetModelSlot(0, 1) raises "expected number" for scale, which the docs call optional
 param ui.NPCCustomisation.SetModelSlot translation Vector3          # client 2026-10-23: the same, for the parameters after scale
 param ui.NPCCustomisation.SetModelSlot rotationYawPitchRoll Vector3 # client 2026-10-23: the same
 java-name ui.Line.width thickness                  # client 2026-10-23: on a line, width is the thickness (10 after line.width = 10, while size.width stays 200), not Component.width
 skip ShapeEntity.drawDistances                     # client 2026-10-23: reads nil, even after SetDrawDistance(100, 200)
+skip ui.ModelCamera.new                            # client 2026-10-24: ui.ModelCamera is nil, so ui.ModelCamera.new() raises "attempt to index a nil value (field 'ModelCamera')"; ModelGroup:GetCamera and activeCamera still hand out cameras
+skip ui.Text.lineSpacing                           # client 2026-10-25: reads nil on a text, and is not in its metatable
+skip ui.Text.shadowColour                          # client 2026-10-25: the same
+skip ui.Text.shadowRGBA                            # client 2026-10-25: the same
+skip ui.Sprite.AlignTo                             # client 2026-10-25: reads nil on a sprite, and is not in its metatable; ui.Text and ui.TextData have it
+skip ui.Model.rotation                             # client 2026-10-24: assigning a Vector3.new raises "expected userdata, received sol.jag::math::Vector3T", and writing a field of the value read back raises "not recognized as a container"
 instance ui.CutsceneLayer                          # docs: ui/layout_components/cutscene_layer.html, existing cutscene layers can be accessed as regular layers
 returns World.GetGroundHeight GroundHeight height available            # stubs: two @return lines; docs: -1 and false on failure
 returns FontType.GetStringHeightAndLineCount HeightAndLineCount height lineCount   # stubs: two @return lines
@@ -426,3 +447,12 @@ no-from-id PersistentDBType
 no-from-id PluginPermissions
 no-from-id ShapeEntityAlignType
 no-from-id ui.AspectRatioMode
+
+# ---- Client behaviour the docs leave out, for the Javadoc
+
+note ui.ModelCamera There is no table ui.ModelCamera, so a camera cannot be made, and a model group's AddCamera takes one; a new model group has none, and its GetCamera and activeCamera give nil.   # client 2026-10-25: ui.ModelCamera is nil; AddCamera() raises; on a new group GetCamera(0) and activeCamera are nil, activeCameraID -1. Entity Probe found the type bound, as jag::game::ModelGroup::CameraInfo
+note ui.ModelGroup A model group can get no camera: AddCamera() without one raises, and ui.ModelCamera cannot be made. The client also has UpdateCamera, which the docs do not describe.   # client 2026-10-25: the API probe's models cases and metatable audit
+note ui.Model A model's rotation is left out, as every value assigned to it is rejected, and SetTransform's rotation does not turn a lone model either; an NPC customisation's model slot does.   # client 2026-10-24: Rich Death's rotation lab
+note ui.Model.SetTransform Its rotation had no visible effect on a lone model, shown by object, model or associated object, at once or over a duration; an NPC customisation's model slot turns one.   # client 2026-10-24: Rich Death's rotation lab turned six lone models on the yaw or the pitch; none turned, and none raised an error
+note ui.NPCCustomisation.SetModelSlot Its rotation turns the model in the slot, the one way found to turn a lone ui.Model; with a yaw and a pitch, the pitch seemed to be applied first.   # client 2026-10-24: Rich Death's party hat on Hans's model turned with the yaw and tilted with the pitch
+note ui.Component.SetPos In one check, the self percentages moved a component the opposite way to this description: SetPos(x, y, 0, 0, -0.5, -0.5) put the top-left corner of a 400 by 400 model right of and below (x, y) by half its size.   # client 2026-10-24: Rich Death, one run with a screenshot, on the plugin layer
