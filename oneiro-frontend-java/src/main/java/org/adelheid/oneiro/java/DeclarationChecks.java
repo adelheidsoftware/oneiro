@@ -1,16 +1,20 @@
 package org.adelheid.oneiro.java;
 
+import com.sun.source.tree.AnnotationTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.MethodTree;
+import com.sun.source.tree.ModifiersTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
+import com.sun.source.util.TreeScanner;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
+import org.adelheid.oneiro.lowering.BindingAnnotations;
 
 /**
- * Checks on declarations that produce little or no Lua of their own: what a class may extend and implement, a
- * {@code @LuaModule} declaration, which only stands for what a Lua module defines, the records in one, and an
- * interface of abstract methods only, which is a type and nothing more.
+ * Checks on declarations that produce little or no Lua of their own: what a class may extend and implement, the
+ * annotations that only generated bindings carry, records, and an interface of abstract methods only, which is a type
+ * and nothing more.
  */
 final class DeclarationChecks {
 
@@ -33,16 +37,12 @@ final class DeclarationChecks {
 		if (superclass != null && !isEntry) {
 			TypeElement element = unit.typeElement(superclass);
 			if (types.isApi(element)) {
-				throw new Rejection(superclass, element.getSimpleName() + " stands for Lua the client provides, which a"
-						+ " class of the plugin's cannot extend.");
+				throw new Rejection(superclass, element.getSimpleName() + " stands for Lua that Oneiro does not write,"
+						+ " which a class of the plugin's cannot extend.");
 			}
 			if (!types.isPluginType(element)) {
 				throw new Rejection(superclass, "Lua has none of " + element.getSimpleName()
 						+ "'s Java code to inherit; keep one in a field instead of extending it.");
-			}
-			if (types.declaredModule(element) != null) {
-				throw new Rejection(superclass, "A @LuaModule declaration stands for a hand-written module, which Java"
-						+ " code cannot extend.");
 			}
 		}
 		for (Tree implemented : type.getImplementsClause()) {
@@ -56,46 +56,36 @@ final class DeclarationChecks {
 	}
 
 	/**
-	 * A {@code @LuaModule} declaration produces no Lua; its members only stand for what the Lua module defines: native
-	 * methods, fields without values, and records, which describe the tables and the several values it returns.
+	 * Whether the file is free of what only generated bindings carry: the annotations that tell the compiler how a
+	 * class meets Lua it does not write, {@code @LuaGlobal}, {@code @LuaModule} and the rest, and native methods. Each
+	 * is reported where it is, because the Lua the plugin calls is bound from its LuaCATS annotations instead.
 	 */
-	void checkDeclaration(ClassTree type) {
-		for (Tree member : type.getMembers()) {
-			if (unit.isSynthetic(member)) {
-				continue;
-			}
-			try {
-				switch (member) {
-					case MethodTree method when UnitLowering.isConstructor(method) -> {
-						if (!method.getModifiers().getFlags().contains(Modifier.PRIVATE)
-								|| !method.getParameters().isEmpty()
-								|| !unit.constructors().realStatements(method.getBody()).isEmpty()) {
-							unit.error(unit.start(method), "A @LuaModule declaration has no constructor of its own;"
-									+ " declare the module's constructor as a static native method with"
-									+ " @LuaName(\"new\").");
-						}
+	boolean checkBindingsOnly(ClassTree type) {
+		boolean[] clean = {true};
+		new TreeScanner<Void, Void>() {
+			@Override
+			public Void visitModifiers(ModifiersTree modifiers, Void unused) {
+				for (AnnotationTree annotation : modifiers.getAnnotations()) {
+					TypeElement element = unit.typeElement(annotation.getAnnotationType());
+					if (BindingAnnotations.isBindingAnnotation(element.getQualifiedName().toString())) {
+						unit.error(unit.start(annotation), BindingAnnotations.rejection(
+								element.getSimpleName().toString()));
+						clean[0] = false;
 					}
-					case MethodTree method -> {
-						if (!method.getModifiers().getFlags().contains(Modifier.NATIVE)) {
-							unit.error(unit.start(method), "Every method of a @LuaModule declaration is native: it"
-									+ " stands for a function the Lua module defines.");
-						}
-						unit.luaMemberName(method);
-					}
-					case VariableTree field -> {
-						if (field.getInitializer() != null) {
-							unit.error(unit.start(field), "A @LuaModule declaration's fields take their values from the"
-									+ " Lua module; remove the initializer.");
-						}
-						unit.luaMemberName(field);
-					}
-					case ClassTree nested when nested.getKind() == Tree.Kind.RECORD -> checkRecord(nested);
-					default -> unit.reject(Rejection.notYet(member, "This member in a @LuaModule declaration"));
 				}
-			} catch (Rejection rejection) {
-				unit.reject(rejection);
+				return super.visitModifiers(modifiers, null);
 			}
-		}
+
+			@Override
+			public Void visitMethod(MethodTree method, Void unused) {
+				if (method.getModifiers().getFlags().contains(Modifier.NATIVE)) {
+					unit.error(unit.start(method), BindingAnnotations.noBody("A native method"));
+					clean[0] = false;
+				}
+				return super.visitMethod(method, null);
+			}
+		}.scan(type, null);
+		return clean[0];
 	}
 
 	/**

@@ -14,11 +14,13 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.adelheid.oneiro.bindings.BindingsGenerator;
@@ -46,8 +48,10 @@ import org.junit.jupiter.api.TestFactory;
  *       style;
  *   <li>{@code diagnostics.txt}: the errors and warnings it must report;
  *   <li>{@code check.lua}: assertions run under Lua 5.4 against the generated modules;
- *   <li>{@code lua/}: hand-written Lua the generated modules use, such as a module the Java declares with
- *       {@code @LuaModule};
+ *   <li>{@code lua/}: the plugin's own Lua, laid out as a plugin's {@code src/main/lua/} is, which runs beside the
+ *       generated modules under {@code src/}, and whose annotations give the bindings the sources compile against;
+ *   <li>{@code types/}: definition files that give those bindings instead, where the Lua is another's, such as
+ *       Blueprint-Helper's;
  *   <li>{@code case.properties}: the plugin's {@code id}, {@code permissions} and {@code flags}, and whether the
  *       sources are the {@code dev} source set;
  *   <li>{@code kotlin/}: the same plugin in Kotlin, its twin, which must give the same Lua, and its own
@@ -129,7 +133,7 @@ class ConformanceTest {
 	static Map<String, String> compileAndCompare(Path folder) throws IOException {
 		Path input = folder.resolve("input");
 		CompileResult result = JavaFrontend.compile(sources(input, ".java"),
-				new JavaFrontend.Options(ROOT_PACKAGE, classpath(), facts(folder.resolve("case.properties"))));
+				new JavaFrontend.Options(ROOT_PACKAGE, classpath(folder), facts(folder)));
 		return compare(folder, input, result, folder.resolve("diagnostics.txt"), null);
 	}
 
@@ -142,7 +146,7 @@ class ConformanceTest {
 	private static void compileKotlinAndCompare(Path folder) throws IOException {
 		Path input = folder.resolve("kotlin");
 		CompileResult result = KotlinFrontend.compile(sources(input, ".kt"),
-				new KotlinFrontend.Options(ROOT_PACKAGE, kotlinClasspath(), facts(folder.resolve("case.properties"))));
+				new KotlinFrontend.Options(ROOT_PACKAGE, kotlinClasspath(folder), facts(folder)));
 		Map<String, String> modules = compare(folder, input, result, input.resolve("diagnostics.txt"),
 				input.resolve("expected"));
 		if (Files.exists(folder.resolve("expected"))) {
@@ -206,8 +210,8 @@ class ConformanceTest {
 	}
 
 	/**
-	 * Writes the generated modules, with any hand-written Lua the case brings, to a plugin folder named
-	 * {@code output}, and runs them and the check, when there is one, under Lua 5.4.
+	 * Writes the generated modules, with the case's own Lua under {@code src/}, as a plugin's build ships it, to a
+	 * plugin folder named {@code output}, and runs them and the check, when there is one, under Lua 5.4.
 	 */
 	private static void runLua(Path folder, Map<String, String> modules, String output, Path check)
 			throws IOException {
@@ -216,7 +220,7 @@ class ConformanceTest {
 		if (Files.exists(handWritten)) {
 			try (Stream<Path> files = Files.walk(handWritten)) {
 				for (Path file : files.filter(Files::isRegularFile).toList()) {
-					Path target = root.resolve(handWritten.relativize(file).toString());
+					Path target = root.resolve("src").resolve(handWritten.relativize(file).toString());
 					Files.createDirectories(target.getParent());
 					Files.copy(file, target, StandardCopyOption.REPLACE_EXISTING);
 				}
@@ -252,40 +256,75 @@ class ConformanceTest {
 				diagnostic.message(), diagnostic.sourceLine(), diagnostic.position());
 	}
 
-	/** The test's own classpath, which has the api and JSpecify, and the RS3 bindings generated from the fixture. */
-	private static List<Path> classpath() {
+	/**
+	 * What a case's Java compiles against: the test's own classpath, which has the api and JSpecify, the RS3 bindings
+	 * generated from the fixture, and the bindings of the case's own Lua.
+	 */
+	private static List<Path> classpath(Path folder) throws IOException {
 		List<Path> classpath = new ArrayList<>(
 				Stream.of(System.getProperty("java.class.path").split(File.pathSeparator)).map(Path::of).toList());
 		classpath.add(FixtureBindings.JAVA);
+		classpath.addAll(ownLuaBindings(folder, BindingsGenerator.Language.JAVA, FixtureBindings.JAVA));
 		return classpath;
 	}
 
 	/**
 	 * What the Kotlin twins compile against: the bindings generated from the fixture for a plugin written in Kotlin,
-	 * and Oneiro's API, JSpecify and the Kotlin standard library, which the build names. The test's own classpath holds
-	 * the Analysis API, which plugin code never sees.
+	 * those of the case's own Lua, and Oneiro's API, JSpecify and the Kotlin standard library, which the build names.
+	 * The test's own classpath holds the Analysis API, which plugin code never sees.
 	 */
-	private static List<Path> kotlinClasspath() {
+	private static List<Path> kotlinClasspath(Path folder) throws IOException {
 		List<Path> classpath = new ArrayList<>(Stream.of(System.getProperty("oneiro.kotlinClasspath")
 				.split(File.pathSeparator)).map(Path::of).toList());
 		classpath.add(FixtureBindings.KOTLIN);
+		classpath.addAll(ownLuaBindings(folder, BindingsGenerator.Language.KOTLIN, FixtureBindings.KOTLIN));
 		return classpath;
 	}
 
 	/**
-	 * The plugin facts a case's {@code case.properties} gives: {@code id}, comma-separated {@code permissions} and
-	 * {@code flags}, and {@code dev}; the defaults without one.
+	 * The bindings of a case's own Lua, from the definition files in its {@code types/}, or else from its {@code lua/},
+	 * which must generate without a warning; none for a case without Lua of its own.
 	 */
-	private static PluginFacts facts(Path properties) throws IOException {
-		if (!Files.exists(properties)) {
-			return PluginFacts.DEFAULT;
+	private static List<Path> ownLuaBindings(Path folder, BindingsGenerator.Language language, Path rs3Jar)
+			throws IOException {
+		Path types = folder.resolve("types");
+		Path lua = Files.isDirectory(types) ? types : folder.resolve("lua");
+		if (!Files.isDirectory(lua)) {
+			return List.of();
 		}
+		Path output = Path.of("build", "case-bindings",
+				folder.getFileName() + "-" + language.name().toLowerCase(Locale.ROOT));
+		List<BindingsGenerator.LibraryResult> results = BindingsGenerator.generatePluginLua(
+				Path.of(System.getProperty("oneiro.stubsFixture")), rs3Jar, output, language, ROOT_PACKAGE, lua, null);
+		for (BindingsGenerator.LibraryResult result : results) {
+			assertEquals(List.of(), result.warnings(), "the bindings of " + lua);
+		}
+		return List.of(results.getFirst().classesJar());
+	}
+
+	/**
+	 * The plugin facts of a case: those its {@code case.properties} gives, {@code id}, comma-separated
+	 * {@code permissions} and {@code flags}, and {@code dev}, or the defaults without one; and the files of its own
+	 * Lua, from its {@code lua/}.
+	 */
+	private static PluginFacts facts(Path folder) throws IOException {
 		Properties values = new Properties();
-		try (Reader reader = Files.newBufferedReader(properties, StandardCharsets.UTF_8)) {
-			values.load(reader);
+		Path properties = folder.resolve("case.properties");
+		if (Files.exists(properties)) {
+			try (Reader reader = Files.newBufferedReader(properties, StandardCharsets.UTF_8)) {
+				values.load(reader);
+			}
+		}
+		Set<String> luaFiles = new TreeSet<>();
+		Path lua = folder.resolve("lua");
+		if (Files.isDirectory(lua)) {
+			try (Stream<Path> files = Files.walk(lua)) {
+				files.filter(Files::isRegularFile)
+						.forEach(file -> luaFiles.add("src/" + lua.relativize(file).toString().replace('\\', '/')));
+			}
 		}
 		return new PluginFacts(values.getProperty("id", PluginFacts.DEFAULT.id()),
-				list(values.getProperty("permissions", "")), list(values.getProperty("flags", "")),
+				list(values.getProperty("permissions", "")), list(values.getProperty("flags", "")), luaFiles,
 				Boolean.parseBoolean(values.getProperty("dev", "false")));
 	}
 

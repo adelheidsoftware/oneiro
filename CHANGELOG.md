@@ -6,6 +6,29 @@ All notable changes to Oneiro are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The plugin's own Lua: files under `src/main/lua/` ship under `src/`, as written, so that
+  `src/main/lua/core/levels.lua` is `src/core/levels.lua`, and those under `src/dev/lua/` go under `dev/` in the
+  development folder alone. Java and Kotlin call them through classes that the new `oneiroLuaBindings` task generates
+  from their LuaCATS annotations, one per module, in the plugin's package for its folder: `Levels.fromPenalty(penalty)`
+  becomes `local Levels = require("src/core/levels")` and `Levels.fromPenalty(penalty)`. `testLua` loads them as it
+  loads Oneiro's modules, and `explainError` shows a place in one as the line of its file. See
+  [plugin-model.md](docs/plugin-model.md#the-plugins-own-lua).
+- `checkPlugin` checks that each Lua file under `src/` starts with its path, by which the client's errors name it;
+  finds a `require` in single quotes too; and finds, in any Lua that ships, the members of the client's that need a
+  permission the manifest lacks, as the compiler does, beside those for development only.
+
+### Changed
+
+- A class of the plugin's may no longer carry the annotations of the bindings, such as `@LuaModule` and `@LuaGlobal`,
+  nor may a Java method be `native` or a Kotlin function `external`: hand-written declarations of existing Lua, which
+  no build could ship, give way to the plugin's own Lua and the bindings of its annotations.
+
+### Fixed
+
+- Two classes of one name from two packages, used in one file, are reported; both became one `require`, of the first.
+
 ## [0.2.0] - 2026-10-25
 
 ### Added

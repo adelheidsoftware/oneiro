@@ -98,19 +98,15 @@ plugin/Gaps.kt:143: error: Lua has no regular expressions; use LuaString.match, 
 		return text.matches(Regex("""\d+"""))
 		       ^
 
-plugin/Misuse.kt:13: error: Only a @LuaModule declaration has external functions; they stand for Lua functions that exist already.
-	external fun outside(): Int
-	^
-
-plugin/Misuse.kt:16: error: Kotlin generates toString() for a data class, but its Lua table has no such function; give Point a toString() function, or put its properties into the text instead.
+plugin/Misuse.kt:14: error: Kotlin generates toString() for a data class, but its Lua table has no such function; give Point a toString() function, or put its properties into the text instead.
 		return "point $point"
 		               ^
 
-plugin/Misuse.kt:20: error: Calling kotlin.Any.hashCode is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+plugin/Misuse.kt:18: error: Calling kotlin.Any.hashCode is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
 		return count.hashCode()
 		       ^
 
-plugin/Misuse.kt:25: error: In Lua, seen::add is an assignment, which gives no value, where Kotlin's add tells whether the collection changed; so it works only where nothing reads that, as in forEach(seen::add). Write a lambda here, which can test the collection first.
+plugin/Misuse.kt:23: error: In Lua, seen::add is an assignment, which gives no value, where Kotlin's add tells whether the collection changed; so it works only where nothing reads that, as in forEach(seen::add). Write a lambda here, which can test the collection first.
 		return names.filter(seen::add)
 		                    ^
 
@@ -142,12 +138,20 @@ plugin/Rejected.kt:37: error: Lua's break and continue only reach the innermost 
 				break@outer
 				^
 
-plugin/Store.kt:9: error: A @LuaModule declaration's properties take their values from the Lua module; declare them without a value and with external accessors: val LEVEL: Int external get.
-	var limit = 3
+plugin/Store.kt:7: error: @LuaModule belongs to the bindings Oneiro generates, not to the plugin's own classes; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them.
+@LuaModule("src/store")
+^
+
+plugin/Store.kt:11: error: An external accessor would stand for Lua that exists already, which Oneiro binds from its annotations rather than from a declaration; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them.
+		external get
+		^
+
+plugin/Store.kt:13: error: @LuaColon belongs to the bindings Oneiro generates, not to the plugin's own classes; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them.
+	@LuaColon
 	^
 
-plugin/Store.kt:11: error: Every function of a @LuaModule declaration is external: it stands for a function the Lua module defines.
-	fun count(): Int {
+plugin/Store.kt:13: error: An external function would stand for Lua that exists already, which Oneiro binds from its annotations rather than from a declaration; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them.
+	@LuaColon
 	^
 
 plugin/Umlauts.kt:6: error: Lua names are ASCII letters, digits and underscores only; rename größe.

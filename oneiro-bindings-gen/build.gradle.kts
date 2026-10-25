@@ -12,6 +12,8 @@ dependencies {
 	// The generated sources are compiled against the binding annotations and JSpecify
 	implementation(project(":oneiro-api"))
 	implementation(libs.jspecify)
+	// The facts checkPlugin reads, written next to the RS3 bindings
+	implementation(project(":oneiro-plugin-model"))
 }
 
 // The real stubs, checked out next to Oneiro, for the test against them and for the audit of the client's members

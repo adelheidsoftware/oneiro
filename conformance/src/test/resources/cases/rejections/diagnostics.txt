@@ -138,23 +138,15 @@ plugin/Gaps.java:223: error: Lua has no regular expressions; use LuaString.match
 		return text.matches("\\d+");
 		       ^
 
-plugin/Misuse.java:20: error: Only a @LuaModule declaration has native methods; they stand for Lua functions that exist already.
-	public static native int outside();
-	^
-
-plugin/Misuse.java:23: error: A record is a plain Lua table without a toString(); put its components into the text instead.
+plugin/Misuse.java:21: error: A record is a plain Lua table without a toString(); put its components into the text instead.
 		return "point " + point;
 		                  ^
 
-plugin/Misuse.java:27: error: A @LuaModule declaration has no Java constructor; call the module's own constructor, declared as a static native method with @LuaName("new").
-		return new Store();
-		       ^
-
-plugin/Misuse.java:31: error: Calling hashCode on a boxed value is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/java-subset.md lists the Java that is.
+plugin/Misuse.java:25: error: Calling hashCode on a boxed value is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/java-subset.md lists the Java that is.
 		return count.hashCode();
 		       ^
 
-plugin/Misuse.java:36: error: In Lua, seen::add is an assignment, which gives no value, where Java's add tells whether the collection changed; so it works only where nothing reads that, as in forEach(seen::add). Write a lambda here, which can test the collection first.
+plugin/Misuse.java:30: error: In Lua, seen::add is an assignment, which gives no value, where Java's add tells whether the collection changed; so it works only where nothing reads that, as in forEach(seen::add). Write a lambda here, which can test the collection first.
 		return names.stream().filter(seen::add).toList();
 		                             ^
 
@@ -190,12 +182,16 @@ plugin/Rejected.java:41: error: Lua's break and continue only reach the innermos
 		outer:
 		^
 
-plugin/Store.java:9: error: A @LuaModule declaration's fields take their values from the Lua module; remove the initializer.
-	public static int LIMIT = 3;
+plugin/Store.java:7: error: @LuaModule belongs to the bindings Oneiro generates, not to the plugin's own classes; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them.
+@LuaModule("src/store")
+^
+
+plugin/Store.java:13: error: A native method would stand for Lua that exists already, which Oneiro binds from its annotations rather than from a declaration; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them.
+	@LuaColon
 	^
 
-plugin/Store.java:11: error: Every method of a @LuaModule declaration is native: it stands for a function the Lua module defines.
-	public static int count() {
+plugin/Store.java:13: error: @LuaColon belongs to the bindings Oneiro generates, not to the plugin's own classes; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them.
+	@LuaColon
 	^
 
 plugin/Waiting.java:15: error: The client gives plugins no clock to read; to measure time, count the ticks of Event.ServerLogic, about every 0.6 seconds, or of Event.Logic, 50 a second.

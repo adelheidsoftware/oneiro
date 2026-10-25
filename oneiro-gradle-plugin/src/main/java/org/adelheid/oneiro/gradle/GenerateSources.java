@@ -17,6 +17,7 @@ import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.CacheableTask;
@@ -24,6 +25,7 @@ import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
@@ -31,7 +33,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * {@code oneiroSources}: the typed {@code Resources} and {@code Urls} classes, in the plugin's root package, from its
- * resource files and its manifest's base URLs.
+ * resource files and its manifest's base URLs, and the root package itself, which {@code oneiroLuaBindings} puts the
+ * bindings of the plugin's own Lua below.
  */
 @CacheableTask
 public abstract class GenerateSources extends DefaultTask {
@@ -63,6 +66,10 @@ public abstract class GenerateSources extends DefaultTask {
 	@OutputDirectory
 	public abstract DirectoryProperty getOutputDirectory();
 
+	/** The file the root package goes to, found in the sources when the build names none. */
+	@OutputFile
+	public abstract RegularFileProperty getRootPackageFile();
+
 	@TaskAction
 	public void generate() {
 		try {
@@ -70,6 +77,9 @@ public abstract class GenerateSources extends DefaultTask {
 			clean(output);
 			List<String> problems = new ArrayList<>();
 			String rootPackage = rootPackage();
+			Path rootPackageFile = getRootPackageFile().get().getAsFile().toPath();
+			Files.createDirectories(rootPackageFile.getParent());
+			Files.writeString(rootPackageFile, rootPackage + "\n", StandardCharsets.UTF_8);
 			String resources = TypedSources.resources(rootPackage, getResourcesFolder().get().getAsFile().toPath(),
 					problems);
 			String urls = TypedSources.urls(rootPackage, getUrls().get());

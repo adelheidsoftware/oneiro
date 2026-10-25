@@ -91,7 +91,7 @@ final class TypeMapping {
 					.filter(scope.variables()::contains)
 					.map(variable -> (TypeRef) TypeRef.Named.of(variable))
 					.toList();
-			JType self = binding(bindings, owner.name, "", variables);
+			JType self = binding(bindings, owner.name, variables);
 			if (self != null) {
 				return self;
 			}
@@ -101,7 +101,7 @@ final class TypeMapping {
 		if (builtin != null) {
 			return builtin;
 		}
-		JType own = binding(bindings, name, "", named.args());
+		JType own = binding(bindings, name, named.args());
 		if (own != null) {
 			return own;
 		}
@@ -112,7 +112,7 @@ final class TypeMapping {
 			if (foreignBuiltin != null) {
 				return foreignBuiltin;
 			}
-			JType found = binding(other, resolved, other.target.packageName() + ".", named.args());
+			JType found = binding(other, resolved, named.args());
 			if (found != null) {
 				return found;
 			}
@@ -178,10 +178,10 @@ final class TypeMapping {
 	}
 
 	/**
-	 * The binding of a class or enum of one set of bindings, with its package for another set's, and with the type
-	 * arguments a generic class takes; null when that set declares none of the name.
+	 * The binding of a class or enum of one set of bindings, with its package for another set's and for the plugin's
+	 * own Lua, and with the type arguments a generic class takes; null when that set declares none of the name.
 	 */
-	private @Nullable JType binding(JavaBindings of, String name, String packagePrefix, List<TypeRef> args) {
+	private @Nullable JType binding(JavaBindings of, String name, List<TypeRef> args) {
 		ApiModel.ClassDef classDef = of.model.classes.get(name);
 		if (classDef != null && "integer".equals(classDef.superclass)) {
 			return JType.primitive("int", "Integer");
@@ -198,6 +198,7 @@ final class TypeMapping {
 		if (enumDef != null && of.typeUses.getOrDefault(enumDef.name(), 0) == 0) {
 			return enumDef.integerValued() ? JType.primitive("int", "Integer") : JType.reference("String");
 		}
+		String reference = of == bindings ? of.qualified(node) : of.packageOf(node.top()) + "." + node.reference();
 		ApiModel.ClassDef nodeClass = node.classDef;
 		if (nodeClass != null && !nodeClass.typeParams.isEmpty() && nodeClass.typeParams.size() == args.size()) {
 			// zyklib.reactive.Event<LogicEventPayload, nil>: nil is no value, Void in Java
@@ -206,9 +207,9 @@ final class TypeMapping {
 							? "Void"
 							: javaType(arg).boxed())
 					.collect(Collectors.joining(", "));
-			return JType.reference(packagePrefix + node.reference() + "<" + arguments + ">");
+			return JType.reference(reference + "<" + arguments + ">");
 		}
-		return JType.reference(packagePrefix + node.reference());
+		return JType.reference(reference);
 	}
 
 	private JType functional(TypeRef.Function function) {
@@ -232,10 +233,12 @@ final class TypeMapping {
 					: returnsBoolean ? prefix + "BiPredicate<" + joined + ">"
 					: prefix + "BiFunction<" + joined + ", " + result + ">");
 			default -> {
-				// More values than java.util.function's interfaces take: an interface of the bindings' own
+				// More values than java.util.function's interfaces take: an interface of the bindings' own, in the
+				// target's package, which the plugin's own Lua's classes in other packages import
 				String name = (returnsNothing ? "Consumer" : "Function") + params.size();
 				bindings.callbacks.add(name);
-				yield JType.reference(name + "<" + joined + (returnsNothing ? "" : ", " + result) + ">");
+				String reference = bindings.target.isPlugin() ? bindings.target.packageName() + "." + name : name;
+				yield JType.reference(reference + "<" + joined + (returnsNothing ? "" : ", " + result) + ">");
 			}
 		};
 	}

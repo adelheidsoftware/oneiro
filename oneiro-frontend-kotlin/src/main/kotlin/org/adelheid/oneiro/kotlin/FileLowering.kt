@@ -4,6 +4,7 @@ import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.util.PsiTreeUtil
+import org.adelheid.oneiro.lowering.BindingAnnotations
 import org.adelheid.oneiro.lowering.ClientApi
 import org.adelheid.oneiro.lowering.Diagnostic
 import org.adelheid.oneiro.lowering.Helper
@@ -25,7 +26,6 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolOrigin
 import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.types.KaType
-import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtClass
@@ -98,6 +98,9 @@ internal class FileLowering(
 	/** The local name of each required module and its require path, in order of first use. */
 	val requires: MutableMap<String, String> = linkedMapOf()
 
+	/** The require paths of modules that would share a local, by that local. */
+	private val requireClashes = sortedMapOf<String, MutableSet<String>>()
+
 	/** The Lua globals the module reads, such as `Player` or `config`, which a local of the same name would hide. */
 	val globals: MutableSet<String> = mutableSetOf()
 
@@ -116,7 +119,7 @@ internal class FileLowering(
 			return null
 		}
 		val checks = DeclarationChecks(this)
-		if (!checks.names()) {
+		if (!checks.names() || !checks.bindingsOnly()) {
 			return null
 		}
 		val classes = file.declarations.filterIsInstance<KtClassOrObject>()
@@ -133,17 +136,16 @@ internal class FileLowering(
 			return null
 		}
 		moduleName = main.name!!
-		if (main is KtObjectDeclaration && hasAnnotation(main, Annotations.LUA_MODULE)) {
-			// A declaration of a hand-written module, which produces no Lua
-			checkDeclaration(main)
-			return null
-		}
 		if (main is KtClass && main.isPlainData()) {
 			// A plain table, built where it is constructed, which produces no Lua of its own
 			return null
 		}
 		if (main is KtClass && (isPluginClass(main) || isDevEntry(main))) {
 			entry = main
+		} else if (path(packageName) in options.plugin.luaFiles()) {
+			error(main, "The Lua of $moduleName would be ${path(packageName)}, a file the plugin's own Lua has already;"
+				+ " rename the class or that file.")
+			return null
 		}
 		checks.check(main)
 		val header = header(main)
@@ -178,6 +180,10 @@ internal class FileLowering(
 			reject(rejection)
 			null
 		}
+		for ((local, paths) in requireClashes) {
+			error(main, "In Lua, this file would require ${paths.joinToString(" and ")} as one local, $local;"
+				+ " rename the class or file of one.")
+		}
 		val failed = diagnostics.any { it.severity() == Diagnostic.Severity.ERROR }
 		// The code an error stopped leaves its comments unplaced, which says nothing new
 		if (!failed) {
@@ -188,31 +194,6 @@ internal class FileLowering(
 		}
 		return if (failed) null else module
 	}
-
-	/**
-	 * A `@LuaModule` declaration's members only stand for what the hand-written module defines: external functions,
-	 * properties with external accessors, and data classes of properties alone, the tables it passes.
-	 */
-	private fun checkDeclaration(declaration: KtObjectDeclaration) {
-		for (member in declaration.declarations) {
-			when {
-				member is KtNamedFunction && !member.hasModifier(KtTokens.EXTERNAL_KEYWORD) -> error(member, "Every"
-					+ " function of a @LuaModule declaration is external: it stands for a function the Lua module"
-					+ " defines.")
-				member is KtNamedFunction -> {}
-				member is KtProperty && !hasExternalAccessors(member) -> error(member, "A @LuaModule declaration's"
-					+ " properties take their values from the Lua module; declare them without a value and with"
-					+ " external accessors: val LEVEL: Int external get.")
-				member is KtProperty -> {}
-				member is KtClass && member.isPlainData() -> {}
-				else -> reject(Rejection.notYet(member, "This member in a @LuaModule declaration"))
-			}
-		}
-	}
-
-	private fun hasExternalAccessors(property: KtProperty): Boolean =
-		property.initializer == null && property.getter?.hasModifier(KtTokens.EXTERNAL_KEYWORD) == true &&
-			(!property.isVar || property.setter?.hasModifier(KtTokens.EXTERNAL_KEYWORD) == true)
 
 	/** A member's name in the Lua: its own, or the one `@LuaName` gives it. */
 	fun memberName(member: KaCallableSymbol): String = with(session) {
@@ -291,9 +272,19 @@ internal class FileLowering(
 		}
 		val local = classId.shortClassName.asString()
 		val folder = if (type.origin == KaSymbolOrigin.SOURCE) sourceFolder() else "src"
-		// A @LuaModule declaration names the hand-written module it stands for
-		requires.putIfAbsent(local, annotations.value(type, Annotations.LUA_MODULE)
-			?: ModulePaths.requirePath(folder, options.rootPackage, classId.packageFqName.asString(), local))
+		return required(local, ModulePaths.requirePath(folder, options.rootPackage, classId.packageFqName.asString(),
+			local))
+	}
+
+	/**
+	 * A module this file requires, `local Levels = require("src/core/levels")` at its top, as the local that holds it.
+	 * Two modules that would be one local, classes of one name in two packages, are reported once the file is lowered.
+	 */
+	fun required(local: String, path: String): Expression {
+		val existing = requires.putIfAbsent(local, path)
+		if (existing != null && existing != path) {
+			requireClashes.getOrPut(local) { sortedSetOf(existing) } += path
+		}
 		return Expression.name(local)
 	}
 
@@ -446,11 +437,14 @@ internal class FileLowering(
 	fun isObjectEnum(type: KaClassSymbol): Boolean =
 		type.classKind == KaClassKind.ENUM_CLASS && type.classId?.asFqNameString() in compilation.objectEnums
 
-	/** Whether a class is the plugin's own, written in its sources or in the main source set the dev set builds on. */
+	/**
+	 * Whether a class is the plugin's own, written in its sources or in the main source set the dev set builds on. The
+	 * bindings of the plugin's own Lua are in its packages too, but stand for Lua that Oneiro does not write.
+	 */
 	fun isPluginType(type: KaClassSymbol): Boolean {
 		// A class declared inside a function, or an object expression, has no name outside it, but is the file's
 		val packageName = type.classId?.packageFqName?.asString() ?: return type.psi?.containingFile == file
-		return ModulePaths.isInside(options.rootPackage, packageName)
+		return ModulePaths.isInside(options.rootPackage, packageName) && !ApiCalls(this).isApi(type)
 	}
 
 	fun useGlobal(name: String) {

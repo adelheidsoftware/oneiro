@@ -20,9 +20,10 @@ import org.jspecify.annotations.Nullable;
  * Writes the Java sources of a set of bindings from a model and its overrides: one class per table, with nested classes
  * for nested tables, so that {@code ui.Text} in Lua is {@code ui.Text} in Java. A global table is a class of the
  * package; a library's module is one too, named as its {@code require} binds it, and the tables its own table holds in
- * fields are nested in it, so that {@code zyklib.reactive.Event} in Lua is {@code zyklib.reactive.Event} in Java. Each
- * class and member carries the annotations that tell Oneiro its Lua shape, and the Javadoc of its description. A type
- * a library names but does not declare, such as {@code ui.Component}, is the RS3 bindings' class, or another library's.
+ * fields are nested in it, so that {@code zyklib.reactive.Event} in Lua is {@code zyklib.reactive.Event} in Java. The
+ * plugin's own modules are classes of the plugin's packages, each in the package of its file's folder. Each class and
+ * member carries the annotations that tell Oneiro its Lua shape, and the Javadoc of its description. A type the Lua
+ * names but does not declare, such as {@code ui.Component}, is the RS3 bindings' class, or another library's.
  *
  * <p>The RS3 API's own parts are written for its bindings alone ({@link BindingsTarget}): the events, the hooks, and
  * the {@code id}, {@code config} and {@code var} namespaces, whose names are not written as sources: they are returned
@@ -158,7 +159,7 @@ final class JavaBindings {
 			this.parent = parent;
 		}
 
-		/** The class's reference from anywhere in the package: {@code ui.Text}. */
+		/** The class's reference from anywhere in its package: {@code ui.Text}. */
 		String reference() {
 			return parent == null ? javaName : parent.reference() + "." + javaName;
 		}
@@ -213,6 +214,10 @@ final class JavaBindings {
 	final Map<String, Overrides.Entry> declaredClasses = new LinkedHashMap<>();
 	/** The hook lines, by the Lua name of the table of hooks they describe, {@code ui.Hook}, in order. */
 	final Map<String, List<HookLine>> hooks = new LinkedHashMap<>();
+	/** The permission each member or table marked {@code @LuaPermission} needs, by its Lua path. */
+	final Map<String, String> permissions = new TreeMap<>();
+	/** The Lua paths of the members marked {@code @LuaDevOnly}. */
+	final Set<String> devOnly = new TreeSet<>();
 
 	/**
 	 * @param csvs the name lists of the RS3 API's constant namespaces; empty for a library
@@ -258,9 +263,48 @@ final class JavaBindings {
 		return memberBindings;
 	}
 
-	/** The names of the package's top-level classes. */
-	Set<String> topNames() {
-		return tops.keySet();
+	/**
+	 * The names of the top-level classes by their packages: the one package's, or for the plugin's own Lua, those of
+	 * each package its files are in; the callback interfaces are in the first package, the target's.
+	 */
+	Map<String, Set<String>> topNamesByPackage() {
+		Map<String, Set<String>> packages = new TreeMap<>();
+		for (Node top : tops.values()) {
+			packages.computeIfAbsent(packageOf(top), name -> new TreeSet<>()).add(top.javaName);
+		}
+		packages.computeIfAbsent(target.packageName(), name -> new TreeSet<>()).addAll(callbacks);
+		return packages;
+	}
+
+	/**
+	 * The package of a top-level class: the target's one package, or for the plugin's own Lua, the package of the file
+	 * that declares it ({@link BindingsTarget#packageOf}).
+	 */
+	String packageOf(Node top) {
+		return target.packageOf(fileOf(top));
+	}
+
+	/** The file that declares a top-level class's table or type, in the folder of Lua files; empty when none does. */
+	private String fileOf(Node top) {
+		ApiModel.ModuleDef module = top.module == null ? null : model.modules.get(top.module);
+		if (module != null) {
+			return module.file();
+		}
+		ApiModel.ClassDef classDef = top.classDef;
+		if (classDef != null && !classDef.files.isEmpty()) {
+			return classDef.files.getFirst();
+		}
+		ApiModel.EnumDef enumDef = top.enumDef;
+		return enumDef == null ? "" : enumDef.file();
+	}
+
+	/**
+	 * A class's reference as the generated code names it: from anywhere in the one package, {@code ui.Text}; for the
+	 * plugin's own Lua, whose classes are in several packages, with its package, which {@link SourceFiles#file} turns
+	 * into an import or leaves out within the package.
+	 */
+	String qualified(Node node) {
+		return target.isPlugin() ? packageOf(node.top()) + "." + node.reference() : node.reference();
 	}
 
 	/** The constant namespaces whose chunk classes the namespace classes extend. */
@@ -271,10 +315,12 @@ final class JavaBindings {
 	/** Every source file, by its path under the source root. */
 	Map<String, String> sources() {
 		Map<String, String> files = new TreeMap<>();
-		String folder = target.packageName().replace('.', '/') + "/";
-		files.put(folder + "package-info.java", sourceFiles.packageInfo());
-		files.put(folder + "LuaOnly.java", sourceFiles.luaOnly());
+		String folder = folder(target.packageName());
 		List<String> fixedNames = new ArrayList<>(List.of("LuaOnly"));
+		if (!target.isPlugin()) {
+			// The plugin's packages are its own, whose package-info its sources may hold, so each class is marked
+			files.put(folder + "package-info.java", sourceFiles.packageInfo());
+		}
 		if (target.isRs3()) {
 			files.put(folder + "EventSubscription.java", sourceFiles.subscription(false));
 			files.put(folder + "EventPredicateSubscription.java", sourceFiles.subscription(true));
@@ -282,30 +328,43 @@ final class JavaBindings {
 			fixedNames.addAll(List.of("EventSubscription", "EventPredicateSubscription", "Globals"));
 		} else {
 			model.globalFunctions.forEach(function -> warnings.add("The global function " + function.name()
-					+ " is left out: a library's bindings bind its tables."));
+					+ " is left out: the bindings of Lua other than the client's bind its tables."));
 		}
-		Set<String> lowerCaseNames = new HashSet<>();
-		for (String fixed : fixedNames) {
-			lowerCaseNames.add(fixed.toLowerCase(Locale.ROOT));
-		}
+		Map<String, Set<String>> lowerCaseNames = new HashMap<>();
 		for (Node top : tops.values()) {
-			if (!lowerCaseNames.add(top.javaName.toLowerCase(Locale.ROOT))) {
+			String packageName = packageOf(top);
+			Set<String> taken = lowerCaseNames.computeIfAbsent(packageName, name -> lowerCase(fixedNames));
+			if (!taken.add(top.javaName.toLowerCase(Locale.ROOT))) {
 				throw new IllegalStateException("Two binding classes differ only in case, which some file systems"
 						+ " cannot hold apart, or one takes the name of a fixed class: " + top.javaName);
 			}
 			StringBuilder source = new StringBuilder();
 			writeNode(source, top, "");
-			files.put(folder + top.javaName + ".java",
-					sourceFiles.file(source.toString(), SourceFiles.nestedNames(top)));
+			files.put(folder(packageName) + top.javaName + ".java",
+					sourceFiles.file(source.toString(), SourceFiles.nestedNames(top), packageName));
 		}
 		// The callbacks are known once the classes that name them are written
 		for (String callback : callbacks) {
-			if (!lowerCaseNames.add(callback.toLowerCase(Locale.ROOT))) {
+			if (!lowerCaseNames.computeIfAbsent(target.packageName(), name -> lowerCase(fixedNames))
+					.add(callback.toLowerCase(Locale.ROOT))) {
 				throw new IllegalStateException("A binding class takes the name of a callback interface: " + callback);
 			}
 			files.put(folder + callback + ".java", sourceFiles.callback(callback));
 		}
+		for (String packageName : target.isPlugin() ? lowerCaseNames.keySet() : Set.of(target.packageName())) {
+			files.put(folder(packageName) + "LuaOnly.java", sourceFiles.luaOnly(packageName));
+		}
 		return files;
+	}
+
+	private static String folder(String packageName) {
+		return packageName.replace('.', '/') + "/";
+	}
+
+	private static Set<String> lowerCase(List<String> names) {
+		Set<String> lowerCase = new HashSet<>();
+		names.forEach(name -> lowerCase.add(name.toLowerCase(Locale.ROOT)));
+		return lowerCase;
 	}
 
 	// ---- Preparation
@@ -798,6 +857,7 @@ final class JavaBindings {
 				: "\"" + event.name() + "\"").append(")\n");
 		String permission = overrides.value("permission", "Event." + event.name());
 		if (permission != null) {
+			permissions.put("Event." + event.name(), permission);
 			out.append(indent).append("@LuaPermission(\"").append(permission).append("\")\n");
 		}
 		String flag = overrides.value("manifest-flag", "Event." + event.name());
@@ -816,8 +876,8 @@ final class JavaBindings {
 		doc.addAll(notes(classDef.name));
 		boolean hasNew = classDef.functions.stream()
 				.anyMatch(function -> isConstructor(classDef, function) && isBound(classDef, function));
-		// What the RS3 API hands out and takes, a library does
-		String provider = target.isRs3() ? "the API" : "the library";
+		// What the RS3 API hands out and takes, a library or the plugin's Lua does
+		String provider = target.isRs3() ? "the API" : target.provider();
 		doc.add(switch (shape) {
 			case NAMESPACE -> "<p>Lua: " + tableDescription(node, path) + ".";
 			case INSTANCE -> "<p>Lua: " + tableDescription(node, path) + (hasNew
@@ -825,7 +885,7 @@ final class JavaBindings {
 					: "; its objects come from " + provider + ".");
 			case TYPE -> "<p>Lua: values of the type {@code " + luaName + "}" + (isBuiltByPlugin(node, classDef)
 					? ": tables the plugin builds and passes to " + provider + "."
-					: ", which " + (target.isRs3() ? "the client" : "the library") + " hands out.");
+					: ", which " + target.provider() + " hands out.");
 		});
 		JavaText.javadoc(out, indent, doc);
 		if (payload != null) {
@@ -1034,10 +1094,12 @@ final class JavaBindings {
 	void memberAnnotations(StringBuilder out, String target, String indent) {
 		String permission = overrides.value("permission", target);
 		if (permission != null) {
+			permissions.put(luaPath(target), permission);
 			out.append(indent).append("@LuaPermission(\"").append(permission).append("\")\n");
 		}
 		reviewAnnotation(out, target, indent);
 		if (overrides.has("dev-only", target)) {
+			devOnly.add(luaPath(target));
 			out.append(indent).append("@LuaDevOnly\n");
 		}
 	}
@@ -1061,7 +1123,7 @@ final class JavaBindings {
 					+ ", which has no class of objects; its Java class extends Object.");
 			return null;
 		}
-		return node.reference();
+		return qualified(node);
 	}
 
 	/**
@@ -1131,16 +1193,16 @@ final class JavaBindings {
 	boolean isSubclass(String subclass, String superclass) {
 		Node node = null;
 		for (Node candidate : byLuaName.values()) {
-			if (candidate.reference().equals(subclass)) {
+			if (qualified(candidate).equals(subclass)) {
 				node = candidate;
 				break;
 			}
 		}
 		Set<String> visited = new HashSet<>();
-		while (node != null && node.classDef != null && visited.add(node.reference())) {
+		while (node != null && node.classDef != null && visited.add(qualified(node))) {
 			String superName = node.classDef.superclass;
 			node = superName == null ? null : byLuaName.get(model.resolveAlias(superName));
-			if (node != null && node.reference().equals(superclass)) {
+			if (node != null && qualified(node).equals(superclass)) {
 				return true;
 			}
 		}

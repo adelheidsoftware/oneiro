@@ -282,6 +282,138 @@ class OneiroPluginFunctionalTest {
 				result.getOutput());
 	}
 
+	/**
+	 * Lua of the plugin's own: {@code levels}, which a class of the plugin's calls through the bindings of its
+	 * annotations, and for the dev source set, {@code teleports}, which the dev set's class calls.
+	 */
+	private void ownLua() throws IOException {
+		write("src/main/lua/core/levels.lua", """
+				-- src/core/levels.lua
+				-- The levels an arrangement scores, kept in Lua.
+
+				local Levels = {}
+
+				Levels.PERFECT = 0
+
+				---@param penalty integer
+				---@return integer level
+				function Levels.fromPenalty(penalty)
+				    return penalty // 2
+				end
+
+				return Levels
+				""");
+		write("src/dev/lua/teleports.lua", """
+				-- dev/teleports.lua
+				-- Where the development helpers teleport to.
+
+				local Teleports = {}
+
+				---@return string command
+				function Teleports.herbPatch()
+				    return "!tele 3058 3311 0"
+				end
+
+				return Teleports
+				""");
+		write("src/test/lua/grades_test.lua", """
+				local Grades = require("src/core/grades")
+
+				assert(Grades.best(4) == 2, "the plugin's own Lua, called from the plugin's class")
+				""");
+	}
+
+	@Test
+	void usesThePluginsOwnLua() throws IOException {
+		plugin();
+		ownLua();
+		write("src/main/java/com/example/herbs/core/Grades.java", """
+				package com.example.herbs.core;
+
+				/** The best level for a penalty, from the plugin's own levels module. */
+				public final class Grades {
+
+					private Grades() {
+					}
+
+					public static int best(int penalty) {
+						return Levels.fromPenalty(penalty) + Levels.PERFECT;
+					}
+				}
+				""");
+		write("src/dev/java/com/example/herbs/Cheats.java", """
+				package com.example.herbs;
+
+				import static org.adelheid.oneiro.rs3.Globals.ExecuteConsoleCommand;
+
+				import org.adelheid.oneiro.api.DevPlugin;
+
+				/** Development helpers: teleports to the herb patch when the plugin starts. */
+				public final class Cheats extends DevPlugin {
+
+					@Override
+					protected void startUp() {
+						ExecuteConsoleCommand(Teleports.herbPatch());
+					}
+				}
+				""");
+		BuildResult result = gradle("build", "assembleDevPlugin").build();
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":checkPlugin"));
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":testLua"));
+
+		String grades = Files.readString(project.resolve("build/oneiro/plugin/src/core/grades.lua"));
+		assertTrue(grades.contains("local Levels = require(\"src/core/levels\")"), grades);
+		assertTrue(grades.contains("return Levels.fromPenalty(penalty) + Levels.PERFECT"), grades);
+		assertEquals(List.of("main.lua", "plugin.json", "resources/", "resources/icons/", "resources/icons/herb.png",
+				"src/", "src/herb_config.lua", "src/tally.lua", "src/core/", "src/core/grades.lua",
+				"src/core/levels.lua"), entries(project.resolve("build/distributions/herb-tracker-1.2.0.zip")));
+		Path dev = project.resolve("build/oneiro/dev-plugin");
+		assertTrue(Files.isRegularFile(dev.resolve("dev/teleports.lua")));
+		String cheats = Files.readString(dev.resolve("dev/main.lua"));
+		assertTrue(cheats.contains("local Teleports = require(\"dev/teleports\")"), cheats);
+		assertTrue(cheats.contains("ExecuteConsoleCommand(Teleports.herbPatch())"), cheats);
+
+		// An error in the plugin's own Lua is shown as the line of its file
+		write("console.txt", """
+				[ERROR] in Herb Tracker(-1): [string "-- src/core/levels.lua..."]:11: attempt to perform arithmetic
+				stack traceback:
+				\t[string "-- src/core/levels.lua..."]:11: in function 'fromPenalty'
+				""");
+		String output = gradle("explainError", "--input=console.txt").build().getOutput();
+		assertTrue(output.contains("\tat src/main/lua/core/levels.lua:11: return penalty // 2"), output);
+	}
+
+	@Test
+	void thePluginsOwnLuaIsChecked() throws IOException {
+		plugin();
+		write("src/main/lua/fetch.lua", """
+				local Fetch = {}
+
+				function Fetch.prices()
+				    return HTTPRequest.new(Plugin.urls.prices, "/")
+				end
+
+				return Fetch
+				""");
+		String output = gradle("checkPlugin").buildAndFail().getOutput();
+		assertTrue(output.contains("src/fetch.lua does not start with its path, -- src/fetch.lua,"), output);
+		assertTrue(output.contains("src/fetch.lua uses HTTPRequest, which needs the httpAccess permission"), output);
+	}
+
+	@Test
+	void aClassWithThePathOfTheOwnLuaFailsCompileJava() throws IOException {
+		plugin();
+		write("src/main/lua/tally.lua", """
+				-- src/tally.lua
+				-- A running total, kept in Lua as well.
+
+				return {}
+				""");
+		String output = gradle("compileJava").buildAndFail().getOutput();
+		assertTrue(output.contains("The Lua of Tally would be src/tally.lua, a file the plugin's own Lua has already;"
+				+ " rename the class or that file."), output);
+	}
+
 	/** The same plugin written in Kotlin, built with the Kotlin JVM plugin applied before Oneiro's. */
 	private void kotlinPlugin() throws IOException {
 		plugin();
@@ -378,6 +510,26 @@ class OneiroPluginFunctionalTest {
 				"src/", "src/herb_config.lua", "src/tally.lua"),
 				entries(project.resolve("build/distributions/herb-tracker-1.2.0.zip")));
 		assertTrue(Files.readString(project.resolve("build/oneiro/line-maps/main.txt")).contains("HerbPlugin.kt"));
+	}
+
+	@Test
+	void usesThePluginsOwnLuaFromKotlin() throws IOException {
+		kotlinPlugin();
+		ownLua();
+		write("src/main/kotlin/com/example/herbs/core/Grades.kt", """
+				package com.example.herbs.core
+
+				/** The best level for a penalty, from the plugin's own levels module. */
+				object Grades {
+
+					fun best(penalty: Int): Int = Levels.fromPenalty(penalty) + Levels.PERFECT
+				}
+				""");
+		BuildResult result = gradle("build").build();
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":testLua"));
+		String grades = Files.readString(project.resolve("build/oneiro/plugin/src/core/grades.lua"));
+		assertTrue(grades.contains("local Levels = require(\"src/core/levels\")"), grades);
+		assertTrue(Files.isRegularFile(project.resolve("build/oneiro/plugin/src/core/levels.lua")));
 	}
 
 	@Test

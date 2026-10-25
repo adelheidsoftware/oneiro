@@ -17,14 +17,8 @@ public final class Misuse {
 	private Misuse() {
 	}
 
-	public static native int outside();
-
 	public static String describe(Point point) {
 		return "point " + point;
-	}
-
-	public static Object create() {
-		return new Store();
 	}
 
 	public static int hashOf(Integer count) {

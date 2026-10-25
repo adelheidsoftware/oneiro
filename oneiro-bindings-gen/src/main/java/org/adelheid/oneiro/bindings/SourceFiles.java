@@ -3,6 +3,7 @@ package org.adelheid.oneiro.bindings;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
@@ -13,8 +14,8 @@ import org.adelheid.oneiro.bindings.JavaBindings.Node;
 
 /**
  * The parts of the bindings' source files that do not come from one table: the header and imports every file starts
- * with, the whole of {@code package-info.java} and {@code LuaOnly}, and for the RS3 API, the event subscription types
- * and {@code Globals}.
+ * with, the whole of {@code package-info.java} and {@code LuaOnly}, the callback interfaces, and for the RS3 API, the
+ * event subscription types and {@code Globals}.
  */
 final class SourceFiles {
 
@@ -33,6 +34,10 @@ final class SourceFiles {
 	 */
 	private static final Pattern JDK_TYPE =
 			Pattern.compile("\\b(java\\.util\\.(?:function\\.)?)(?:@Nullable )?([A-Z]\\w*)");
+	/** Where a qualified name starts: after no name or dot, so that {@code a.b.} is not found inside {@code x.a.b.}. */
+	private static final String NOT_AFTER_NAME = "(?<![\\w.])";
+	/** The declaration of a file's top-level class or interface, after its Javadoc and annotations. */
+	private static final Pattern TOP_LEVEL_CLASS = Pattern.compile("^public ", Pattern.MULTILINE);
 
 	/** The documentation of the RS3 bindings' package. */
 	private static final String RS3_PACKAGE_DOC = """
@@ -53,16 +58,20 @@ final class SourceFiles {
 
 	/**
 	 * A source file: the header, the imports, and the classes. The classes name the JDK's types fully, and the classes
-	 * of other bindings, such as the RS3 API's {@code ui.Component} in a library's, which keeps the generator simple;
-	 * here each becomes an import and its simple name. The exception is a name that a class nested in the file takes,
-	 * such as {@code ui.List}, or that a class of the package or an earlier import takes, where only the qualified name
-	 * reaches the type.
+	 * of other bindings, such as the RS3 API's {@code ui.Component} in a library's, and of the plugin's own Lua in
+	 * other packages, which keeps the generator simple; here each becomes an import and its simple name, or within the
+	 * file's package its simple name alone. The exception is a name that a class nested in the file takes, such as
+	 * {@code ui.List}, or that a class of the package or an earlier import takes, where only the qualified name reaches
+	 * the type.
 	 */
-	String file(String classes, Set<String> shadowed) {
+	String file(String classes, Set<String> shadowed, String packageName) {
 		BindingsTarget target = bindings.target;
 		Set<String> imports = new TreeSet<>(ANNOTATION_IMPORTS);
 		if (!target.isRs3()) {
 			imports.add("org.adelheid.oneiro.api.LuaModule");
+		}
+		if (target.isPlugin()) {
+			imports.add("org.jspecify.annotations.NullMarked");
 		}
 		Set<String> taken = new HashSet<>(shadowed);
 		String body = classes;
@@ -81,23 +90,42 @@ final class SourceFiles {
 				body = body.replaceAll("\\b" + packagePrefix + "(@Nullable )?" + simple + "\\b", "$1" + simple);
 			}
 		}
-		taken.addAll(bindings.topNames());
-		for (JavaBindings other : bindings.foreign) {
-			String prefix = other.target.packageName() + ".";
-			Matcher foreignType = Pattern.compile("\\b" + Pattern.quote(prefix) + "([A-Za-z_]\\w*)").matcher(body);
-			Set<String> tops = new TreeSet<>();
-			while (foreignType.find()) {
-				tops.add(foreignType.group(1));
-			}
-			for (String top : tops) {
-				if (taken.add(top)) {
-					imports.add(prefix + top);
-					body = body.replaceAll("\\b" + Pattern.quote(prefix + top) + "\\b", top);
+		Set<String> samePackage = bindings.topNamesByPackage().getOrDefault(packageName, Set.of());
+		taken.addAll(samePackage);
+		List<JavaBindings> named = new ArrayList<>(bindings.foreign);
+		if (target.isPlugin()) {
+			named.addFirst(bindings);
+		}
+		for (JavaBindings other : named) {
+			for (Map.Entry<String, Set<String>> entry : other.topNamesByPackage().entrySet()) {
+				String prefix = entry.getKey() + ".";
+				Matcher qualifiedType = Pattern.compile(NOT_AFTER_NAME + Pattern.quote(prefix)
+						+ "(?:@Nullable )?([A-Za-z_]\\w*)").matcher(body);
+				Set<String> tops = new TreeSet<>();
+				while (qualifiedType.find()) {
+					// A package's subpackage is no class of it: <root>.core.Levels is not a class core of <root>
+					if (entry.getValue().contains(qualifiedType.group(1))) {
+						tops.add(qualifiedType.group(1));
+					}
+				}
+				boolean ownPackage = other == bindings && entry.getKey().equals(packageName);
+				for (String top : tops) {
+					if (ownPackage ? !shadowed.contains(top) : taken.add(top)) {
+						if (!ownPackage) {
+							imports.add(prefix + top);
+						}
+						body = body.replaceAll(NOT_AFTER_NAME + Pattern.quote(prefix) + "(@Nullable )?"
+								+ Pattern.quote(top) + "\\b", "$1" + top);
+					}
 				}
 			}
 		}
+		if (target.isPlugin()) {
+			// The plugin's packages are its own, so each class is marked rather than the package
+			body = TOP_LEVEL_CLASS.matcher(body).replaceFirst("@NullMarked\n$0");
+		}
 		StringBuilder header = new StringBuilder("// Generated by Oneiro's bindings generator from " + target.origin()
-				+ " on this machine; not for distribution.\npackage " + target.packageName() + ";\n\n");
+				+ " on this machine; not for distribution.\npackage " + packageName + ";\n\n");
 		imports.forEach(name -> header.append("import ").append(name).append(";\n"));
 		return header.append("\n").append(body).toString();
 	}
@@ -124,7 +152,7 @@ final class SourceFiles {
 				+ ";\n\nimport org.jspecify.annotations.NullMarked;\n";
 	}
 
-	String luaOnly() {
+	String luaOnly(String packageName) {
 		BindingsTarget target = bindings.target;
 		return """
 				// Generated by Oneiro's bindings generator; not for distribution.
@@ -146,8 +174,11 @@ final class SourceFiles {
 								+ " calls to them, they never run on the JVM.");
 					}
 				}
-				""".formatted(target.packageName(), target.isRs3() ? "the client" : "the library",
-				target.isRs3() ? "RS3 bindings" : "The bindings of " + target.library());
+				""".formatted(packageName, target.provider(), switch (target.kind()) {
+					case RS3 -> "RS3 bindings";
+					case LIBRARY -> "The bindings of " + target.library();
+					case PLUGIN -> "The bindings of the plugin's Lua";
+				});
 	}
 
 	/**
@@ -182,7 +213,7 @@ final class SourceFiles {
 		JavaText.javadoc(out, "\t", List.of("Calls the function.", "", "<p>Lua: {@code fn(" + arguments + ")}"));
 		out.append("\t").append(returns ? "R apply(" : "void accept(").append(String.join(", ", parameters))
 				.append(");\n}\n");
-		return file(out.toString(), Set.of());
+		return file(out.toString(), Set.of(), bindings.target.packageName());
 	}
 
 	String subscription(boolean predicate) {
@@ -216,7 +247,7 @@ final class SourceFiles {
 				"<p>Lua: {@code Event.Name.Unsubscribe(name)}",
 				"@param name the name it was subscribed under"));
 		out.append("\t@LuaDot\n\tpublic native void Unsubscribe(String name);\n}\n");
-		return file(out.toString(), Set.of());
+		return file(out.toString(), Set.of(), bindings.target.packageName());
 	}
 
 	/** The global functions, {@code print}, {@code log}, {@code formatStr} and the rest, as static methods. */
@@ -252,6 +283,6 @@ final class SourceFiles {
 			}
 		}
 		out.append("}\n");
-		return file(out.toString(), Set.of());
+		return file(out.toString(), Set.of(), bindings.target.packageName());
 	}
 }

@@ -58,12 +58,12 @@ object Heights {
 	}
 
 	fun report(values: List<Int>): String {
-		val (count, mean) = Stats.summarise(values)
-		return "$count values, mean $mean"
+		val summary = Stats.summarise(values)
+		return "${summary.count()} values, mean ${summary.mean()}"
 	}
 
 	fun range(values: List<Int>): Int {
 		val extremes = Stats.extremes(values)
-		return extremes.most - extremes.least
+		return extremes.most() - extremes.least()
 	}
 }

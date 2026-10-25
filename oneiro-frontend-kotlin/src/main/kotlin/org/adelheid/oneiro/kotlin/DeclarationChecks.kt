@@ -2,8 +2,10 @@ package org.adelheid.oneiro.kotlin
 
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
+import org.adelheid.oneiro.lowering.BindingAnnotations
 import org.adelheid.oneiro.lowering.LocalNames
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDeclaration
@@ -12,12 +14,14 @@ import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtPropertyAccessor
 
 /**
  * Checks of a file's declarations against what Lua can hold, made before its code is lowered, as the Java front end
- * makes them: every name is a Lua name; functions do not share a name, which Lua's untyped parameters cannot tell
- * apart; a property and a function do not share a slot of one Lua table; and the declarations that become locals of
- * the module's chunk, the private members and nested classes of the file's classes, do not share a name.
+ * makes them: every name is a Lua name; nothing carries what only generated bindings do; functions do not share a
+ * name, which Lua's untyped parameters cannot tell apart; a property and a function do not share a slot of one Lua
+ * table; and the declarations that become locals of the module's chunk, the private members and nested classes of the
+ * file's classes, do not share a name.
  */
 internal class DeclarationChecks(private val unit: FileLowering) {
 
@@ -34,15 +38,37 @@ internal class DeclarationChecks(private val unit: FileLowering) {
 		return invalid.isEmpty()
 	}
 
+	/**
+	 * Whether the file is free of what only generated bindings carry: the annotations that tell the compiler how a
+	 * class meets Lua it does not write, `@LuaGlobal`, `@LuaModule` and the rest, and external functions and accessors.
+	 * Each is reported where it is, because the Lua the plugin calls is bound from its LuaCATS annotations instead.
+	 */
+	fun bindingsOnly(): Boolean = with(unit.session) {
+		var clean = true
+		for (entry in PsiTreeUtil.collectElementsOfType(unit.file, KtAnnotationEntry::class.java)) {
+			val classId = entry.typeReference?.type?.expandedSymbol?.classId ?: continue
+			if (BindingAnnotations.isBindingAnnotation(classId.asFqNameString())) {
+				unit.error(entry, BindingAnnotations.rejection(classId.shortClassName.asString()))
+				clean = false
+			}
+		}
+		val external = PsiTreeUtil.collectElementsOfType(unit.file, KtNamedFunction::class.java) +
+			PsiTreeUtil.collectElementsOfType(unit.file, KtPropertyAccessor::class.java)
+		for (declaration in external.filter { it.hasModifier(KtTokens.EXTERNAL_KEYWORD) }) {
+			unit.error(declaration, BindingAnnotations.noBody(
+				if (declaration is KtNamedFunction) "An external function" else "An external accessor"))
+			clean = false
+		}
+		clean
+	}
+
 	/** The checks of the file's classes and objects, each problem reported where it is. */
 	fun check(main: KtClassOrObject) {
 		val classes = PsiTreeUtil.collectElementsOfType(unit.file, KtClassOrObject::class.java)
 			.filter { !it.isLocal && !(it is KtObjectDeclaration && it.isObjectLiteral()) }
 		overloads(unit.file.declarations)
 		for (declaration in classes) {
-			if (!unit.hasAnnotation(declaration, Annotations.LUA_MODULE)) {
-				overloads(declaration.declarations)
-			}
+			overloads(declaration.declarations)
 			slots(declaration)
 		}
 		locals(main, classes)

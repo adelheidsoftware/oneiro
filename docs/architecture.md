@@ -161,15 +161,26 @@ only the RS3 API's have its events, hooks, constant namespaces and `Globals`.
    `ConstantTables` for enums, hooks and constant namespaces, and `SourceFiles` for the files that do not come from a
    table. A global table is a class named like it; a library's module is a class named as its `require` binds it,
    annotated `@LuaModule`, and the tables it holds in fields are nested in it, so that each class's `@LuaGlobal` path
-   is the one Lua reaches it by. A type a library names but does not declare resolves to the RS3 bindings' class,
-   then to another library's; LuaCATS generics become Java's. The plugin's language (`BindingsGenerator.Language`)
-   decides how a member that takes a hook types the callback: one generic method, from which javac types a lambda,
-   or for Kotlin one method for each callback.
+   is the one Lua reaches it by. The plugin's own modules are classes of the plugin's packages, the package of each
+   file's folder below the root package, and the code that names a class of another package imports it. A type a
+   library names but does not declare resolves to the RS3 bindings' class, then to another library's; LuaCATS
+   generics become Java's. The plugin's language (`BindingsGenerator.Language`) decides how a member that takes a
+   hook types the callback: one generic method, from which javac types a lambda, or for Kotlin one method for each
+   callback. Beside the RS3 jars, the generator writes the members its bindings mark as needing a permission or for
+   development only, which `checkPlugin` looks for in the Lua that ships (`ClientFacts`).
 4. The constant namespaces hold about half a million names; `config.Loc` alone has more than one class can hold.
    `ConstantChunks` writes them straight to class files with the JDK's ClassFile API, as a chain of chunk classes
    that each extend the one before, which is also far faster than compiling them from Java. `Jars` packs everything
    into reproducible jars: the libraries' sources compile together, against the RS3 jar, and each library's classes
-   go into a jar of their own.
+   go into a jar of their own. The plugin's own Lua gives two, its main source set's, compiled against the RS3 jar,
+   and its dev source set's, compiled against both.
+
+The front ends call a class of the bindings as its annotations say. A module's class, `@LuaModule`, and the classes
+nested in it start their path at the local that the file's `require` of the module binds, where a global table's start
+at the global. The annotations belong to generated code alone: `BindingAnnotations` names them, and both front ends
+reject them on a class of the plugin's, with Java's `native` methods and Kotlin's `external` functions. The generated
+`Resources` and `Urls`, which are compiled with the plugin's sources, carry `@Generated`, by which the Java front end
+tells them apart.
 
 `ClientAudit`, in a source set of its own that is not published, compares the members the client's objects have, as
 a development plugin logs them from their metatables, with the bindings: `./gradlew :oneiro-bindings-gen:auditClient
@@ -179,8 +190,9 @@ update, each difference it finds ends as an overrides line.
 ## Tests
 
 - **Conformance.** Each folder under `conformance/src/test/resources/cases/` is one case. `ConformanceTest` compiles
-  its `input/` and compares the Lua with the hand-written `expected/` files, or the errors with `diagnostics.txt`, and
-  does the same for its Kotlin twin in `kotlin/`, which must give the same Lua. It then runs `check.lua` against the
+  its `input/`, against the bindings of its own Lua in `lua/` when it has some, and compares the Lua with the
+  hand-written `expected/` files, or the errors with `diagnostics.txt`, and does the same for its Kotlin twin in
+  `kotlin/`, which must give the same Lua. It then runs `check.lua` against the
   generated modules on Lua 5.4, and checks that the expected Lua is formatted as StyLua formats it. Every row of
   [java-subset.md](java-subset.md) and [kotlin-subset.md](kotlin-subset.md) has a case. `ClientNamesTest` checks that no
   source of the front ends or of `oneiro-lowering` other than `ClientApi` spells one of the client's names in a

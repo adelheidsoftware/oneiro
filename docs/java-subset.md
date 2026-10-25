@@ -394,7 +394,7 @@ plugin's Java needs no annotations of its own.
 | Using a member that needs a permission the build does not declare | *Never*: "Chat.AddMessage needs the chatAccess permission, which the manifest does not declare; add it to the build, oneiro { plugin { permissions { optional(chatAccess) } } }, and check CurrentPlugin.HasPermission(PluginPermissions.chatAccess) before using it." | Oneiro never adds a permission to the manifest on its own. |
 | Using a member that moderation reviews closely, such as `MiniMenu.Swap(1, 2)` | `miniMenu:Swap(1, 2)`, with a warning: "MiniMenu.Swap changes the right-click menu, which Jagex's moderators review closely as input customisation: a change must not reduce the game's intended difficulty. Once the plugin meets this, @SuppressWarnings(\"oneiro:mini-menu\") on the method or class silences this warning." | The areas and their members are listed in [the plugin model](plugin-model.md#compiling). |
 | Using a development-only member, such as `ExecuteConsoleCommand`, outside the dev source set | *Never*: "ExecuteConsoleCommand is for development only and must never ship; move the code that uses it into the dev source set (src/dev/java), whose Lua stays out of the zip." | |
-| A class of the plugin's that extends a binding | *Never*: "NPCEntity stands for Lua the client provides, which a class of the plugin's cannot extend." | |
+| A class of the plugin's that extends a binding | *Never*: "NPCEntity stands for Lua that Oneiro does not write, which a class of the plugin's cannot extend." | |
 | `a == b` on values the client hands out, `npc.config == config.NPC.RS3_HANS` | `a == b` | The client defines `==` for its values: two reads of the same config, entity or UI component are equal (checked in the client, 2026-10-22), though they are two objects. |
 | A value the client hands out as a map key or set element, `kills.put(npc.config, 1)` | *Never*: "The client hands out a new NPCType object each time one is read, and Lua compares table keys by identity, so the map or set would not find it again; key it by a number or string the value carries, such as its id or uid." | Configs, entities and UI components are new proxies on every read, equal under `==` but not as keys (checked in the client, 2026-10-22). An API enum's constants are plain Lua values and make good keys. Every key is checked: `put`, `get`, `getOrDefault`, `containsKey`, `remove`, `add`, `contains`, and the keys of `Map.of` and `Set.of`. |
 | An array passed for a Lua function's `...`, `log("values:", values)` | `log("values:", table.unpack(values))` | Spread over the values, as Java spreads it over the parameters. |
@@ -435,29 +435,29 @@ plugin's Java needs no annotations of its own.
 
 ## Calling existing Lua
 
-Four features from the `oneiro-api` artifact describe Lua that Oneiro does not write: `@LuaName`, `@LuaModule`
-declarations, records, and `@LuaReturnValues` for several return values.
-
-A plugin's build cannot use a `@LuaModule` declaration yet. The declaration compiles, and the conformance suite checks
-its Lua, but the build ships only the Lua that Oneiro writes: the hand-written module the declaration stands for never
-reaches the folder that ships, and `checkPlugin` rejects the `require`. Nor can Java code call a library plugin, such
-as PrettyUI, which the client exposes as a global rather than as a module.
+Lua that Oneiro does not write is called through classes Oneiro generates from its LuaCATS annotations: the RS3 API's,
+from the stubs, and the plugin's own Lua, from its files under `src/main/lua/`, as
+[plugin-model.md](plugin-model.md#the-plugins-own-lua) explains. Three features of the `oneiro-api` artifact describe
+the tables and values that pass between the two: `@LuaName`, records, and `@LuaReturnValues` for several return
+values. Java code cannot call a library plugin, such as PrettyUI, yet.
 
 | Java | Lua | Notes |
 | --- | --- | --- |
+| `Levels.fromPenalty(penalty)` and `Levels.PERFECT`, of the class generated from `src/main/lua/core/levels.lua` | `local Levels = require("src/core/levels")` at the top of the file, then `Levels.fromPenalty(penalty)` and `Levels.PERFECT` | The class is in the package of the file's folder, `<root>.core`, and named by the module's `---@class`, or else by its file. `---@param`, `---@field` and `---@return` give the members' types; a value without one is an `Object`. |
+| `new Tally(5)` and `tally.add(2)`, of a module whose `---@class Tally` has a `new` and colon functions | `Tally.new(5)` and `tally:add(2)` | |
 | `@LuaName("Ingest") public void ingest(...)` | `function Tracker:Ingest(...)`; every call is `tracker:Ingest(...)` | Keeps a name that existing Lua code calls, or uses a Lua name Java cannot spell (`@LuaName("new")`). Works on methods, fields and record components. |
-| A class annotated `@LuaModule("src/core/levels")` with `static native` methods and fields without values | No Lua of its own; code that uses it gets `local Levels = require("src/core/levels")` and calls `Levels.fromPenalty(penalty)`, reads `Levels.PERFECT` | Declares a module that exists already, which a plugin's build cannot ship yet (above). Instance `native` methods are methods of the module's objects, `object:method(...)`. |
-| `@LuaName("new") public static native Tally create(...)` in a declaration | `Tally.new(...)` | The module's own constructor. |
 | A record describing a table that Lua passes in | Field reads, `position.spriteId` | `@Nullable` components for fields the Lua may leave out. |
-| A `native` method outside a `@LuaModule` declaration | *Never*: "Only a @LuaModule declaration has native methods; they stand for Lua functions that exist already." | |
-| `new` of a `@LuaModule` declaration | *Never*: "A @LuaModule declaration has no Java constructor; call the module's own constructor, declared as a static native method with @LuaName(\"new\")." | |
-| A declaration's field with an initializer, or a method that is not `native` | *Never*: the declaration only stands for what the Lua module defines | |
-| A record nested in a declaration | No Lua; it describes a table or the several values the module returns | |
+| A class of the plugin's annotated `@LuaGlobal`, `@LuaModule` or another annotation of the generated bindings | *Never*: "@LuaModule belongs to the bindings Oneiro generates, not to the plugin's own classes; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them." | The others are `@LuaType`, `@LuaColon`, `@LuaDot`, `@LuaIndex`, `@LuaSame`, `@LuaOperator`, `@LuaCopy`, `@LuaConstants`, `@LuaEvent`, `@LuaFromId`, `@LuaPermission`, `@LuaManifestFlag`, `@LuaReview` and `@LuaDevOnly`. |
+| A `native` method | *Never*: "A native method would stand for Lua that exists already, which Oneiro binds from its annotations rather than from a declaration; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them." | |
+| A class whose Lua would be a file of the plugin's own Lua, `Tally` beside `src/main/lua/tally.lua` | *Never*: "The Lua of Tally would be src/tally.lua, a file the plugin's own Lua has already; rename the class or that file." | |
+| Classes of one name from two packages, used in one file | *Never*: "In Lua, this file would require src/core/levels and src/ui/levels as one local, Levels; rename the class or file of one." | Each module is the local its class is named, in every file that uses it. |
 
 ### Several return values
 
-A Lua function that returns several values is declared with a record annotated `@LuaReturnValues` as its return type,
-as the RS3 bindings do for `World.GetGroundHeight` and a `@LuaModule` declaration does for its own functions.
+A Lua function that returns several values has a record annotated `@LuaReturnValues` as its return type: in the RS3
+bindings, `World.GetGroundHeight`; in the bindings of the plugin's own Lua, a function whose `---@return` tags name each
+value, so that `Stats.summarise` returns a `Stats.SummariseResult`. A method of the plugin's returns several values
+through a record of its own so annotated.
 
 | Java | Lua | Notes |
 | --- | --- | --- |

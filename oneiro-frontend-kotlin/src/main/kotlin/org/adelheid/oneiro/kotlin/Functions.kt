@@ -10,7 +10,6 @@ import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.Trivia
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
-import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -175,8 +174,6 @@ internal class Functions(private val unit: FileLowering) {
 				Block(lowering.expressionStatement(expression).map(Block.Entry::of), listOf())
 			// An expression body is the function's return, which a chain, a when or a scope function can be too
 			expression != null -> Block(lowering.returned(expression).map(Block.Entry::of), listOf())
-			function.hasModifier(KtTokens.EXTERNAL_KEYWORD) -> throw Rejection(function, "Only a @LuaModule"
-				+ " declaration has external functions; they stand for Lua functions that exist already.")
 			else -> throw Rejection(function, "A function without a body has no Lua; give it one.")
 		}
 	}

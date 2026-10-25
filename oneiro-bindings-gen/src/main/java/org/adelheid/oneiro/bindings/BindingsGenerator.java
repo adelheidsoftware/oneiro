@@ -9,9 +9,11 @@ import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.tools.Diagnostic;
@@ -21,15 +23,16 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.adelheid.oneiro.api.LuaGlobal;
+import org.adelheid.oneiro.plugin.ClientFacts;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
  * Generates the RS3 bindings from a checkout of runescape-api-stubs, and the bindings of the Lua libraries a plugin
- * uses from their LuaCATS types: reads the types, applies the overrides, writes the Java sources and, for the RS3 API,
- * the constant chunks, compiles the sources, and packs two jars for each, the classes that plugins compile against and
- * the sources that IDEs show as documentation. It runs on the developer's machine, so nothing derived from the stubs
- * or a library is ever published.
+ * uses and of its own Lua from their LuaCATS types: reads the types, applies the overrides, writes the Java sources
+ * and, for the RS3 API, the constant chunks, compiles the sources, and packs two jars for each, the classes that
+ * plugins compile against and the sources that IDEs show as documentation. It runs on the developer's machine, so
+ * nothing derived from the stubs or a library is ever published.
  */
 public final class BindingsGenerator {
 
@@ -41,12 +44,14 @@ public final class BindingsGenerator {
 	/**
 	 * What a run produced.
 	 *
+	 * @param clientFacts the file of the members the bindings mark as needing a permission or for development only,
+	 *     which {@code checkPlugin} looks for in the Lua that ships
 	 * @param warnings what the stubs or the overrides say that the bindings could not follow, for the build log
 	 * @param notes lines of the overrides file that the stubs have caught up with, for Oneiro's own tests: they can be
 	 *     deleted, but change nothing while they stay
 	 * @param libraries what the run produced for each library, in the order they were given
 	 */
-	public record Result(Path classesJar, Path sourcesJar, List<String> warnings, List<String> notes,
+	public record Result(Path classesJar, Path sourcesJar, Path clientFacts, List<String> warnings, List<String> notes,
 			List<LibraryResult> libraries) {
 
 		public Result {
@@ -70,18 +75,7 @@ public final class BindingsGenerator {
 
 		/** The model of every Lua file under the folder, each loaded by its path from there after the prefix. */
 		ApiModel read() throws IOException {
-			ApiModel model = new ApiModel();
-			LuaCatsReader reader = new LuaCatsReader(model);
-			List<Path> files;
-			try (Stream<Path> walk = Files.walk(folder)) {
-				files = walk.filter(path -> path.toString().endsWith(".lua")).sorted().toList();
-			}
-			for (Path file : files) {
-				String path = folder.relativize(file).toString().replace('\\', '/');
-				reader.read(file, path, modulePrefix + path.substring(0, path.length() - ".lua".length()));
-			}
-			reader.finish();
-			return model;
+			return BindingsGenerator.read(folder, modulePrefix);
 		}
 	}
 
@@ -136,6 +130,103 @@ public final class BindingsGenerator {
 	}
 
 	/**
+	 * Generates the bindings of the plugin's own Lua into {@code output}, replacing what an earlier run left there:
+	 * from the LuaCATS files of the main source set, which ship under {@code src/}, {@code main-bindings.jar}, and from
+	 * those of the dev source set, which go under {@code dev/}, {@code dev-bindings.jar}, each with a sources jar. A
+	 * file's folders below its source set's folder are packages below the root package, so that
+	 * {@code core/levels.lua} is the class {@code <root>.core.Levels}. A type the Lua names but does not declare
+	 * resolves to the RS3 bindings' class, and the dev set's also to the main set's; the main set's classes compile
+	 * against the RS3 jar, and the dev set's against both.
+	 *
+	 * @param rs3Jar the classes of the RS3 bindings the stubs gave
+	 * @param main the folder of the main source set's LuaCATS files, its Lua or definition files for it; a folder that
+	 *     does not exist has none
+	 * @param dev the folder of the dev source set's, or null for none
+	 * @return what each source set's bindings produced, the main set's first
+	 */
+	public static List<LibraryResult> generatePluginLua(Path stubsRoot, Path rs3Jar, Path output, Language language,
+			String rootPackage, Path main, @Nullable Path dev) throws IOException {
+		Map<String, ApiModel> models = new LinkedHashMap<>();
+		models.put("main", read(main, "src/"));
+		models.put("dev", dev == null ? new ApiModel() : read(dev, "dev/"));
+		Path work = output.resolve("work");
+		delete(work);
+		List<LibraryResult> results = new ArrayList<>();
+		List<JavaBindings> named = new ArrayList<>();
+		if (models.values().stream().anyMatch(model -> !model.classes.isEmpty() || !model.enums.isEmpty())) {
+			// The RS3 API's types, which the Lua may name; Lua that declares nothing names none
+			named.add(new JavaBindings(Stubs.readTypes(stubsRoot).model(), Map.of(), Overrides.bundled(),
+					BindingsTarget.rs3(), language, new ArrayList<>()));
+		}
+		List<Path> classpath = new ArrayList<>(List.of(rs3Jar));
+		for (Map.Entry<String, ApiModel> entry : models.entrySet()) {
+			String sourceSet = entry.getKey();
+			ApiModel model = entry.getValue();
+			Path folder = sourceSet.equals("main") ? main : dev;
+			List<String> warnings = new ArrayList<>();
+			for (ApiModel.Unparsed unparsed : model.unparsed) {
+				warnings.add(Objects.requireNonNull(folder).resolve(unparsed.file()) + ":" + unparsed.line()
+						+ ": not understood (" + unparsed.pattern() + "): " + unparsed.text());
+			}
+			JavaBindings bindings = new JavaBindings(model, Map.of(), Overrides.none(),
+					BindingsTarget.plugin(sourceSet, rootPackage), language, warnings);
+			// The dev set's Lua names the main set's types before the RS3 API's, as its own come first
+			bindings.foreign.addAll(named.reversed());
+			Path sources = Files.createDirectories(work.resolve(sourceSet).resolve("sources"));
+			Path classes = Files.createDirectories(work.resolve(sourceSet).resolve("classes"));
+			List<Path> sourceFiles = write(bindings.sources(), sources);
+			if (!sourceFiles.isEmpty()) {
+				compile(sourceFiles, classes, classpath);
+			}
+			Path classesJar = output.resolve(sourceSet + "-bindings.jar");
+			Path sourcesJar = output.resolve(sourceSet + "-bindings-sources.jar");
+			Jars.write(classes, classesJar, "");
+			Jars.write(sources, sourcesJar, "");
+			results.add(new LibraryResult(sourceSet, classesJar, sourcesJar, warnings, List.of()));
+			named.add(bindings);
+			classpath.add(classes);
+		}
+		delete(work);
+		return results;
+	}
+
+	/**
+	 * {@link #generatePluginLua} for the Gradle plugin's worker, called reflectively with plain strings, returning the
+	 * warnings of both source sets.
+	 */
+	public static List<String> generatePluginLuaForBuild(String stubsRoot, String rs3Jar, String output,
+			String language, String rootPackage, String main, String dev) throws IOException {
+		return generatePluginLua(Path.of(stubsRoot), Path.of(rs3Jar), Path.of(output), Language.valueOf(language),
+				rootPackage, Path.of(main), Path.of(dev)).stream()
+				.flatMap(result -> result.warnings().stream())
+				.toList();
+	}
+
+	/**
+	 * The model of every Lua file under a folder, each loaded by its path from there after the prefix; an empty one
+	 * when the folder does not exist.
+	 *
+	 * @param modulePrefix what comes before a file's path in the path {@code require} loads it by
+	 */
+	private static ApiModel read(Path folder, String modulePrefix) throws IOException {
+		ApiModel model = new ApiModel();
+		if (!Files.isDirectory(folder)) {
+			return model;
+		}
+		LuaCatsReader reader = new LuaCatsReader(model);
+		List<Path> files;
+		try (Stream<Path> walk = Files.walk(folder)) {
+			files = walk.filter(path -> path.toString().endsWith(".lua")).sorted().toList();
+		}
+		for (Path file : files) {
+			String path = folder.relativize(file).toString().replace('\\', '/');
+			reader.read(file, path, modulePrefix + path.substring(0, path.length() - ".lua".length()));
+		}
+		reader.finish();
+		return model;
+	}
+
+	/**
 	 * Generates the RS3 bindings, and those of each library, into {@code output}, replacing what an earlier run left
 	 * there. A library's jars are {@code <name>-bindings.jar} and {@code <name>-bindings-sources.jar}.
 	 */
@@ -168,11 +259,13 @@ public final class BindingsGenerator {
 		Path sourcesJar = output.resolve(SOURCES_JAR);
 		Jars.write(classes, classesJar, "");
 		Jars.write(sourceRoot, sourcesJar, "");
+		Path clientFacts = output.resolve(ClientFacts.FILE);
+		new ClientFacts(bindings.permissions, bindings.devOnly).write(clientFacts);
 		List<LibraryResult> libraryResults = libraries.isEmpty()
 				? List.of()
 				: generateLibraries(bindings, classesJar, libraries, language, output, work.resolve("libraries"));
 		delete(work);
-		return new Result(classesJar, sourcesJar, warnings, notes, libraryResults);
+		return new Result(classesJar, sourcesJar, clientFacts, warnings, notes, libraryResults);
 	}
 
 	/**

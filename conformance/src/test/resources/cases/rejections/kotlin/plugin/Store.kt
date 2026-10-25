@@ -1,14 +1,15 @@
 package plugin
 
+import org.adelheid.oneiro.api.LuaColon
 import org.adelheid.oneiro.api.LuaModule
 
-/** A hand-written store, declared with mistakes. */
+/** A hand-written Lua store, declared in Kotlin, where its annotations should give its bindings. */
 @LuaModule("src/store")
 object Store {
 
-	var limit = 3
+	val limit: Int
+		external get
 
-	fun count(): Int {
-		return 0
-	}
+	@LuaColon
+	external fun count(): Int
 }

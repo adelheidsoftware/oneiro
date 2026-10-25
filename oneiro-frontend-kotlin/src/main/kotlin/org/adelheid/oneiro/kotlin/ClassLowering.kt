@@ -77,11 +77,12 @@ internal class ClassLowering(private val unit: FileLowering) {
 			}
 			// Every class extends Any, and every enum Enum, which have no Lua of their own
 			if (type.classId != StandardClassIds.Any && type.classId != StandardClassIds.Enum) {
-				if (!ApiCalls(unit).isApi(type)) {
-					throw Rejection(declaration, "Lua has none of ${type.classId?.shortClassName}'s code to inherit;"
-						+ " keep one in a property instead of extending it.")
+				if (ApiCalls(unit).isApi(type)) {
+					throw Rejection(declaration, "${type.classId?.shortClassName} stands for Lua that Oneiro does not"
+						+ " write, which a class of the plugin's cannot extend.")
 				}
-				throw Rejection.notYet(declaration, "Extending ${type.classId?.asFqNameString()}")
+				throw Rejection(declaration, "Lua has none of ${type.classId?.shortClassName}'s code to inherit; keep"
+					+ " one in a property instead of extending it.")
 			}
 		}
 		null

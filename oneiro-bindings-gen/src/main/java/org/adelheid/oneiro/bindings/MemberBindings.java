@@ -356,11 +356,12 @@ final class MemberBindings {
 			List<String> names = returnNames(owner, function);
 			if (names != null && !names.isEmpty()) {
 				Node node = bindings.byLuaName.get(owner);
-				String ownerReference = node == null ? JavaBindings.luaPath(owner) : node.reference();
+				String ownerReference = node == null ? JavaBindings.luaPath(owner) : bindings.qualified(node);
 				return JType.reference(ownerReference + "." + names.getFirst());
 			}
-			warnings.add(target + " returns " + returns.size() + " values, but neither its ---@return tags nor the"
-					+ " overrides name them; only the first is bound.");
+			warnings.add(target + " returns " + returns.size() + " values, but " + (bindings.target.isPlugin()
+					? "its ---@return tags do not name them all"
+					: "neither its ---@return tags nor the overrides name them") + "; only the first is bound.");
 		}
 		TypeRef type = returns.getFirst().type();
 		if (type instanceof TypeRef.Named named && named.name().equals("nil")) {

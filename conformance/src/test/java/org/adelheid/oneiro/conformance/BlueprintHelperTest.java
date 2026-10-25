@@ -23,8 +23,8 @@ import org.junit.jupiter.api.Test;
  * {@code src/test/resources/blueprint-helper/input}. They must compile to the hand-written Lua in {@code expected/},
  * and the result must pass all of Blueprint-Helper's own tests in place of the plugin's modules: the tests of those
  * five, and those of the hand-written modules that use them ({@code seeds}, {@code deduce}, {@code session} and the
- * rest). {@code search} calls the hand-written {@code seeds} through a {@code @LuaModule} declaration whose functions
- * return several values, and catches its own error through {@code pcall}.
+ * rest). {@code search} calls the hand-written {@code seeds}, whose functions return several values, through the
+ * bindings of definition files in {@code types/}, and catches its own error through {@code pcall}.
  *
  * <p>Blueprint-Helper is a separate repository, found through {@code oneiro.blueprintHelper}, which the build points at
  * a checkout next to Oneiro's; without it the test is skipped.

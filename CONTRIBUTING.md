@@ -59,7 +59,8 @@ A case is a folder under `conformance/src/test/resources/cases/`:
 | `expected/` | The Lua Oneiro must write, at the paths it has in the plugin: `main.lua`, `src/...`, `dev/main.lua`. |
 | `diagnostics.txt` | The exact errors and warnings the case must report, in javac's format; a case without one must report none. |
 | `check.lua` | Optional. Assertions run on Lua 5.4 against the generated modules, to show that the Lua behaves as the source does. |
-| `lua/` | Optional. Hand-written Lua modules that the case's sources declare with `@LuaModule`. |
+| `lua/` | Optional. Lua of the plugin's own, laid out as a plugin's `src/main/lua/` is, which runs beside the generated modules under `src/`; the case's sources call it through the bindings of its annotations. |
+| `types/` | Optional. Definition files that give those bindings instead, where the Lua is another's, as Blueprint-Helper's is. |
 | `case.properties` | Optional. The plugin's identifier (`id`), its `permissions` and manifest `flags`, and `dev=true` for a dev source set. |
 | `kotlin/` | Optional. The same plugin in Kotlin, the case's twin, which must give the same Lua as `expected/`, and passes the same `check.lua`; with its own `diagnostics.txt` when it has any, and its own `expected/` for a module where idiomatic Kotlin reads differently. |
 

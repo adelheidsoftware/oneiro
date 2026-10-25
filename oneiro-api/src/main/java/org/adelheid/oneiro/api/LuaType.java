@@ -7,11 +7,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Declares a type of Lua values that existing Lua hands out, with no table of its own for code to reach: an entity
- * the client passes, an event's payload, a settings table. Its instance methods are called with a colon,
- * {@code npc:GetName()}, or with a dot when they carry {@link LuaDot}; its fields are the table's fields. A public
- * constructor without parameters, where the type has one, builds an empty table, {@code {}}, for the plugin to fill
- * and pass to the API. The class produces no Lua of its own.
+ * Marks a class of the generated bindings that stands for a type of Lua values that existing Lua hands out, with no
+ * table of its own for code to reach: an entity the client passes, an event's payload, a settings table. Its instance
+ * methods are called with a colon, {@code npc:GetName()}, or with a dot when they carry {@link LuaDot}; its fields are
+ * the table's fields. A public constructor without parameters, where the type has one, builds an empty table,
+ * {@code {}}, for the plugin to fill and pass to the API. The class produces no Lua of its own. Only generated bindings
+ * carry it.
  */
 @Documented
 @Retention(RetentionPolicy.CLASS)

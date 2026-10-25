@@ -7,42 +7,21 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Declares a hand-written Lua module, so that the plugin's code can use it. The declaration produces no Lua of its
- * own: its methods have no body, and code that uses it loads the module with {@code require} and calls it there. In
- * Java, a class whose methods are {@code native} and whose fields hold no values:
+ * Marks a class of the generated bindings that stands for a Lua module, the table {@code require} gives: a module of
+ * the plugin's own Lua, whose bindings Oneiro generates from its LuaCATS annotations, so that
+ * {@code src/main/lua/core/levels.lua} is the class {@code <root>.core.Levels}, annotated
+ * {@code @LuaModule("src/core/levels")} and {@code @LuaGlobal("Levels")}. Code that uses the class, or a class nested
+ * in it, requires the module into a local of the class's name, {@code local Levels = require("src/core/levels")}, where
+ * the path its {@link LuaGlobal} gives starts.
  *
- * <pre>{@code
- * @LuaModule("src/core/levels")
- * public final class Levels {
- *     public static int PERFECT;
- *     public static native int fromPenalty(int penalty);
- * }
- * }</pre>
- *
- * <p>In Kotlin, an object whose functions are {@code external}, and whose properties have external accessors:
- *
- * <pre>{@code
- * @LuaModule("src/core/levels")
- * object Levels {
- *     val PERFECT: Int
- *         external get
- *
- *     external fun fromPenalty(penalty: Int): Int
- * }
- * }</pre>
- *
- * <p>Static methods and fields, or an object's functions and properties, become {@code Levels.fromPenalty(...)} and
- * {@code Levels.PERFECT}; instance methods are methods of the module's objects, called as {@code object:method(...)}.
- * A module's constructor is declared as a static method with {@code @LuaName("new")}.
- *
- * <p>A plugin's build does not ship hand-written Lua yet, so it cannot use a declaration: the module never reaches the
- * folder that ships, and {@code checkPlugin} rejects the {@code require}.
+ * <p>Only generated bindings carry it. The plugin's own Lua is bound from its annotations, so a class of the plugin's
+ * own that carries this annotation does not compile.
  */
 @Documented
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.TYPE)
 public @interface LuaModule {
 
-	/** The module's require path inside the plugin, such as {@code src/core/levels}. */
+	/** The path {@code require} loads the module by, such as {@code src/core/levels}. */
 	String value();
 }

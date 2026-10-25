@@ -63,10 +63,6 @@ final class ObjectCreation {
 		if (JavaTypes.isRecord(type) && !types.isObjectRecord(type)) {
 			return record(type, creation.getArguments());
 		}
-		if (types.declaredModule(type) != null) {
-			throw new Rejection(creation, "A @LuaModule declaration has no Java constructor; call the module's own"
-					+ " constructor, declared as a static native method with @LuaName(\"new\").");
-		}
 		if (types.isPluginEntry(type) || types.isDevEntry(type)) {
 			throw new Rejection(creation, "The client creates the plugin class, once, when the plugin starts; use its"
 					+ " members directly instead of creating another.");

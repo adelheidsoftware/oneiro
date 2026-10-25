@@ -21,17 +21,19 @@ import java.util.stream.Stream;
  * @param id the plugin's identifier, which names its event subscriptions
  * @param permissions the permissions the manifest requests
  * @param flags the manifest flags that are set, such as {@code hasSettingsIcon}
+ * @param luaFiles the paths of the source set's own Lua files in the plugin, such as {@code src/core/levels.lua}
  * @param dev whether the sources are the {@code dev} source set
  * @param luaOutput the folder the Lua is written to, replacing what it held
  * @param lineMap the file the Java line of each Lua line is written to, for {@code explainError}
  * @param warningsAsErrors whether a warning, such as a comment that cannot be placed, fails the build
  */
-public record CompilerSettings(String rootPackage, String id, Set<String> permissions, Set<String> flags, boolean dev,
-		Path luaOutput, Path lineMap, boolean warningsAsErrors) {
+public record CompilerSettings(String rootPackage, String id, Set<String> permissions, Set<String> flags,
+		Set<String> luaFiles, boolean dev, Path luaOutput, Path lineMap, boolean warningsAsErrors) {
 
 	public CompilerSettings {
 		permissions = Set.copyOf(permissions);
 		flags = Set.copyOf(flags);
+		luaFiles = Set.copyOf(luaFiles);
 	}
 
 	public void write(Path file) throws IOException {
@@ -40,6 +42,7 @@ public record CompilerSettings(String rootPackage, String id, Set<String> permis
 		properties.setProperty("id", id);
 		properties.setProperty("permissions", String.join(",", new TreeSet<>(permissions)));
 		properties.setProperty("flags", String.join(",", new TreeSet<>(flags)));
+		properties.setProperty("luaFiles", String.join(",", new TreeSet<>(luaFiles)));
 		properties.setProperty("dev", Boolean.toString(dev));
 		properties.setProperty("luaOutput", luaOutput.toAbsolutePath().toString());
 		properties.setProperty("lineMap", lineMap.toAbsolutePath().toString());
@@ -57,6 +60,7 @@ public record CompilerSettings(String rootPackage, String id, Set<String> permis
 		}
 		return new CompilerSettings(properties.getProperty("rootPackage", ""), required(properties, "id", file),
 				list(properties.getProperty("permissions", "")), list(properties.getProperty("flags", "")),
+				list(properties.getProperty("luaFiles", "")),
 				Boolean.parseBoolean(properties.getProperty("dev", "false")),
 				Path.of(required(properties, "luaOutput", file)), Path.of(required(properties, "lineMap", file)),
 				Boolean.parseBoolean(properties.getProperty("warningsAsErrors", "false")));

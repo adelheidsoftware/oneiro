@@ -23,5 +23,5 @@ local checkedLow, checkedHigh = Heights.checkedSpan({ 1, 8 })
 assert(checkedLow == 1 and checkedHigh == 8, "returned from the locals")
 assert(not pcall(Heights.checkedSpan, { -1 }), "and checked first")
 
-assert(Heights.report({ 1, 2, 3, 6 }) == "4 values, mean 3", "the hand-written module's two values")
-assert(Heights.range({ 4, -2, 9 }) == 11, "a record declared in the module's declaration")
+assert(Heights.report({ 1, 2, 3, 6 }) == "4 values, mean 3", "the plugin's own module's two values")
+assert(Heights.range({ 4, -2, 9 }) == 11, "named by the module's annotations")

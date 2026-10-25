@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.adelheid.oneiro.plugin.ConsoleErrors;
 import org.adelheid.oneiro.plugin.LuaLineMap;
 import org.gradle.api.DefaultTask;
@@ -23,9 +24,9 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * {@code explainError}: shows the errors of this plugin in text copied from the client's console, with each place in
- * the Lua they name as the source file and line it came from, and that line's code. It reads the line maps of the
- * latest build, so it explains the Lua that build wrote: after a change, build and reload the plugin before reproducing
- * the error.
+ * the Lua they name as the source file and line it came from, and that line's code: the Java or Kotlin line of Lua
+ * Oneiro wrote, and the line of a file of the plugin's own Lua. It reads the line maps of the latest build, so it
+ * explains the Lua that build wrote: after a change, build and reload the plugin before reproducing the error.
  */
 @UntrackedTask(because = "It explains the text it is given, each time it runs.")
 public abstract class ExplainError extends DefaultTask {
@@ -46,6 +47,14 @@ public abstract class ExplainError extends DefaultTask {
 	/** The folders of the plugin's Java or Kotlin sources, where each line's code is read. */
 	@Internal
 	public abstract ConfigurableFileCollection getSourceFolders();
+
+	/** {@code src/main/lua}, the plugin's own Lua, which ships under {@code src/}. */
+	@Internal
+	public abstract DirectoryProperty getMainLua();
+
+	/** {@code src/dev/lua}, the dev source set's own Lua, which goes under {@code dev/}. */
+	@Internal
+	public abstract DirectoryProperty getDevLua();
 
 	@Internal
 	public abstract DirectoryProperty getProjectFolder();
@@ -72,7 +81,8 @@ public abstract class ExplainError extends DefaultTask {
 		ConsoleErrors.Explanation explanation;
 		try {
 			explanation = ConsoleErrors.explain(Files.readString(input, StandardCharsets.UTF_8), name, lines,
-					sourceFolders, project);
+					sourceFolders, Map.of("src", getMainLua().get().getAsFile().toPath(),
+							"dev", getDevLua().get().getAsFile().toPath()), project);
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}

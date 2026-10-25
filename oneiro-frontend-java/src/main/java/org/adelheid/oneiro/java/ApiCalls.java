@@ -23,14 +23,15 @@ import org.adelheid.oneiro.lua.LuaNames;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Calls into Lua that the client provides, declared by classes annotated {@code @LuaGlobal} (a global table, such as
- * {@code Player} or {@code ui.Text}) or {@code @LuaType} (values the client hands out, such as {@code NPCEntity}): the
- * RS3 bindings, and the plugin's generated {@code Resources} and {@code Urls}. Each member's annotations give its Lua
- * shape: a static method is {@code Table.Name(...)}, or {@code Table:Name(...)} with {@code @LuaColon}; an instance
- * method is {@code object:Name(...)}, or {@code object.Name(...)} with {@code @LuaDot}; a constructor is
- * {@code Table.new(...)}, or {@code {}} for a {@code @LuaType} table the plugin fills in. Members that need a
- * permission the manifest does not declare, or that must never ship, are rejected here, and members moderation
- * reviews closely are warned about.
+ * Calls into Lua that Oneiro does not write, declared by classes annotated {@code @LuaGlobal} (a table, such as
+ * {@code Player} or {@code ui.Text}) or {@code @LuaType} (values the Lua hands out, such as {@code NPCEntity}): the RS3
+ * bindings, the bindings of the plugin's own Lua, and the plugin's generated {@code Resources} and {@code Urls}. A
+ * table's path starts at a global, or for a module's class, {@code @LuaModule}, at the local its {@code require}
+ * binds. Each member's annotations give its Lua shape: a static method is {@code Table.Name(...)}, or
+ * {@code Table:Name(...)} with {@code @LuaColon}; an instance method is {@code object:Name(...)}, or
+ * {@code object.Name(...)} with {@code @LuaDot}; a constructor is {@code Table.new(...)}, or {@code {}} for a
+ * {@code @LuaType} table the plugin fills in. Members that need a permission the manifest does not declare, or that
+ * must never ship, are rejected here, and members moderation reviews closely are warned about.
  */
 final class ApiCalls {
 
@@ -202,12 +203,21 @@ final class ApiCalls {
 		return global;
 	}
 
-	/** A global table as an expression: {@code ui.Text} is the field {@code Text} of the global {@code ui}. */
+	/**
+	 * A table as an expression: {@code ui.Text} is the field {@code Text} of the global {@code ui}, and a module's
+	 * {@code zyklib.reactive} the field {@code reactive} of the local {@code zyklib}, which the file requires.
+	 */
 	Expression table(TypeElement owner, Tree where) {
 		String global = global(owner, where);
 		List<String> segments = List.of(global.split("\\.", -1));
-		unit().useGlobal(segments.getFirst());
-		Expression table = name(segments.getFirst());
+		String module = types().module(owner);
+		Expression table;
+		if (module != null) {
+			table = unit().required(segments.getFirst(), module);
+		} else {
+			unit().useGlobal(segments.getFirst());
+			table = name(segments.getFirst());
+		}
 		for (String segment : segments.subList(1, segments.size())) {
 			table = member(table, segment);
 		}

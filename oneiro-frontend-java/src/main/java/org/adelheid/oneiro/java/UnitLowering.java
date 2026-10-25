@@ -35,6 +35,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
@@ -93,6 +95,8 @@ final class UnitLowering {
 	private final @Nullable Set<Helper> helpersInUse;
 	// The local name of each required module and its require path, in order of first use
 	final Map<String, String> requires = new LinkedHashMap<>();
+	// The require paths of modules that would share a local, by that local
+	private final Map<String, Set<String>> requireClashes = new TreeMap<>();
 	// Every class, enum, record and interface declared in this file
 	final Set<TypeElement> fileTypes = new HashSet<>();
 	// The file's top-level class, the one the module stands for
@@ -176,10 +180,6 @@ final class UnitLowering {
 		return overloading;
 	}
 
-	Constructors constructors() {
-		return constructors;
-	}
-
 	MemberComments memberComments() {
 		return memberComments;
 	}
@@ -222,18 +222,23 @@ final class UnitLowering {
 					+ "; move it below " + rootPackage + ".");
 			return null;
 		}
-		if (types.declaredModule(typeElement) != null) {
-			declarationChecks.checkDeclaration(type);
-			return null;
-		}
-		if (types.isApi(typeElement)) {
+		if (JavaTypes.isGenerated(typeElement)) {
 			// The plugin's generated Resources and Urls stand for tables the client provides
 			return null;
 		}
+		if (!declarationChecks.checkBindingsOnly(type)) {
+			return null;
+		}
 		moduleName = type.getSimpleName().toString();
+		boolean isEntry = types.isPluginEntry(typeElement) || types.isDevEntry(typeElement);
+		String modulePath = ModulePaths.requirePath(sourceFolder(), rootPackage, packageName, moduleName) + ".lua";
+		if (!isEntry && plugin.luaFiles().contains(modulePath)) {
+			error(start(type), "The Lua of " + moduleName + " would be " + modulePath + ", a file the plugin's own Lua"
+					+ " has already; rename the class or that file.");
+			return null;
+		}
 		if (types.configGroup(typeElement) != null) {
-			return settings.lowerConfig(type, typeElement,
-					ModulePaths.requirePath(sourceFolder(), rootPackage, packageName, moduleName) + ".lua");
+			return settings.lowerConfig(type, typeElement, modulePath);
 		}
 		switch (type.getKind()) {
 			case RECORD -> {
@@ -255,7 +260,6 @@ final class UnitLowering {
 				return null;
 			}
 		}
-		boolean isEntry = types.isPluginEntry(typeElement) || types.isDevEntry(typeElement);
 		if (isEntry) {
 			entry = typeElement;
 			pluginEntry.checkEntry(type, typeElement);
@@ -263,7 +267,7 @@ final class UnitLowering {
 		// The dev source set's DevPlugin class is the development folder's dev/main.lua, which its main.lua requires
 		String path = types.isPluginEntry(typeElement) ? "main.lua"
 				: types.isDevEntry(typeElement) ? "dev/main.lua"
-				: ModulePaths.requirePath(sourceFolder(), rootPackage, packageName, moduleName) + ".lua";
+				: modulePath;
 
 		List<Comment> header = header(type);
 		@Nullable Expression table;
@@ -295,6 +299,8 @@ final class UnitLowering {
 		}
 		assembly.checkLocals(type);
 		List<Block.Entry> body = assembly.assemble(table, instanceClass, members);
+		requireClashes.forEach((local, paths) -> error(start(type), "In Lua, this file would require "
+				+ String.join(" and ", paths) + " as one local, " + local + "; rename the class or file of one."));
 		for (CommentIndex.SourceComment comment : comments.unclaimed()) {
 			warning(comment.start(), "This comment could not be placed in the Lua and was left out; move it onto its"
 					+ " own line above a statement.");
@@ -648,10 +654,6 @@ final class UnitLowering {
 	 */
 	private void nestedType(ClassTree nested, TypeElement outer, String outerTable, Trivia trivia, List<Member> out) {
 		TypeElement element = (TypeElement) element(nested);
-		if (types.declaredModule(element) != null) {
-			throw new Rejection(nested, "A @LuaModule declaration stands for a module file of its own; move it into a"
-					+ " file of its own.");
-		}
 		switch (nested.getKind()) {
 			case INTERFACE -> {
 				if (!declarationChecks.hasLua(nested)) {
@@ -879,10 +881,6 @@ final class UnitLowering {
 			Overloading.@Nullable DefaultChain chain) {
 		ExecutableElement element = (ExecutableElement) element(method);
 		Set<Modifier> flags = method.getModifiers().getFlags();
-		if (flags.contains(Modifier.NATIVE)) {
-			throw new Rejection(method, "Only a @LuaModule declaration has native methods; they stand for Lua functions"
-					+ " that exist already.");
-		}
 		BlockTree methodBody = method.getBody();
 		if (methodBody == null) {
 			throw new IllegalStateException("a method without a body is native or abstract: " + method.getName());
@@ -1026,11 +1024,20 @@ final class UnitLowering {
 			throw new IllegalStateException("a plugin class outside a package: " + type);
 		}
 		String local = type.getSimpleName().toString();
-		String declared = types.declaredModule(type);
-		requires.putIfAbsent(local, declared != null
-				? declared
-				: ModulePaths.requirePath(types.isSourceType(type) ? sourceFolder() : "src", rootPackage,
-						packageElement.getQualifiedName().toString(), local));
+		return required(local, ModulePaths.requirePath(types.isSourceType(type) ? sourceFolder() : "src", rootPackage,
+				packageElement.getQualifiedName().toString(), local));
+	}
+
+	/**
+	 * A module this file requires, {@code local Levels = require("src/core/levels")} at its top, as the local that
+	 * holds it. Two modules that would be one local, classes of one name in two packages, are reported once the file is
+	 * lowered.
+	 */
+	Expression required(String local, String path) {
+		String existing = requires.putIfAbsent(local, path);
+		if (existing != null && !existing.equals(path)) {
+			requireClashes.computeIfAbsent(local, name -> new TreeSet<>(List.of(existing))).add(path);
+		}
 		return name(local);
 	}
 

@@ -108,6 +108,9 @@ final class Compilers {
 					task.getPermissions().addAll(plugin.getOptionalPermissions());
 					task.getFlags().set(plugin.getSettingsIcon().zip(plugin.getRibbonIcon(), Manifest::flags));
 					task.getDev().set(dev);
+					Directory luaFolder = layout.getProjectDirectory().dir("src/" + name + "/lua");
+					task.getLuaFolder().set(luaFolder);
+					task.getLuaFiles().from(luaFolder.getAsFileTree());
 					task.getWarningsAsErrors().set(extension.getWarningsAsErrors());
 					task.getLuaOutput().set(lua.map(folder -> folder.getAsFile().getAbsolutePath()));
 					task.getLineMap().set(lineMap.map(file -> file.getAsFile().getAbsolutePath()));

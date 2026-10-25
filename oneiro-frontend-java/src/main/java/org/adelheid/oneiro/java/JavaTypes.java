@@ -20,6 +20,7 @@ import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import org.adelheid.oneiro.api.LuaConstants;
+import org.adelheid.oneiro.plugin.TypedSources;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -29,6 +30,7 @@ import org.jspecify.annotations.Nullable;
 final class JavaTypes {
 
 	private static final String NULLABLE = "org.jspecify.annotations.Nullable";
+	private static final String GENERATED = "javax.annotation.processing.Generated";
 	private static final String API = "org.adelheid.oneiro.api.";
 	private static final String LUA_NAME = API + "LuaName";
 	private static final String LUA_MODULE = API + "LuaModule";
@@ -364,9 +366,37 @@ final class JavaTypes {
 		return name;
 	}
 
-	/** The require path of a {@code @LuaModule} declaration, or null for a class that becomes a module of its own. */
-	@Nullable String declaredModule(TypeElement type) {
-		return annotationValue(type, LUA_MODULE);
+	/**
+	 * The require path of the module an API class belongs to: the {@code @LuaModule} of its outermost class, which the
+	 * bindings of a Lua module carry, such as the plugin's own {@code src/core/levels}; null for the class of a global
+	 * table or of a type.
+	 */
+	@Nullable String module(TypeElement type) {
+		TypeElement outermost = type;
+		while (outermost.getEnclosingElement() instanceof TypeElement outer) {
+			outermost = outer;
+		}
+		return annotationValue(outermost, LUA_MODULE);
+	}
+
+	/**
+	 * Whether a class of the sources is one that Oneiro generated, the plugin's {@code Resources} and {@code Urls},
+	 * which carry the binding annotations no class of the plugin's own may.
+	 */
+	static boolean isGenerated(TypeElement type) {
+		for (AnnotationMirror mirror : type.getAnnotationMirrors()) {
+			if (!isAnnotation(mirror, GENERATED)) {
+				continue;
+			}
+			for (AnnotationValue value : mirror.getElementValues().values()) {
+				if (value.getValue() instanceof List<?> generators && generators.stream().anyMatch(generator ->
+						generator instanceof AnnotationValue named
+								&& TypedSources.GENERATOR.equals(named.getValue()))) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -378,9 +408,9 @@ final class JavaTypes {
 	}
 
 	/**
-	 * Whether a class stands for Lua that the client or another plugin provides, with {@code @LuaGlobal} or
-	 * {@code @LuaType}: the RS3 bindings, and the plugin's generated {@code Resources} and {@code Urls}. Such a class
-	 * has no Lua of its own; code that uses it calls the Lua directly.
+	 * Whether a class stands for Lua that Oneiro does not write, with {@code @LuaGlobal} or {@code @LuaType}: the RS3
+	 * bindings, the bindings of the plugin's own Lua, and the plugin's generated {@code Resources} and {@code Urls}.
+	 * Such a class has no Lua of its own; code that uses it calls the Lua directly.
 	 */
 	boolean isApi(TypeElement type) {
 		return hasAnnotation(type, LUA_GLOBAL) || hasAnnotation(type, LUA_TYPE);

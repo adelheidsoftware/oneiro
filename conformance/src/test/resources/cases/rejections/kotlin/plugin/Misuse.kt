@@ -10,8 +10,6 @@ object Misuse {
 		}
 	}
 
-	external fun outside(): Int
-
 	fun describe(point: Point): String {
 		return "point $point"
 	}

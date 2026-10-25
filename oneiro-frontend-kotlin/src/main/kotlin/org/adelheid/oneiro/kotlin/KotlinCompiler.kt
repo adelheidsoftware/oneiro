@@ -26,7 +26,8 @@ public object KotlinCompiler {
 	@JvmStatic
 	public fun compileForBuild(settings: String, sources: String, classpath: String): List<String> {
 		val compiler = CompilerSettings.read(Path.of(settings))
-		val plugin = PluginFacts(compiler.id(), compiler.permissions(), compiler.flags(), compiler.dev())
+		val plugin = PluginFacts(compiler.id(), compiler.permissions(), compiler.flags(), compiler.luaFiles(),
+			compiler.dev())
 		val result = KotlinFrontend.compile(paths(sources),
 			KotlinFrontend.Options(compiler.rootPackage(), paths(classpath), plugin))
 		// With warningsAsErrors, a warning fails the build like an error

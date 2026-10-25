@@ -2,6 +2,10 @@ plugin/Copies.java:13: error: npc.coordGrid hands out a copy of the client's val
 		npc.coordGrid.x = 5;
 		^
 
+plugin/Extended.java:6: error: NPCEntity stands for Lua that Oneiro does not write, which a class of the plugin's cannot extend.
+public class Extended extends NPCEntity {
+                              ^
+
 plugin/Keys.java:17: error: The client hands out a new NPCType object each time one is read, and Lua compares table keys by identity, so the map or set would not find it again; key it by a number or string the value carries, such as its id or uid.
 		return counts.getOrDefault(npc.config, 0);
 		                           ^

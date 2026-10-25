@@ -16,20 +16,21 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaSymbol
 import org.jetbrains.kotlin.psi.KtExpression
 
 /**
- * Calls into Lua that the client provides, declared by classes annotated `@LuaGlobal` (a global table, such as
- * `Player` or `ui.Text`) or `@LuaType` (values the client hands out, such as `NPCEntity`): the RS3 bindings, and the
- * plugin's generated `Resources` and `Urls`. Each member's annotations give its Lua shape, as in the Java front end: a
- * static method is `Table.Name(...)`, or `Table:Name(...)` with `@LuaColon`; an instance method is
- * `object:Name(...)`, or `object.Name(...)` with `@LuaDot`; `@LuaIndex` indexes the table, `@LuaSame` is the receiver
- * itself, and `@LuaOperator` is Lua's operator; a constructor is `Table.new(...)`, or `{}` for a `@LuaType` table the
- * plugin fills in. Members that need a permission the manifest does not declare, or that must
- * never ship, are rejected here, and members moderation reviews closely are warned about.
+ * Calls into Lua that Oneiro does not write, declared by classes annotated `@LuaGlobal` (a table, such as `Player` or
+ * `ui.Text`) or `@LuaType` (values the Lua hands out, such as `NPCEntity`): the RS3 bindings, the bindings of the
+ * plugin's own Lua, and the plugin's generated `Resources` and `Urls`. A table's path starts at a global, or for a
+ * module's class, `@LuaModule`, at the local its `require` binds. Each member's annotations give its Lua shape, as in
+ * the Java front end: a static method is `Table.Name(...)`, or `Table:Name(...)` with `@LuaColon`; an instance method
+ * is `object:Name(...)`, or `object.Name(...)` with `@LuaDot`; `@LuaIndex` indexes the table, `@LuaSame` is the
+ * receiver itself, and `@LuaOperator` is Lua's operator; a constructor is `Table.new(...)`, or `{}` for a `@LuaType`
+ * table the plugin fills in. Members that need a permission the manifest does not declare, or that must never ship,
+ * are rejected here, and members moderation reviews closely are warned about.
  */
 internal class ApiCalls(private val unit: FileLowering) {
 
 	private val annotations = unit.annotations
 
-	/** Whether a class stands for Lua the client provides. */
+	/** Whether a class stands for Lua that Oneiro does not write. */
 	fun isApi(owner: KaClassSymbol): Boolean =
 		annotations.has(owner, Annotations.LUA_GLOBAL) || annotations.has(owner, Annotations.LUA_TYPE)
 
@@ -47,7 +48,7 @@ internal class ApiCalls(private val unit: FileLowering) {
 		checkUse(method, owner, where)
 		val name = memberName(method, owner)
 		if (annotations.has(method, Annotations.LUA_INDEX)) {
-			val indexed = if (method.isStatic) table(global(owner, where)) else receiver(receiver, where)
+			val indexed = if (method.isStatic) table(owner, global(owner, where)) else receiver(receiver, where)
 			return Expression.Index(indexed, arguments.single())
 		}
 		if (annotations.has(method, Annotations.LUA_SAME)) {
@@ -64,7 +65,7 @@ internal class ApiCalls(private val unit: FileLowering) {
 				unit.useGlobal(name)
 				return Expression.Call(Expression.name(name), arguments)
 			}
-			val table = table(global)
+			val table = table(owner, global)
 			return if (annotations.has(method, Annotations.LUA_COLON)) Expression.MethodCall(table, name, arguments)
 			else Expression.Call(Expression.field(table, name), arguments)
 		}
@@ -112,7 +113,7 @@ internal class ApiCalls(private val unit: FileLowering) {
 				unit.useGlobal(name)
 				return Expression.name(name)
 			}
-			return member(table(global), name)
+			return member(table(owner, global), name)
 		}
 		val target = receiver ?: throw IllegalStateException("an API field without a receiver: ${where.text}")
 		return member(target, name)
@@ -121,7 +122,7 @@ internal class ApiCalls(private val unit: FileLowering) {
 	/** A constant of an API enum, `GameState.GAME`, whose value is the client's own number or string. */
 	fun enumConstant(where: PsiElement, constant: KaEnumEntrySymbol, owner: KaClassSymbol): Expression {
 		checkUse(constant, owner, where)
-		return member(table(global(owner, where)), constant.name.asString())
+		return member(table(owner, global(owner, where)), constant.name.asString())
 	}
 
 	/**
@@ -132,7 +133,7 @@ internal class ApiCalls(private val unit: FileLowering) {
 		if (!annotations.has(owner, Annotations.LUA_FROM_ID)) {
 			throw Rejection(where, ClientApi.noFromId(owner.classId?.shortClassName?.asString().orEmpty()))
 		}
-		return ClientApi.fromId(table(global(owner, where)), value)
+		return ClientApi.fromId(table(owner, global(owner, where)), value)
 	}
 
 	/** `ui.Text(parent)` as the table's constructor, `ui.Text.new(parent)`; a `@LuaType` as a table to fill in. */
@@ -140,7 +141,7 @@ internal class ApiCalls(private val unit: FileLowering) {
 		arguments: List<Expression>): Expression {
 		checkUse(constructor, owner, where)
 		val global = annotations.value(owner, Annotations.LUA_GLOBAL) ?: return Expression.Table(listOf())
-		return Expression.Call(Expression.field(table(global), "new"), arguments)
+		return Expression.Call(Expression.field(table(owner, global), "new"), arguments)
 	}
 
 	/** The name a member has in the Lua: its `@LuaName`, or its own; a constant table's names lose their prefix. */
@@ -159,11 +160,24 @@ internal class ApiCalls(private val unit: FileLowering) {
 		annotations.value(owner, Annotations.LUA_GLOBAL)
 		?: throw IllegalStateException("a static member of a @LuaType at ${where.text}")
 
-	/** A global table as an expression: `ui.Text` is the field `Text` of the global `ui`. */
-	private fun table(global: String): Expression {
+	/**
+	 * A table as an expression: `ui.Text` is the field `Text` of the global `ui`, and a module's `zyklib.reactive` the
+	 * field `reactive` of the local `zyklib`, which the file requires.
+	 */
+	private fun table(owner: KaClassSymbol, global: String): Expression = with(unit.session) {
 		val segments = global.split(".")
-		unit.useGlobal(segments.first())
-		return segments.drop(1).fold(Expression.name(segments.first()) as Expression, ::member)
+		var outermost = owner
+		while (true) {
+			outermost = outermost.classId?.outerClassId?.let { findClass(it) } ?: break
+		}
+		val module = annotations.value(outermost, Annotations.LUA_MODULE)
+		val first = if (module != null) {
+			unit.required(segments.first(), module)
+		} else {
+			unit.useGlobal(segments.first())
+			Expression.name(segments.first())
+		}
+		segments.drop(1).fold(first, ::member)
 	}
 
 	/** `table.name`, or `table["name"]` for a key that is not a Lua name, such as an enum's. */

@@ -141,6 +141,37 @@ class ConsoleErrorsTest {
 				""", explanation.text());
 	}
 
+	/**
+	 * A place in a file of the plugin's own Lua, which starts with its path as Oneiro's files do, is that line of the
+	 * file, with its code, as a place in Oneiro's Lua is the Java line it came from.
+	 */
+	@Test
+	void aLineOfThePluginsOwnLuaIsShownWithItsCode() throws IOException {
+		Path levels = project.resolve("src/main/lua/core/levels.lua");
+		Files.createDirectories(levels.getParent());
+		Files.writeString(levels, """
+				-- src/core/levels.lua
+
+				local Levels = {}
+
+				function Levels.fromPenalty(penalty)
+				    return penalty // nil
+				end
+				""", StandardCharsets.UTF_8);
+		ConsoleErrors.Explanation explanation = explain("""
+				[ERROR] in Oneiro Error Probe(-1): [string "-- src/core/levels.lua..."]:6: attempt to divide by nil
+				stack traceback:
+				\t[string "-- src/core/levels.lua..."]:6: in function 'fromPenalty'
+				\t[string "-- src/failures.lua..."]:20: in function
+				""");
+		assertEquals("""
+				src/main/lua/core/levels.lua:6: attempt to divide by nil
+				\tat src/main/lua/core/levels.lua:6: return penalty // nil
+				\tat %sFailures.java:27: return missing.length();
+
+				""".formatted(FOLDER), explanation.text());
+	}
+
 	@Test
 	void aMessageOfTheClientsOwnIsExplained() throws IOException {
 		// Rich Death's console as it was, newest line first, with its main.lua for the file; the Java line stands in
@@ -168,7 +199,8 @@ class ConsoleErrorsTest {
 	}
 
 	private ConsoleErrors.Explanation explain(String console) {
-		return ConsoleErrors.explain(console, PLUGIN, lines, List.of(project.resolve("src/main/java")), project);
+		return ConsoleErrors.explain(console, PLUGIN, lines, List.of(project.resolve("src/main/java")),
+				Map.of("src", project.resolve("src/main/lua"), "dev", project.resolve("src/dev/lua")), project);
 	}
 
 	private void javaFile(String path, Map<Integer, String> code) throws IOException {

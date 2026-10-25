@@ -19,6 +19,18 @@ import java.util.stream.Stream;
 record Stubs(ApiModel model, Map<String, CsvConstants.Namespace> namespaces) {
 
 	static Stubs read(Path root) throws IOException {
+		return read(root, true);
+	}
+
+	/**
+	 * The stubs' declarations alone, without the name lists, which the bindings of other Lua need only to resolve the
+	 * types it names.
+	 */
+	static Stubs readTypes(Path root) throws IOException {
+		return read(root, false);
+	}
+
+	private static Stubs read(Path root, boolean withNames) throws IOException {
 		if (!Files.isRegularFile(root.resolve("types.lua")) || !Files.isDirectory(root.resolve("generated"))) {
 			throw new IOException(root + " is not a checkout of runescape-api-stubs: it has no types.lua and"
 					+ " generated/ folder.");
@@ -38,7 +50,7 @@ record Stubs(ApiModel model, Map<String, CsvConstants.Namespace> namespaces) {
 
 		Map<String, CsvConstants.Namespace> namespaces = new LinkedHashMap<>();
 		Path csvs = root.resolve("csvs");
-		if (Files.isDirectory(csvs)) {
+		if (withNames && Files.isDirectory(csvs)) {
 			try (Stream<Path> list = Files.list(csvs)) {
 				for (Path csv : list.filter(path -> path.toString().endsWith(".csv")).sorted().toList()) {
 					CsvConstants.Namespace namespace = CsvConstants.read(csv);

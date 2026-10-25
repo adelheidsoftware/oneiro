@@ -1,14 +1,15 @@
 package plugin;
 
+import org.adelheid.oneiro.api.LuaColon;
 import org.adelheid.oneiro.api.LuaModule;
 
-/** A hand-written store, declared with mistakes. */
+/** A hand-written Lua store, declared in Java, where its annotations should give its bindings. */
 @LuaModule("src/store")
 public final class Store {
 
-	public static int LIMIT = 3;
-
-	public static int count() {
-		return 0;
+	private Store() {
 	}
+
+	@LuaColon
+	public static native int count();
 }

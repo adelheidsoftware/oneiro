@@ -12,9 +12,11 @@ build.gradle.kts           plugins { id("org.adelheid.oneiro") }, the version, a
 settings.gradle.kts        optional; without it, the folder's name is the project's name, and so the plugin's identifier
 src/main/java/             the plugin in Java: one class that extends Plugin, settings interfaces, modules of its own
 src/main/kotlin/           or the same in Kotlin, with the Kotlin JVM plugin applied; one language per plugin
+src/main/lua/              optional Lua of the plugin's own, shipped under src/: core/levels.lua is src/core/levels.lua
 src/main/resources/        PNG images and Ogg Vorbis sounds, shipped as resources/
 src/dev/java/              optional development helpers, which never ship: one class may extend DevPlugin
 src/dev/kotlin/            or the same in Kotlin
+src/dev/lua/               optional Lua for the development helpers, under dev/ in the development folder
 src/test/lua/              optional *_test.lua files, run against the plugin as it ships
 ```
 
@@ -76,14 +78,15 @@ overrides Oneiro applies to them may no longer match.
 | Task | What it does | Output |
 | --- | --- | --- |
 | `oneiroBindings` | Generates the RS3 bindings from the stubs, in a worker process, and compiles them; for a plugin written in Kotlin, a member that takes a hook has a form for each callback the hook takes, so that the callback can be a trailing lambda | `build/oneiro/bindings/rs3-bindings.jar`, and a sources jar for the IDE |
+| `oneiroLuaBindings` | Generates classes from the LuaCATS annotations of the plugin's own Lua, `src/main/lua/` and `src/dev/lua/`, in a worker process, and compiles them; the main set's are on the main source set's classpath, the dev set's on the dev source set's alone | `build/oneiro/lua-bindings/main-bindings.jar` and `dev-bindings.jar`, each with a sources jar |
 | `oneiroSources` | Writes the typed `Resources` class from `src/main/resources/` and the `Urls` class from the manifest's URLs | `build/generated/sources/oneiro/java/main` |
 | `compileJava` | javac, with Oneiro as a javac plugin: once javac has analysed the sources without errors, Oneiro checks them and writes the Lua | `build/oneiro/lua/main/` |
 | `oneiroKotlin` | For a plugin written in Kotlin, after Kotlin's own `compileKotlin`: Oneiro's Kotlin front end checks the sources and writes the Lua, in a worker process | `build/oneiro/lua/main/` |
 | `pluginManifest` | Writes `plugin.json` from the `plugin { }` block, with every rule of the manifest checked | `build/oneiro/manifest/plugin.json` |
-| `assemblePlugin` | The plugin exactly as it ships | `build/oneiro/plugin/`: `main.lua`, `plugin.json`, `src/`, `resources/` |
+| `assemblePlugin` | The plugin exactly as it ships | `build/oneiro/plugin/`: `main.lua`, `plugin.json`, `src/` with the plugin's own Lua, `resources/` |
 | `checkPlugin` | Checks that folder; part of `check` | `build/oneiro/check-plugin.txt` |
 | `packagePlugin` | Zips that folder, with `main.lua` and `plugin.json` at the top; part of `assemble` | `build/distributions/<id>-<version>.zip` |
-| `assembleDevPlugin` | The shipped folder plus the dev source set's Lua under `dev/` | `build/oneiro/dev-plugin/` |
+| `assembleDevPlugin` | The shipped folder plus the dev source set's Lua, compiled and its own, under `dev/` | `build/oneiro/dev-plugin/` |
 | `linkDevPlugin` | Links the plugin into the client's `dev_plugins` folder under its identifier: the dev folder when there is a dev source set, the shipped folder otherwise | A junction on Windows, a symbolic link elsewhere |
 | `testLua` | Runs each `*_test.lua` under `src/test/lua/` against the shipped folder, in a worker process; part of `check` | `build/oneiro/test-lua.txt` |
 | `explainError` | Shows the plugin's errors in text copied from the client's console as the source lines they came from: `./gradlew explainError --input=console.txt` | Printed; it reads the line maps the compile writes to `build/oneiro/line-maps/` |
@@ -267,6 +270,63 @@ folder's `main.lua` requires last, subscribes its methods under `"<id>.dev.<meth
 that the plugin's own shutdown runs first. When the dev source set exists, `linkDevPlugin` links the development
 folder, so the client runs the shipped files plus the helpers.
 
+## The plugin's own Lua
+
+Lua the plugin keeps as Lua, such as a module of a Lua plugin being ported, goes under `src/main/lua/`, laid out as it
+ships under `src/`: `src/main/lua/core/levels.lua` ships as `src/core/levels.lua`, and Lua loads it with
+`require("src/core/levels")`. It ships as it is written, so Jagex's moderators read it as the plugin's, and
+`checkPlugin` and `testLua` cover it as they cover the Lua Oneiro writes.
+
+Each file starts with its path, as the files Oneiro writes do: the client names a file in its errors by its first line,
+and `explainError` shows a place in it as that line of the file under `src/main/lua/`, with its code. `checkPlugin`
+checks that it does.
+
+```lua
+-- src/core/levels.lua
+-- The levels an arrangement scores, from 0 (Perfect) up.
+
+local Levels = {}
+
+Levels.PERFECT = 0
+
+---@param penalty integer the sum of the slots' distances
+---@return integer level
+function Levels.fromPenalty(penalty)
+    return penalty // 2
+end
+
+return Levels
+```
+
+`oneiroLuaBindings` generates classes from the files' LuaCATS annotations, the ones Lua Language Server reads, so that
+Java and Kotlin call the Lua as Lua calls it. A module, a file that returns a table, is a class of the plugin's package
+for its folder, named by the module's `---@class` or else by its file, so `src/main/lua/core/levels.lua` is
+`<root>.core.Levels`, which a class of `<root>.core` names without an import:
+
+```java
+int level = Levels.fromPenalty(penalty) + Levels.PERFECT;
+```
+
+That line becomes:
+
+```lua
+local Levels = require("src/core/levels")
+
+local level = Levels.fromPenalty(penalty) + Levels.PERFECT
+```
+
+The annotations give the types, and the generator infers nothing they leave out: a parameter or field without a type
+is an `Object`, which Java and Kotlin can pass on but not use, so the functions and fields the plugin's code reaches
+want `---@param`, `---@field` and `---@return` tags. A type may be one of the RS3 API's, `---@param parent
+ui.Component`. Several values that the `---@return` tags name are a record named after the function,
+`Stats.SummariseResult` for `Stats.summarise`, and a class with a `new` and colon functions is a class of objects. The
+bindings belong to the build, never to the plugin's sources: a class of the plugin's that carries one of their
+annotations, such as `@LuaModule`, does not compile, nor does a `native` method or, in Kotlin, an `external` function,
+since the Lua's annotations say what it is. A class whose Lua would be one of these files does not compile either.
+
+`src/dev/lua/` is the same for the dev source set: its files go under `dev/` in the development folder and never into
+the zip, its classes are on the dev source set's classpath alone, and its annotations may name the main set's types.
+
 ## What `checkPlugin` checks
 
 `checkPlugin` reads the shipped folder as Mod.io would receive it and fails the build on any of these:
@@ -274,8 +334,12 @@ folder, so the client runs the shipped files plus the helpers.
 - `main.lua` or `plugin.json` is missing.
 - A file is something other than `main.lua`, `plugin.json`, a Lua file under `src/`, or a PNG or Ogg Vorbis file under
   `resources/`.
+- A Lua file under `src/` does not start with its path, `-- src/core/levels.lua`.
 - A `require` names a module that is not in the plugin.
-- A file calls `ExecuteConsoleCommand`.
+- A file uses a member of the client's that needs a permission the manifest does not declare, such as `HTTPRequest`
+  without `httpAccess`, or that is for development only, such as `ExecuteConsoleCommand`. The compiler holds the Lua
+  it writes to this already; the check holds the plugin's own Lua to it, by the members' names, the same the compiler
+  knows from the bindings. It reads the text as it is, so a name in a comment counts too.
 - An image is larger than 1024 by 1024 pixels, or a resource is not really a PNG or an Ogg Vorbis file.
 
 The manifest's own rules are checked when it is written: the identifier, name, version and contact address; known
@@ -286,9 +350,9 @@ a base URL.
 ## Lua tests
 
 `testLua` runs each `*_test.lua` under `src/test/lua/` in a fresh Lua state, with the shipped folder and the tests
-folder on `package.path`, so a test loads a module with `require("src/tally")` and a helper next to it with
-`require("helper")`. A test passes when it runs to its end; an error, such as a failed `assert`, fails it and the
-build. The tests run outside the client, so the client's tables are absent; a test stands
+folder on `package.path`, so a test loads a module, Oneiro's or the plugin's own, with `require("src/tally")` and a
+helper next to it with `require("helper")`. A test passes when it runs to its end; an error, such as a failed
+`assert`, fails it and the build. The tests run outside the client, so the client's tables are absent; a test stands
 in for what it needs. `formatStr` is the one exception: a stand-in that reproduces the client's behaviour is defined
 before each test. Tests never ship.
 
@@ -319,7 +383,7 @@ src/main/java/com/example/herbs/Tally.java:31: attempt to perform arithmetic on 
 ```
 
 Each place is the file and line of the source it came from, a `.java` or a `.kt` file, with that line's code, in the
-form IDEs link. The task picks the
+form IDEs link; a place in the plugin's own Lua is the line of its file under `src/main/lua/`. The task picks the
 plugin's errors by its name and leaves out everything else, including other plugins' errors, whose files can share
 a path with this plugin's. It reads the line maps of the latest build, so it explains the Lua that build wrote: after
 changing the code, build and reload the plugin, and reproduce the error, before explaining it.

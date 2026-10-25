@@ -7,19 +7,24 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 
 /**
  * Errors copied from the client's console, explained in the terms of the plugin's source. The client names a plugin's
- * file by its first line, which Oneiro makes the file's path, so a place in the Lua reads
- * {@code [string "-- src/core/row.lua..."]:12}. Each error of the plugin is shown with its message and the calls that
- * led to it, innermost first, each as the Java or Kotlin file and line it came from with that line's code, in the
- * {@code file:line: text} form that IDEs link, and, for a message of the client's own, what it means. Errors of other
- * plugins, whose files can share a path with this plugin's, are left out.
+ * file by its first line, which Oneiro makes the file's path, and which the plugin's own Lua files start with too, so a
+ * place in the Lua reads {@code [string "-- src/core/row.lua..."]:12}. Each error of the plugin is shown with its
+ * message and the calls that led to it, innermost first, each as the Java or Kotlin file and line it came from with
+ * that line's code, or as the line of the plugin's own Lua file, in the {@code file:line: text} form that IDEs link,
+ * and, for a message of the client's own, what it means. Errors of other plugins, whose files can share a path with
+ * this plugin's, are left out.
  */
 public final class ConsoleErrors {
 
@@ -45,16 +50,20 @@ public final class ConsoleErrors {
 	private final LuaLineMap lines;
 	private final List<Path> sourceFolders;
 	private final Path projectFolder;
-	// The lines of each source file read so far, by its path relative to its source folder
+	// The plugin's own Lua files, by their paths in the plugin
+	private final Map<String, Path> ownLua;
+	// The lines of each source file read so far, by its path relative to its source folder, or its own Lua's path
 	private final Map<String, @Nullable SourceFile> sources = new HashMap<>();
 
 	private record SourceFile(String shownPath, List<String> lines) {
 	}
 
-	private ConsoleErrors(String pluginName, LuaLineMap lines, List<Path> sourceFolders, Path projectFolder) {
+	private ConsoleErrors(String pluginName, LuaLineMap lines, List<Path> sourceFolders, Map<String, Path> ownLua,
+			Path projectFolder) {
 		this.pluginName = pluginName;
 		this.lines = lines;
 		this.sourceFolders = List.copyOf(sourceFolders);
+		this.ownLua = Map.copyOf(ownLua);
 		this.projectFolder = projectFolder.toAbsolutePath();
 	}
 
@@ -65,11 +74,25 @@ public final class ConsoleErrors {
 	 * @param pluginName the plugin's name, which the console puts in front of each of its errors
 	 * @param lines the line maps of the plugin's build
 	 * @param sourceFolders the folders that hold the plugin's Java or Kotlin sources, where each line's code is read
+	 * @param luaFolders the folders of the plugin's own Lua, by the folder of the plugin they go to:
+	 *     {@code src/main/lua} for {@code src}, and {@code src/dev/lua} for {@code dev}; a folder that does not exist
+	 *     holds none
 	 * @param projectFolder the folder that the source files' paths are shown relative to
 	 */
 	public static Explanation explain(String console, String pluginName, LuaLineMap lines, List<Path> sourceFolders,
-			Path projectFolder) {
-		return new ConsoleErrors(pluginName, lines, sourceFolders, projectFolder).explain(console);
+			Map<String, Path> luaFolders, Path projectFolder) {
+		Map<String, Path> ownLua = new TreeMap<>();
+		luaFolders.forEach((shipped, folder) -> {
+			if (Files.isDirectory(folder)) {
+				try (Stream<Path> files = Files.walk(folder)) {
+					files.filter(Files::isRegularFile).forEach(file -> ownLua.put(
+							shipped + "/" + folder.relativize(file).toString().replace('\\', '/'), file));
+				} catch (IOException e) {
+					throw new UncheckedIOException(e);
+				}
+			}
+		});
+		return new ConsoleErrors(pluginName, lines, sourceFolders, ownLua, projectFolder).explain(console);
 	}
 
 	private Explanation explain(String console) {
@@ -144,30 +167,40 @@ public final class ConsoleErrors {
 	}
 
 	/**
-	 * A place in the Lua as the source line it came from, with that line's code when asked for; as the Lua file and
-	 * line when the line maps do not know it, such as a line of hand-written Lua.
+	 * A place in the Lua as the source line it came from, with that line's code when asked for: the Java or Kotlin line
+	 * of a line Oneiro wrote, or the line of the plugin's own Lua file; as the Lua file and line when neither is known.
 	 */
 	private String shown(Matcher place, boolean withCode) {
 		int luaLine = Integer.parseInt(place.group(2));
 		String luaFile = luaFile(place.group(1));
 		LuaLineMap.Source source = luaFile == null ? null : lines.sourceOf(luaFile, luaLine);
 		if (source == null) {
-			return (luaFile != null ? luaFile : consoleName(place.group(1))) + ":" + luaLine;
+			Path own = luaFile == null ? null : ownLua.get(luaFile);
+			SourceFile file = own == null ? null : sources.computeIfAbsent(luaFile, path -> read(own));
+			if (file == null) {
+				return (luaFile != null ? luaFile : consoleName(place.group(1))) + ":" + luaLine;
+			}
+			return shown(file, luaLine, withCode);
 		}
 		SourceFile file = sources.computeIfAbsent(source.path(), this::find);
 		if (file == null) {
 			return source.path() + ":" + source.line();
 		}
-		String shown = file.shownPath() + ":" + source.line();
-		if (withCode && source.line() <= file.lines().size()) {
-			shown += ": " + file.lines().get(source.line() - 1).strip();
+		return shown(file, source.line(), withCode);
+	}
+
+	private static String shown(SourceFile file, int line, boolean withCode) {
+		String shown = file.shownPath() + ":" + line;
+		if (withCode && line <= file.lines().size()) {
+			shown += ": " + file.lines().get(line - 1).strip();
 		}
 		return shown;
 	}
 
 	/**
-	 * The plugin's Lua file a console name stands for. The name is the file's first line, cut to 45 characters, which
-	 * for a file Oneiro wrote is its path; a cut path stands for the one file whose path starts with it.
+	 * The plugin's Lua file a console name stands for, one Oneiro wrote or one of the plugin's own. The name is the
+	 * file's first line, cut to 45 characters, which for either is its path; a cut path stands for the one file whose
+	 * path starts with it.
 	 */
 	private @Nullable String luaFile(String consoleName) {
 		String name = uncut(consoleName);
@@ -175,10 +208,12 @@ public final class ConsoleErrors {
 			return null;
 		}
 		String path = name.substring(3);
-		if (lines.luaFiles().contains(path)) {
+		Set<String> files = new HashSet<>(lines.luaFiles());
+		files.addAll(ownLua.keySet());
+		if (files.contains(path)) {
 			return path;
 		}
-		List<String> candidates = lines.luaFiles().stream().filter(file -> file.startsWith(path)).toList();
+		List<String> candidates = files.stream().filter(file -> file.startsWith(path)).toList();
 		return candidates.size() == 1 ? candidates.get(0) : null;
 	}
 
@@ -197,17 +232,22 @@ public final class ConsoleErrors {
 		for (Path folder : sourceFolders) {
 			Path file = folder.resolve(path);
 			if (Files.isRegularFile(file)) {
-				Path absolute = file.toAbsolutePath();
-				String shownPath = absolute.startsWith(projectFolder)
-						? projectFolder.relativize(absolute).toString().replace('\\', '/')
-						: absolute.toString();
-				try {
-					return new SourceFile(shownPath, Files.readAllLines(file, StandardCharsets.UTF_8));
-				} catch (IOException e) {
-					throw new UncheckedIOException(e);
-				}
+				return read(file);
 			}
 		}
 		return null;
+	}
+
+	/** A file's lines, with its path relative to the project folder where it is in it. */
+	private SourceFile read(Path file) {
+		Path absolute = file.toAbsolutePath();
+		String shownPath = absolute.startsWith(projectFolder)
+				? projectFolder.relativize(absolute).toString().replace('\\', '/')
+				: absolute.toString();
+		try {
+			return new SourceFile(shownPath, Files.readAllLines(file, StandardCharsets.UTF_8));
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
 	}
 }

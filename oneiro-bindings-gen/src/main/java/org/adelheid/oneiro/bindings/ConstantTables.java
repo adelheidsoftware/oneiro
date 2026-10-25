@@ -48,7 +48,7 @@ final class ConstantTables {
 				&& (bindings.typeUses.getOrDefault(enumDef.name(), 0) > 0 || enumDef.placeholderValued());
 		List<String> doc = new ArrayList<>(JavaText.lines(enumDef.description()));
 		doc.add(asJavaEnum
-				? "<p>Lua: the table {@code " + table + "}, whose values " + (rs3 ? "the client" : "the library")
+				? "<p>Lua: the table {@code " + table + "}, whose values " + bindings.target.provider()
 						+ " compares with {@code ==}."
 				: "<p>Lua: the table {@code " + table + "}; its values are plain "
 						+ (enumDef.integerValued() ? "integers, such as bit flags." : "strings."));
