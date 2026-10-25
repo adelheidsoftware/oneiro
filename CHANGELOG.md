@@ -4,7 +4,7 @@ All notable changes to Oneiro are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-25
 
 ### Added
 
@@ -15,7 +15,8 @@ All notable changes to Oneiro are listed here. The format follows
   let it be left out.
 - Compliance warnings: a use that Jagex's moderators review closely (the chat, HTTP requests, the tracking ID,
   changes to the right-click menu, finding other players) compiles with a warning that names what they look at.
-  `@SuppressWarnings("oneiro:<area>")` silences an area's warnings once the plugin meets them.
+  `@SuppressWarnings("oneiro:<area>")`, or `@Suppress("oneiro:<area>")` in Kotlin, silences an area's warnings once
+  the plugin meets them.
 - [From RuneLite to RS3](docs/from-runelite.md), a guide for RuneLite developers: what a RuneLite plugin's events,
   getters, settings, overlays, notifiers and timers become, and how the rules differ between the games.
 - Plugins written in Kotlin: apply the Kotlin JVM plugin beside Oneiro's and put the sources in `src/main/kotlin/`.
@@ -34,12 +35,12 @@ All notable changes to Oneiro are listed here. The format follows
   `ui.Text(parent).apply { SetPos(10, 20) }` configures the new component in place, and on `receiver?.`, as a
   statement or, for `apply` and `also`, as a local's value, their code runs when the receiver is not nil; in both,
   the receiver's members named without it, the Kotlin library's included, as in `fun List<Int>.total() = sum()`; an
-  `if` or `when` with blocks inside an expression, whose value a local before the statement takes; chains over a map or its entries, such as
-  `counts.maxByOrNull { it.value }?.key`, and loops that read `entry.key` and `entry.value`; the collection functions
-  `distinct`, `take`, `drop`, `takeWhile`, `dropWhile`, `flatMap`, `groupBy` and `associate`, and the string functions
-  `padStart`, `padEnd`, `removePrefix`, `removeSuffix`, `substringBefore`, `substringAfter`, `isBlank`, `trimStart`
-  and `trimEnd`; `requireNotNull` and `checkNotNull`; and the casts `as` and `as?`. An expression body can be anything
-  a `return` can, and a class's property can be built with `apply`.
+  `if` or `when` with blocks inside an expression, whose value a local before the statement takes; chains over a map
+  or its entries, such as `counts.maxByOrNull { it.value }?.key`, and loops that read `entry.key` and `entry.value`;
+  the collection functions `distinct`, `take`, `drop`, `takeWhile`, `dropWhile`, `flatMap`, `groupBy` and
+  `associate`, and the string functions `padStart`, `padEnd`, `removePrefix`, `removeSuffix`, `substringBefore`,
+  `substringAfter`, `isBlank`, `trimStart` and `trimEnd`; `requireNotNull` and `checkNotNull`; and the casts `as`
+  and `as?`. An expression body can be anything a `return` can, and a class's property can be built with `apply`.
 - `LuaString`, Lua's string patterns where Java and Kotlin have regular expressions: `match`, `captures`, `find`,
   `gsub` and `gmatch`, each Lua's string function of its name, with the pattern syntax in its Javadoc. The errors for
   regular expressions named it before it existed.
@@ -103,5 +104,5 @@ The first release.
 - Compile-time checks against the manifest: code that needs a permission or an icon does not compile unless the build
   declares it, and development-only members such as `ExecuteConsoleCommand` compile only in the dev source set.
 
-[Unreleased]: https://github.com/adelheidsoftware/oneiro/compare/v0.1.0...HEAD
+[0.2.0]: https://github.com/adelheidsoftware/oneiro/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/adelheidsoftware/oneiro/releases/tag/v0.1.0

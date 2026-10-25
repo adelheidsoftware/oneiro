@@ -125,7 +125,7 @@ You need:
 
 - Gradle 9; Oneiro is tested with 9.8.2.
 - JDK 25, which Oneiro compiles with. Gradle finds it when it is installed, whichever Java Gradle itself runs on.
-- For a plugin written in Kotlin, from Oneiro 0.2.0 on: the Kotlin Gradle plugin 2.3.0 or later.
+- For a plugin written in Kotlin: the Kotlin Gradle plugin 2.3.0 or later.
 - To try the plugin in game: the RS3 beta client.
 
 In a new folder named `coin-watch`, create the Gradle wrapper with `gradle wrapper --gradle-version 9.8.2`, then
@@ -134,7 +134,7 @@ In a new folder named `coin-watch`, create the Gradle wrapper with `gradle wrapp
 ```kotlin
 plugins {
     // For a plugin written in Kotlin, add kotlin("jvm") version "2.4.21"
-    id("org.adelheid.oneiro") version "0.1.0"
+    id("org.adelheid.oneiro") version "0.2.0"
 }
 
 version = "1.0.0"

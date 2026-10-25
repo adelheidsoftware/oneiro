@@ -435,13 +435,18 @@ plugin's Java needs no annotations of its own.
 
 ## Calling existing Lua
 
-Plugins mix generated and hand-written Lua, and use library plugins. Four features from the `oneiro-api` artifact cover
-where they meet: `@LuaName`, `@LuaModule` declarations, records, and `@LuaReturnValues` for several return values.
+Four features from the `oneiro-api` artifact describe Lua that Oneiro does not write: `@LuaName`, `@LuaModule`
+declarations, records, and `@LuaReturnValues` for several return values.
+
+A plugin's build cannot use a `@LuaModule` declaration yet. The declaration compiles, and the conformance suite checks
+its Lua, but the build ships only the Lua that Oneiro writes: the hand-written module the declaration stands for never
+reaches the folder that ships, and `checkPlugin` rejects the `require`. Nor can Java code call a library plugin, such
+as PrettyUI, which the client exposes as a global rather than as a module.
 
 | Java | Lua | Notes |
 | --- | --- | --- |
 | `@LuaName("Ingest") public void ingest(...)` | `function Tracker:Ingest(...)`; every call is `tracker:Ingest(...)` | Keeps a name that existing Lua code calls, or uses a Lua name Java cannot spell (`@LuaName("new")`). Works on methods, fields and record components. |
-| A class annotated `@LuaModule("src/core/levels")` with `static native` methods and fields without values | No Lua of its own; code that uses it gets `local Levels = require("src/core/levels")` and calls `Levels.fromPenalty(penalty)`, reads `Levels.PERFECT` | Declares a module that exists already. Instance `native` methods are methods of the module's objects, `object:method(...)`. |
+| A class annotated `@LuaModule("src/core/levels")` with `static native` methods and fields without values | No Lua of its own; code that uses it gets `local Levels = require("src/core/levels")` and calls `Levels.fromPenalty(penalty)`, reads `Levels.PERFECT` | Declares a module that exists already, which a plugin's build cannot ship yet (above). Instance `native` methods are methods of the module's objects, `object:method(...)`. |
 | `@LuaName("new") public static native Tally create(...)` in a declaration | `Tally.new(...)` | The module's own constructor. |
 | A record describing a table that Lua passes in | Field reads, `position.spriteId` | `@Nullable` components for fields the Lua may leave out. |
 | A `native` method outside a `@LuaModule` declaration | *Never*: "Only a @LuaModule declaration has native methods; they stand for Lua functions that exist already." | |
