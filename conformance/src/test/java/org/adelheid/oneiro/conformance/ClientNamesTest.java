@@ -28,9 +28,12 @@ class ClientNamesTest {
 	@Test
 	void onlyClientApiSpellsTheClientsNames() throws IOException {
 		List<String> spelled = new ArrayList<>();
-		for (String folder : System.getProperty("oneiro.compilerSources").split(File.pathSeparator)) {
+		List<Path> folders = Stream.of(System.getProperty("oneiro.compilerSources").split(File.pathSeparator))
+				.map(Path::of)
+				.toList();
+		for (Path folder : folders) {
 			List<Path> sources;
-			try (Stream<Path> files = Files.walk(Path.of(folder))) {
+			try (Stream<Path> files = Files.walk(folder)) {
 				sources = files.filter(file -> file.toString().endsWith(".java") || file.toString().endsWith(".kt"))
 						.filter(file -> !file.getFileName().toString().equals("ClientApi.java"))
 						.sorted()
