@@ -17,6 +17,13 @@ import java.lang.annotation.Target;
  * // Event.InventoryUpdated.Subscribe("herbs.onInventoryUpdated", onInventoryUpdated)
  * }</pre>
  *
+ * <p>In Kotlin, the same:
+ *
+ * <pre>{@code
+ * @Subscribe
+ * fun onInventoryUpdated(event: InventoryUpdatedEventPayload) { ... }
+ * }</pre>
+ *
  * <p>For an event that passes nothing, such as {@code ServerLogic}, the parameter is its empty payload class and the
  * Lua function takes no parameter.
  */

@@ -2,8 +2,8 @@
 
 What Oneiro accepts in a plugin's Kotlin source and the Lua it produces. The Kotlin front end accepts what these
 tables list; anything else fails with a message, either that it is not supported yet or, marked *Never* here, why Lua
-cannot follow it and what to write instead. How a plugin written in Kotlin is built is in
-[plugin-model.md](plugin-model.md#a-plugin-written-in-kotlin).
+cannot follow it and what to write instead. How a plugin is built, packaged and linked into the client is in
+[plugin-model.md](plugin-model.md).
 
 The same two rules decide every row as for Java ([java-subset.md](java-subset.md)): the ordinary Kotlin form is
 accepted wherever a faithful, readable Lua translation exists, and only genuine gaps between Kotlin and Lua are

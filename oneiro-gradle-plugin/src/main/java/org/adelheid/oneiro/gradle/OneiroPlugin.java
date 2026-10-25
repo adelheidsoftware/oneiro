@@ -208,7 +208,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 		SourceSet dev = java.getSourceSets().getByName("dev");
 		tasks.register("explainError", ExplainError.class, task -> {
 			task.setGroup(GROUP);
-			task.setDescription("Shows the plugin's errors in text copied from the client's console as Java lines.");
+			task.setDescription("Shows the plugin's errors in text copied from the client's console as source lines.");
 			task.getPluginName().set(extension.getPlugin().getName());
 			task.getLineMaps().from(lineMap(layout, "main"), lineMap(layout, "dev"));
 			task.getSourceFolders().from(main.getJava().getSourceDirectories(), dev.getJava().getSourceDirectories(),

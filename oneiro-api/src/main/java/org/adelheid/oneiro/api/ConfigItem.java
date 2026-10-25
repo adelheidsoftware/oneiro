@@ -7,9 +7,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * One setting of a {@link ConfigGroup} interface: its getter, a default method returning the default value, or its
- * setter, an abstract {@code void} method with one parameter. A setting may be a {@code boolean}, an {@code int} or
- * {@code long}, a {@code double}, a {@code String}, or an enum of the plugin's.
+ * One setting of a {@link ConfigGroup} interface: its getter, a method with a body that returns the default value, or
+ * its setter, a method without a body that takes one parameter and returns nothing. A setting may be a
+ * {@code boolean}, an {@code int} or {@code long}, a {@code double}, a {@code String}, or an enum of the plugin's; in
+ * Kotlin, a {@code Boolean}, an {@code Int} or {@code Long}, a {@code Double}, a {@code String}, or an enum class of
+ * the plugin's.
  */
 @Documented
 @Retention(RetentionPolicy.CLASS)

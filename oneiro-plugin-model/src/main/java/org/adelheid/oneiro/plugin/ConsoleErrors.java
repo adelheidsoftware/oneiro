@@ -14,10 +14,10 @@ import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Errors copied from the client's console, explained in the plugin's Java terms. The client names a plugin's file by
- * its first line, which Oneiro makes the file's path, so a place in the Lua reads
+ * Errors copied from the client's console, explained in the terms of the plugin's source. The client names a plugin's
+ * file by its first line, which Oneiro makes the file's path, so a place in the Lua reads
  * {@code [string "-- src/core/row.lua..."]:12}. Each error of the plugin is shown with its message and the calls that
- * led to it, innermost first, each as the Java file and line it came from with that line's code, in the
+ * led to it, innermost first, each as the Java or Kotlin file and line it came from with that line's code, in the
  * {@code file:line: text} form that IDEs link, and, for a message of the client's own, what it means. Errors of other
  * plugins, whose files can share a path with this plugin's, are left out.
  */
@@ -45,7 +45,7 @@ public final class ConsoleErrors {
 	private final LuaLineMap lines;
 	private final List<Path> sourceFolders;
 	private final Path projectFolder;
-	// The lines of each Java file read so far, by its path relative to its source folder
+	// The lines of each source file read so far, by its path relative to its source folder
 	private final Map<String, @Nullable SourceFile> sources = new HashMap<>();
 
 	private record SourceFile(String shownPath, List<String> lines) {
@@ -64,8 +64,8 @@ public final class ConsoleErrors {
 	 * @param console the console's text, as copied: errors, their tracebacks, and anything else, which is left out
 	 * @param pluginName the plugin's name, which the console puts in front of each of its errors
 	 * @param lines the line maps of the plugin's build
-	 * @param sourceFolders the folders that hold the plugin's Java sources, where each line's code is read
-	 * @param projectFolder the folder that the Java files' paths are shown relative to
+	 * @param sourceFolders the folders that hold the plugin's Java or Kotlin sources, where each line's code is read
+	 * @param projectFolder the folder that the source files' paths are shown relative to
 	 */
 	public static Explanation explain(String console, String pluginName, LuaLineMap lines, List<Path> sourceFolders,
 			Path projectFolder) {
@@ -144,8 +144,8 @@ public final class ConsoleErrors {
 	}
 
 	/**
-	 * A place in the Lua as the Java line it came from, with that line's code when asked for; as the Lua file and line
-	 * when the line maps do not know it, such as a line of hand-written Lua.
+	 * A place in the Lua as the source line it came from, with that line's code when asked for; as the Lua file and
+	 * line when the line maps do not know it, such as a line of hand-written Lua.
 	 */
 	private String shown(Matcher place, boolean withCode) {
 		int luaLine = Integer.parseInt(place.group(2));

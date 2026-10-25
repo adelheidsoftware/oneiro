@@ -9,7 +9,7 @@ All notable changes to Oneiro are listed here. The format follows
 ### Added
 
 - `explainError`: copy errors from the client's console into a file, run `./gradlew explainError --input=<file>`,
-  and each error of the plugin is shown with the Java file, line and code of every place it names. The compiler
+  and each error of the plugin is shown with the source file, line and code of every place it names. The compiler
   writes the line maps it reads to `build/oneiro/line-maps/`. A message of the client's own, which names C++ types,
   is followed by what it means and what to do instead, such as for an argument the client requires where the docs
   let it be left out.
@@ -59,10 +59,10 @@ All notable changes to Oneiro are listed here. The format follows
   no longer have `new ui.ModelCamera()`, `ui.ModelGroup.AddCamera()` without a camera, `ui.Model.rotation`, `ui.Text`'s
   `lineSpacing`, `shadowColour` and `shadowRGBA`, or `ui.Sprite.AlignTo`, which compiled and then failed or read
   `nil`. They gain the members the client has and the docs leave out: `aabb` on `LocEntity`, `paramCount` on NPC, loc
-  and object types, `isValid` on object types, `valid` on coordinates, `ShapeEntity.drawDistance`, and the menu of `MiniMenuEntryAdded`'s
-  payload; `NPCType.attackOpPriority` is now `attackOpHasPriority`, the client's name. The Javadoc of a member whose
-  behaviour in the client differs from its documentation says how, in a paragraph that begins "In the client:", as
-  for `SetPos`'s self percentages.
+  and object types, `isValid` on object types, `valid` on coordinates, `ShapeEntity.drawDistance`, and the menu of
+  `MiniMenuEntryAdded`'s payload; `NPCType.attackOpPriority` is now `attackOpHasPriority`, the client's name. The
+  Javadoc of a member whose behaviour in the client differs from its documentation says how, in a paragraph that
+  begins "In the client:", as for `SetPos`'s self percentages.
 
 ### Fixed
 

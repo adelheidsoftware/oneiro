@@ -23,9 +23,9 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * {@code explainError}: shows the errors of this plugin in text copied from the client's console, with each place in
- * the Lua they name as the Java file and line it came from, and that line's code. It reads the line maps of the latest
- * build, so it explains the Lua that build wrote: after a change, build and reload the plugin before reproducing the
- * error.
+ * the Lua they name as the source file and line it came from, and that line's code. It reads the line maps of the
+ * latest build, so it explains the Lua that build wrote: after a change, build and reload the plugin before reproducing
+ * the error.
  */
 @UntrackedTask(because = "It explains the text it is given, each time it runs.")
 public abstract class ExplainError extends DefaultTask {
@@ -43,7 +43,7 @@ public abstract class ExplainError extends DefaultTask {
 	@Internal
 	public abstract ConfigurableFileCollection getLineMaps();
 
-	/** The folders of the plugin's Java sources, where each line's code is read. */
+	/** The folders of the plugin's Java or Kotlin sources, where each line's code is read. */
 	@Internal
 	public abstract ConfigurableFileCollection getSourceFolders();
 

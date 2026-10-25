@@ -2,10 +2,11 @@ package org.adelheid.oneiro.api;
 
 /**
  * The plugin's entry point: the one class of a plugin that extends {@code Plugin} becomes its {@code main.lua}. The
- * client runs {@code main.lua} once when the plugin is enabled, so the class is a singleton: its fields and methods
- * become locals of {@code main.lua}, {@link #startUp()} runs when the file loads, and {@link #shutDown()} runs in the
- * global {@code PluginShutdown}, which the client calls when the plugin is disabled. Methods annotated
- * {@link Subscribe} are subscribed to their events after {@code startUp()} and unsubscribed before {@code shutDown()}.
+ * client runs {@code main.lua} once when the plugin is enabled, so the class is a singleton: its members, fields and
+ * methods in Java or properties and functions in Kotlin, become locals of {@code main.lua}, {@link #startUp()} runs
+ * when the file loads, and {@link #shutDown()} runs in the global {@code PluginShutdown}, which the client calls when
+ * the plugin is disabled. Methods annotated {@link Subscribe} are subscribed to their events after {@code startUp()}
+ * and unsubscribed before {@code shutDown()}. In Java:
  *
  * <pre>{@code
  * public final class HerbPlugin extends Plugin {
@@ -14,6 +15,19 @@ package org.adelheid.oneiro.api;
  *     @Subscribe
  *     public void onServerLogic(ServerLogicEventPayload tick) {
  *         ticks++;
+ *     }
+ * }
+ * }</pre>
+ *
+ * <p>In Kotlin:
+ *
+ * <pre>{@code
+ * class HerbPlugin : Plugin() {
+ *     private var ticks = 0
+ *
+ *     @Subscribe
+ *     fun onServerLogic(tick: ServerLogicEventPayload) {
+ *         ticks++
  *     }
  * }
  * }</pre>

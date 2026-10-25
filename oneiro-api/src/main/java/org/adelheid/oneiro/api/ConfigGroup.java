@@ -8,9 +8,10 @@ import java.lang.annotation.Target;
 
 /**
  * Declares an interface of settings kept in the client's {@code PersistentDB}, one per {@link ConfigItem} method. The
- * interface becomes a Lua module with a function per method: a default method is a getter that returns its stored
- * value, or its body's value when nothing is stored, and an abstract {@code void} method with one parameter is the
- * matching setter. Each setting is stored under {@code "<group>.<keyName>"} with the typed accessor of its type.
+ * interface becomes a Lua module with a function per method: a method with a body, a default method in Java, is a
+ * getter that returns its stored value, or its body's value when nothing is stored, and a method without a body that
+ * takes one parameter and returns nothing is the matching setter. Each setting is stored under
+ * {@code "<group>.<keyName>"} with the typed accessor of its type. In Java:
  *
  * <pre>{@code
  * @ConfigGroup("herbs")
@@ -25,7 +26,21 @@ import java.lang.annotation.Target;
  * }
  * }</pre>
  *
- * <p>A field of the interface's type needs no value: every call through it is a call of the module.
+ * <p>In Kotlin:
+ *
+ * <pre>{@code
+ * @ConfigGroup("herbs")
+ * interface HerbConfig {
+ *     @ConfigItem(keyName = "showOverlay", name = "Show overlay", description = "Draws a box on each patch")
+ *     fun showOverlay(): Boolean = true
+ *
+ *     @ConfigItem(keyName = "showOverlay", name = "Show overlay", description = "Draws a box on each patch")
+ *     fun setShowOverlay(show: Boolean)
+ * }
+ * }</pre>
+ *
+ * <p>A field of the interface's type, a {@code lateinit var} in Kotlin, needs no value: every call through it is a
+ * call of the module.
  */
 @Documented
 @Retention(RetentionPolicy.CLASS)

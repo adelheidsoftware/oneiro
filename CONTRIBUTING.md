@@ -57,8 +57,8 @@ A case is a folder under `conformance/src/test/resources/cases/`:
 | `input/` | The Java sources, in the root package `plugin`. |
 | `expected/` | The Lua Oneiro must write, at the paths it has in the plugin: `main.lua`, `src/...`, `dev/main.lua`. |
 | `diagnostics.txt` | The exact errors and warnings the case must report, in javac's format; a case without one must report none. |
-| `check.lua` | Optional. Assertions run on Lua 5.4 against the generated modules, to show that the Lua behaves as the Java does. |
-| `lua/` | Optional. Hand-written Lua modules that the case's Java declares with `@LuaModule`. |
+| `check.lua` | Optional. Assertions run on Lua 5.4 against the generated modules, to show that the Lua behaves as the source does. |
+| `lua/` | Optional. Hand-written Lua modules that the case's sources declare with `@LuaModule`. |
 | `case.properties` | Optional. The plugin's identifier (`id`), its `permissions` and manifest `flags`, and `dev=true` for a dev source set. |
 | `kotlin/` | Optional. The same plugin in Kotlin, the case's twin, which must give the same Lua as `expected/`, and passes the same `check.lua`; with its own `diagnostics.txt` when it has any, and its own `expected/` for a module where idiomatic Kotlin reads differently. |
 
@@ -92,7 +92,7 @@ plugins:
 - Lua 5.4, four spaces, 120 columns, formatted as StyLua 2.6.0 formats it with `stylua.toml`.
 - A header comment at the top of every file, whose first line is the file's path inside the plugin, such as
   `-- src/core/row.lua`: the client's errors name a file only by its first line. Then a comment above each function
-  that has documentation in the Java, and Lua Language Server annotations (`---@param`, `---@return`) for the
+  that has documentation in the source, and Lua Language Server annotations (`---@param`, `---@return`) for the
   signature.
 - One module table per file, returned at its end; `local` for everything else. The only globals are the ones the
   client requires, such as `PluginShutdown`, each with a comment saying so.

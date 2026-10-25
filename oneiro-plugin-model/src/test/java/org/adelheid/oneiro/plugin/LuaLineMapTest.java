@@ -26,7 +26,7 @@ class LuaLineMapTest {
 		LuaLineMap written = new LuaLineMap(Map.of("src/tally.lua", Map.of(5, tally)));
 		Path file = folder.resolve("main.txt");
 		written.write(file);
-		assertEquals(List.of("# Oneiro line map: Lua file, Lua line, Java file, Java line",
+		assertEquals(List.of("# Oneiro line map: Lua file, Lua line, source file, source line",
 				"src/tally.lua\t5\tcom/example/herbs/Tally.java\t12"), Files.readAllLines(file));
 		LuaLineMap read = LuaLineMap.read(file);
 		assertEquals(tally, read.sourceOf("src/tally.lua", 5));

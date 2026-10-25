@@ -1,7 +1,8 @@
 # Architecture
 
 How Oneiro is put together, for people who work on it. What Oneiro accepts and the Lua it writes are in
-[java-subset.md](java-subset.md); how a plugin's build uses it is in [plugin-model.md](plugin-model.md).
+[java-subset.md](java-subset.md) and [kotlin-subset.md](kotlin-subset.md); how a plugin's build uses it is in
+[plugin-model.md](plugin-model.md).
 
 ## Principles
 
@@ -9,11 +10,13 @@ How Oneiro is put together, for people who work on it. What Oneiro accepts and t
   is judged by the Lua it produces, which must read like a careful person wrote it: a header comment per file,
   starting with the file's path so that the client's errors name it, Lua Language Server annotations, one module
   table per file, and the RS3 API called by its documented names.
-- **A compiler, not a runtime.** Each Java construct becomes the Lua a person would write for it, at compile time.
+- **A compiler, not a runtime.** Each Java or Kotlin construct becomes the Lua a person would write for it, at compile
+  time.
   There is no runtime library. The few translations that need more than one expression use small helper functions,
   which a module defines only when it uses them, each with a comment.
-- **Idiomatic source first.** Where a faithful, readable translation exists, the ordinary Java form is accepted. Only
-  genuine gaps between Java and Lua are rejected, with an error that says why and what to write instead.
+- **Idiomatic source first.** Where a faithful, readable translation exists, the ordinary Java or Kotlin form is
+  accepted. Only genuine gaps between the source language and Lua are rejected, with an error that says why and what
+  to write instead.
 - **Nothing hidden.** Oneiro downloads nothing the build does not name, apart from the libraries the Kotlin front end
   runs on, from the two JetBrains repositories that [plugin-model.md](plugin-model.md) names; it never adds a
   permission to the manifest, and reports every comment it cannot place instead of dropping it.
@@ -29,17 +32,19 @@ plugin's Kotlin ──► kotlinc ───────────────�
                     (compileKotlin)                  (oneiro-frontend-kotlin)
 ```
 
-1. **Bindings.** `oneiroBindings` runs the bindings generator in a worker process on JDK 25. It parses the LuaCATS
-   files and name lists of runescape-api-stubs, applies the hand-kept `overrides.txt`, and writes one Java class per
-   Lua table. The classes carry annotations that tell the compiler how Lua calls each member (`@LuaColon`, `@LuaDot`,
+1. **Bindings.** `oneiroBindings` runs the bindings generator in a worker process. It parses the LuaCATS files and
+   name lists of runescape-api-stubs, applies the hand-kept `overrides.txt`, and writes one Java class per Lua
+   table. The classes carry annotations that tell the compiler how Lua calls each member (`@LuaColon`, `@LuaDot`,
    `@LuaReturnValues` and the others in `oneiro-api`). The bindings are generated on each developer's machine;
    nothing derived from the stubs is published.
-2. **Compiling.** A plugin's own `compileJava` runs javac with Oneiro as a javac plugin. Once javac has analysed every
-   class without errors, Oneiro lowers each source file into a Lua module. A construct it cannot translate becomes an
-   ordinary javac error, so it shows in the IDE and the build log like a type error.
+2. **Compiling.** For a plugin written in Java, its own `compileJava` runs javac with Oneiro as a javac plugin. Once
+   javac has analysed every class without errors, Oneiro lowers each source file into a Lua module. A construct it
+   cannot translate becomes an ordinary javac error, so it shows in the IDE and the build log like a type error. For a
+   plugin written in Kotlin, Kotlin's own `compileKotlin` checks the sources first; then `oneiroKotlin` lowers each
+   file in the same way and reports a construct it cannot translate as kotlinc reports an error.
 3. **Printing.** The printer turns each module's tree into text in the house style, at 120 columns, and records the
-   Java line each Lua line came from. The compiler writes those line maps into the build, where `explainError` reads
-   them to show a client error in Java terms.
+   source line each Lua line came from. The compiler writes those line maps into the build, where `explainError` reads
+   them to show a client error in the terms of the plugin's source.
 4. **Packaging.** The Gradle plugin writes `plugin.json` from the build's `oneiro { plugin { } }` block, assembles
    the folder that ships, checks it, zips it, and runs the plugin's Lua tests.
 
@@ -48,7 +53,7 @@ plugin's Kotlin ──► kotlinc ───────────────�
 | Module | Published | What it holds |
 | --- | --- | --- |
 | `oneiro-api` | Yes | What plugin authors compile against: `Plugin`, `@Subscribe`, `@ConfigGroup`, the annotations that describe existing Lua, and `LuaString`, Lua's string patterns, where Java and Kotlin have regular expressions. |
-| `oneiro-lua-tree` | Yes | The Lua tree (`Chunk`, `Statement`, `Expression`), the printer and the line map. It knows nothing about Java. |
+| `oneiro-lua-tree` | Yes | The Lua tree (`Chunk`, `Statement`, `Expression`), the printer and the line map. It knows nothing about Java or Kotlin. |
 | `oneiro-lua-runner` | Yes | Runs Lua 5.4: the bundled Lua 5.4.8 through LuaJava, or an installed interpreter, and the plugin's Lua tests. |
 | `oneiro-bindings-gen` | Yes | Generates the RS3 bindings from the stubs and `overrides.txt`. |
 | `oneiro-plugin-model` | Yes | The plugin apart from its code: the manifest and the permissions it may request, the checks of the folder that ships, the typed `Resources` and `Urls` classes, the compiler's settings, and the line maps, console errors and client messages behind `explainError`. |
@@ -101,8 +106,9 @@ file to the classes below.
 ## The Kotlin front end
 
 The Kotlin front end lives in `org.adelheid.oneiro.kotlin` and is written in Kotlin, the language the Kotlin
-Analysis API is made for. [kotlin-subset.md](kotlin-subset.md) lists what it accepts. In a plugin's build, `oneiroKotlin` runs it in a worker process on JDK 25 through `KotlinCompiler`, which reads the same
-settings the javac plugin reads and writes the Lua and its line map to the same places.
+Analysis API is made for. [kotlin-subset.md](kotlin-subset.md) lists what it accepts. In a plugin's build,
+`oneiroKotlin` runs it in a worker process through `KotlinCompiler`, which reads the same settings the javac plugin
+reads and writes the Lua and its line map to the same places.
 
 - **`KotlinFrontend`** compiles a set of sources: `AnalysisSessions` builds a standalone Analysis API session over
   them and their classpath, Kotlin's own errors are reported first, and each file is then lowered and the session
@@ -162,9 +168,10 @@ update, each difference it finds ends as an overrides line.
 ## Tests
 
 - **Conformance.** Each folder under `conformance/src/test/resources/cases/` is one case. `ConformanceTest` compiles
-  its `input/` and compares the Lua with the hand-written `expected/` files, or the errors with `diagnostics.txt`.
-  It then runs `check.lua` against the generated modules on Lua 5.4, and checks that the expected Lua is formatted as
-  StyLua formats it. Every row of [java-subset.md](java-subset.md) has a case. `ClientNamesTest` checks that no
+  its `input/` and compares the Lua with the hand-written `expected/` files, or the errors with `diagnostics.txt`, and
+  does the same for its Kotlin twin in `kotlin/`, which must give the same Lua. It then runs `check.lua` against the
+  generated modules on Lua 5.4, and checks that the expected Lua is formatted as StyLua formats it. Every row of
+  [java-subset.md](java-subset.md) and [kotlin-subset.md](kotlin-subset.md) has a case. `ClientNamesTest` checks that no
   source of the front ends or of `oneiro-lowering` other than `ClientApi` spells one of the client's names in a
   string.
 - **Unit tests** cover the printer and the line map, the bundled Lua, the bindings generator (on a small stubs

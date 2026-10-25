@@ -7,7 +7,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks an API method that only changes the Java type of its receiver and is the receiver itself in Lua:
+ * Marks an API method that only changes the type of its receiver and is the receiver itself in Lua:
  * {@code ui.Hook.ONCLICK.stoppable()} is {@code ui.Hook.ONCLICK}, typed so that its callback returns a boolean.
  */
 @Documented

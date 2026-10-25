@@ -121,34 +121,19 @@ warning that names what they look at.
 
 ## Getting started
 
-You need Gradle 9 (Oneiro is tested with 9.8) and Java 17 or newer to run it; Gradle downloads the JDK 25 that Oneiro
-compiles with if you have none. To try the plugin in game, you need the RS3 beta client.
+You need:
 
-In a new folder, create the Gradle wrapper with `gradle wrapper --gradle-version 9.8.2`, then these two files.
+- Gradle 9; Oneiro is tested with 9.8.2.
+- JDK 25, which Oneiro compiles with. Gradle finds it when it is installed, whichever Java Gradle itself runs on.
+- For a plugin written in Kotlin, from Oneiro 0.2.0 on: the Kotlin Gradle plugin 2.3.0 or later.
+- To try the plugin in game: the RS3 beta client.
 
-`settings.gradle.kts`:
-
-```kotlin
-pluginManagement {
-    repositories {
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-
-plugins {
-    // Downloads a Java 25 toolchain on machines that have none installed
-    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-}
-
-rootProject.name = "coin-watch"
-```
-
+In a new folder named `coin-watch`, create the Gradle wrapper with `gradle wrapper --gradle-version 9.8.2`, then
 `build.gradle.kts`:
 
 ```kotlin
 plugins {
-    // For a plugin written in Kotlin, with Oneiro 0.2.0 or later: kotlin("jvm") version "2.4.21"
+    // For a plugin written in Kotlin, add kotlin("jvm") version "2.4.21"
     id("org.adelheid.oneiro") version "0.1.0"
 }
 
@@ -160,13 +145,24 @@ repositories {
 
 oneiro {
     stubs {
-        // The RS3 API's type information, from which Oneiro generates the Java bindings on your machine
+        // The RS3 API's type information, from which Oneiro generates the RS3 bindings on your machine
         remote("https://github.com/FriendlyDevelopment/runescape-api-stubs", "fe2272a5522944b9d3aa5015be51b9bca334630f")
     }
     plugin {
         name = "Coin Watch"
         contactEmail = "you@example.org"
     }
+}
+```
+
+The folder's name is the project's name, and so the plugin's identifier: the name of its zip and of its link in the
+client. The build needs no `settings.gradle.kts`, except on a machine without the JDK that Oneiro compiles with,
+where this one lets Gradle download it:
+
+```kotlin
+plugins {
+    // Lets Gradle download the JDK that Oneiro compiles with
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 ```
 
@@ -209,8 +205,9 @@ interface CoinSettings {
 
 A plugin is written in one language; the build fails when it has both Java and Kotlin sources. A plugin written in
 Kotlin also needs the Kotlin Analysis API, which JetBrains publishes only to its own repositories. In a build like this
-one, which declares its repositories in `build.gradle.kts`, Oneiro's Gradle plugin adds those repositories itself; a
-build that declares its repositories in `settings.gradle.kts` adds them there, as
+one, which declares its repositories in `build.gradle.kts`, Oneiro's Gradle plugin adds those repositories itself.
+Only a build that declares its repositories in `settings.gradle.kts` instead, under `dependencyResolutionManagement`,
+adds the JetBrains ones there, as
 [the plugin model](docs/plugin-model.md#where-the-kotlin-front-ends-libraries-come-from) shows.
 
 Then build the plugin and link it into the client:

@@ -13,22 +13,23 @@ import java.util.TreeMap;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The Java line that each line of a plugin's Lua came from, which the compiler writes into the build so that
+ * The source line that each line of a plugin's Lua came from, which the compiler writes into the build so that
  * {@code explainError} can trace a client error back to the source. The file is plain text with one line per Lua line
- * that has a source: the Lua file and line, then the Java file and line, separated by tabs.
+ * that has a source: the Lua file and line, then the Java or Kotlin file and line, separated by tabs.
  */
 public final class LuaLineMap {
 
 	/**
-	 * A line of the plugin's Java source.
+	 * A line of the plugin's Java or Kotlin source.
 	 *
 	 * @param path the source file, relative to the source folder that holds it: {@code com/example/herbs/Tally.java}
+	 *     or {@code com/example/herbs/Tally.kt}
 	 * @param line the line number, starting at 1
 	 */
 	public record Source(String path, int line) {
 	}
 
-	private static final String HEADER = "# Oneiro line map: Lua file, Lua line, Java file, Java line";
+	private static final String HEADER = "# Oneiro line map: Lua file, Lua line, source file, source line";
 
 	// Each Lua file's lines that have a source, by line number
 	private final Map<String, Map<Integer, Source>> files;
@@ -40,7 +41,7 @@ public final class LuaLineMap {
 		this.files = Collections.unmodifiableMap(copy);
 	}
 
-	/** The Java line that a line of a Lua file came from; null when it has none, or the map does not know the file. */
+	/** The source line a line of a Lua file came from; null when it has none, or the map does not know the file. */
 	public @Nullable Source sourceOf(String luaFile, int luaLine) {
 		Map<Integer, Source> lines = files.get(luaFile);
 		return lines == null ? null : lines.get(luaLine);

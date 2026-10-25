@@ -7,9 +7,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * The name a method, field or record component has in the Lua, when it differs from its Java name: to keep a name that
- * existing Lua code calls, as in {@code @LuaName("Ingest") public void ingest(...)}, or to use a Lua name Java cannot
- * spell, as in {@code @LuaName("new")}. Every call and access in the plugin uses the Lua name.
+ * The name a method, field or record component has in the Lua, when it differs from its name in the source: to keep a
+ * name that existing Lua code calls, as in {@code @LuaName("Ingest") public void ingest(...)} in Java or
+ * {@code @LuaName("Ingest") fun ingest(...)} in Kotlin, or to use a Lua name the source cannot spell, as in
+ * {@code @LuaName("new")}. Every call and access in the plugin uses the Lua name.
  */
 @Documented
 @Retention(RetentionPolicy.CLASS)

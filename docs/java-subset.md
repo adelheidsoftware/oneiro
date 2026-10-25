@@ -2,7 +2,8 @@
 
 What Oneiro accepts in a plugin's Java source and the Lua it produces. Every row is a conformance test case. This page
 covers plain Java, the RS3 API, `try`/`catch`, several return values, and the plugin class and its settings. How a
-plugin is built, packaged and linked into the client is in [plugin-model.md](plugin-model.md).
+plugin is built, packaged and linked into the client is in [plugin-model.md](plugin-model.md), and the Kotlin that a
+plugin can be written in instead is in [kotlin-subset.md](kotlin-subset.md).
 
 Every row not marked *Never* works, and the conformance suite has a case for each. Rows marked *Never* are genuine
 gaps between Java and Lua: they fail with the message shown, a compile-time error that fails the build. A library

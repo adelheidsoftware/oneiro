@@ -1,15 +1,16 @@
 # The plugin model and the build
 
-How a plugin written in Java becomes an RS3 plugin: the project's layout, the `oneiro { }` block that configures it, the
-tasks that turn it into the folder the client loads and the zip that goes to Mod.io, and the checks on the way. What
-each Java construct becomes is in [java-subset.md](java-subset.md).
+How a plugin written in Java or Kotlin becomes an RS3 plugin: the project's layout, the `oneiro { }` block that
+configures it, the tasks that turn it into the folder the client loads and the zip that goes to Mod.io, and the checks
+on the way. What each construct becomes is in [java-subset.md](java-subset.md) for Java and
+[kotlin-subset.md](kotlin-subset.md) for Kotlin.
 
 ## A plugin project
 
 ```text
 build.gradle.kts           plugins { id("org.adelheid.oneiro") }, the version, and the oneiro { } block
-settings.gradle.kts        rootProject.name, which is the plugin's identifier unless the build names another
-src/main/java/             the plugin: one class that extends Plugin, settings interfaces, modules of its own
+settings.gradle.kts        optional; without it, the folder's name is the project's name, and so the plugin's identifier
+src/main/java/             the plugin in Java: one class that extends Plugin, settings interfaces, modules of its own
 src/main/kotlin/           or the same in Kotlin, with the Kotlin JVM plugin applied; one language per plugin
 src/main/resources/        PNG images and Ogg Vorbis sounds, shipped as resources/
 src/dev/java/              optional development helpers, which never ship: one class may extend DevPlugin
@@ -17,9 +18,11 @@ src/dev/kotlin/            or the same in Kotlin
 src/test/lua/              optional *_test.lua files, run against the plugin as it ships
 ```
 
-The Oneiro Gradle plugin applies the `java` plugin, sets the Java toolchain to 25 (Gradle finds an installed JDK 25 or,
-with the foojay resolver, downloads one), and adds the RS3 bindings, Oneiro's API (`oneiro-api`) and JSpecify to the
-compile classpath. The Gradle that runs the build only needs Java 17.
+The Oneiro Gradle plugin applies the `java` plugin, sets the Java toolchain to the JDK that Oneiro compiles with, and
+adds the RS3 bindings, Oneiro's API (`oneiro-api`) and JSpecify to the compile classpath. A plugin written in Kotlin
+applies the Kotlin JVM plugin beside it, `kotlin("jvm")`, which compiles with the same toolchain. The
+[README](../README.md#getting-started) names the versions of each that Oneiro needs. A plugin is written in one
+language: one with both Java and Kotlin sources fails to build.
 
 ## The `oneiro { }` block
 
@@ -72,10 +75,10 @@ overrides Oneiro applies to them may no longer match.
 
 | Task | What it does | Output |
 | --- | --- | --- |
-| `oneiroBindings` | Generates the RS3 bindings from the stubs, in a worker process on JDK 25, and compiles them; for a plugin written in Kotlin, a member that takes a hook has a form for each callback the hook takes, so that the callback can be a trailing lambda | `build/oneiro/bindings/rs3-bindings.jar`, and a sources jar for the IDE |
+| `oneiroBindings` | Generates the RS3 bindings from the stubs, in a worker process, and compiles them; for a plugin written in Kotlin, a member that takes a hook has a form for each callback the hook takes, so that the callback can be a trailing lambda | `build/oneiro/bindings/rs3-bindings.jar`, and a sources jar for the IDE |
 | `oneiroSources` | Writes the typed `Resources` class from `src/main/resources/` and the `Urls` class from the manifest's URLs | `build/generated/sources/oneiro/java/main` |
 | `compileJava` | javac, with Oneiro as a javac plugin: once javac has analysed the sources without errors, Oneiro checks them and writes the Lua | `build/oneiro/lua/main/` |
-| `oneiroKotlin` | For a plugin written in Kotlin, after Kotlin's own `compileKotlin`: Oneiro's Kotlin front end checks the sources and writes the Lua, in a worker process on JDK 25 | `build/oneiro/lua/main/` |
+| `oneiroKotlin` | For a plugin written in Kotlin, after Kotlin's own `compileKotlin`: Oneiro's Kotlin front end checks the sources and writes the Lua, in a worker process | `build/oneiro/lua/main/` |
 | `pluginManifest` | Writes `plugin.json` from the `plugin { }` block, with every rule of the manifest checked | `build/oneiro/manifest/plugin.json` |
 | `assemblePlugin` | The plugin exactly as it ships | `build/oneiro/plugin/`: `main.lua`, `plugin.json`, `src/`, `resources/` |
 | `checkPlugin` | Checks that folder; part of `check` | `build/oneiro/check-plugin.txt` |
@@ -94,9 +97,18 @@ The zip is reproducible: fixed timestamps and sorted entries, so the same source
 
 ## Compiling
 
-Oneiro runs inside the ordinary `compileJava`, so a construct it cannot translate fails the build at the same step as
-a type error, in javac's format, and appears in the IDE's build output like any other compile error. Every error is
-reported in one run, and no Lua is written while any remains. The checks against the manifest happen here too:
+Oneiro compiles a plugin where the compiler of its language runs, so a construct it cannot translate fails the build
+at the same step as a type error, and appears in the IDE's build output like any other compile error:
+
+- **Java:** Oneiro runs inside the ordinary `compileJava`, as a javac plugin, once javac has analysed the sources
+  without errors, and reports in javac's format, `HerbPlugin.java:12: error: message`.
+- **Kotlin:** Kotlin's own `compileKotlin` runs first, so a type error is reported as Kotlin reports it; then
+  `oneiroKotlin` lowers the sources with Oneiro's Kotlin front end, which runs on the Kotlin Analysis API in a worker
+  process of its own, and reports as kotlinc does, `e: file:///.../HerbPlugin.kt:12:5 message`, which IDEs link to the
+  line.
+
+Every error is reported in one run, and no Lua is written while any remains. The checks against the manifest happen
+here too:
 
 - A member that needs a permission (`Chat.AddMessage`, `Event.ChatMessage`, `HTTPRequest`, `Player.GetTrackingID`)
   does not compile unless the `permissions { }` block declares it.
@@ -111,10 +123,12 @@ plugin meets it before it is submitted rather than in a moderator's report:
 | Area | Uses |
 | --- | --- |
 | `chat` | `Chat.AddMessage`, subscribing to `ChatMessage` |
-| `http` | `new HTTPRequest` |
+| `http` | Creating an `HTTPRequest` |
 | `tracking` | `Player.GetTrackingID` |
 | `mini-menu` | `MiniMenu.Swap`, `MiniMenu.Add`, assigning `MiniMenuEntry.overrideText` |
 | `other-players` | `PlayerList.All`, `ByUID`, `ByName`, `ByDistance` and `Filter`; not `PlayerList.Self` |
+
+In Java:
 
 ```text
 HerbPlugin.java:28: warning: Subscribing to ChatMessage uses the chat, which Jagex's moderators review closely: the
@@ -123,31 +137,21 @@ them, which a plugin must never export. Once the plugin meets this, @SuppressWar
 or class silences this warning.
 ```
 
+In Kotlin:
+
+```text
+w: file:///.../HerbPlugin.kt:28:5 Subscribing to ChatMessage uses the chat, which Jagex's moderators review closely:
+the Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about
+them, which a plugin must never export. Once the plugin meets this, @Suppress("oneiro:chat") on the function, class
+or file silences this warning.
+```
+
 Once the plugin meets what a warning names, `@SuppressWarnings("oneiro:<area>")` on a method or class around the
 use silences that area's warnings there, as it silences javac's own; in Kotlin, `@Suppress("oneiro:<area>")` on a
 function, class or file does. The dev source set is never warned about, since
 it never ships. With `warningsAsErrors`, a warning nobody has silenced fails the build.
 
-## A plugin written in Kotlin
-
-Apply the Kotlin JVM plugin beside Oneiro's, and put the sources in `src/main/kotlin/`:
-
-```kotlin
-plugins {
-    kotlin("jvm") version "2.4.21"
-    id("org.adelheid.oneiro") version "0.2.0"
-}
-```
-
-The plugin keeps the same shape: a class that extends `Plugin`, with `@Subscribe` functions and `startUp()` and
-`shutDown()`, an interface of settings, and classes and objects of its own. Kotlin's own `compileKotlin` runs first, so
-a type error is reported as Kotlin reports it; then `oneiroKotlin` lowers the sources with Oneiro's Kotlin front end,
-which runs on the Kotlin Analysis API in a worker process of its own on JDK 25, and reports each rejection as kotlinc
-reports an error, `e: file:///.../HerbPlugin.kt:12:5 message`, which IDEs link to the line. A plugin is written in one
-language: one with both Java and Kotlin sources fails to build. [kotlin-subset.md](kotlin-subset.md) lists the Kotlin
-it accepts, as [java-subset.md](java-subset.md) lists the Java.
-
-### Where the Kotlin front end's libraries come from
+## Where the Kotlin front end's libraries come from
 
 The Kotlin front end runs on the Kotlin Analysis API and the IntelliJ platform modules it needs, which JetBrains
 publishes only to its own repositories, not to Maven Central. A plugin's build resolves them from there:
@@ -185,9 +189,10 @@ libraries come to about 100 MB, which Gradle downloads once and keeps in its cac
 
 ## The plugin class, events and settings
 
-The one class that extends `Plugin` becomes `main.lua`. Its fields and methods are locals of `main.lua`; the body of
-`startUp()` runs when the client loads the file, after every member is defined; each `@Subscribe` method is then
-subscribed under `"<id>.<method>"`; and the global `PluginShutdown` unsubscribes them and runs `shutDown()`.
+The one class that extends `Plugin` becomes `main.lua`. Its members, fields and methods in Java or properties and
+functions in Kotlin, are locals of `main.lua`; the body of `startUp()` runs when the client loads the file, after every
+member is defined; each `@Subscribe` method is then subscribed under `"<id>.<method>"`; and the global `PluginShutdown`
+unsubscribes them and runs `shutDown()`. In Java:
 
 ```java
 public final class HerbPlugin extends Plugin {
@@ -207,6 +212,27 @@ public final class HerbPlugin extends Plugin {
 }
 ```
 
+In Kotlin:
+
+```kotlin
+class HerbPlugin : Plugin() {
+
+    private lateinit var settings: HerbConfig
+    private var ticks = 0
+
+    override fun startUp() {
+        log("Herb tracker started")
+    }
+
+    @Subscribe
+    fun onServerLogic(tick: ServerLogicEventPayload) {
+        ticks++
+    }
+}
+```
+
+Either becomes:
+
 ```lua
 local ticks = 0
 
@@ -225,14 +251,16 @@ end
 ```
 
 An interface annotated `@ConfigGroup` is the plugin's settings: a module of typed `PersistentDB` accessors, one per
-`@ConfigItem` method, kept under `"<group>.<keyName>"`. A field of its type in the plugin class needs no value; every
-call through it calls the module. The settings page itself is the plugin's to build, in `SettingsLayerReady`, with
-the `ui` bindings. The exact rules, and every rejection, are in
-[java-subset.md](java-subset.md#the-plugin-class-and-settings).
+`@ConfigItem` method, kept under `"<group>.<keyName>"`. A field of its type in the plugin class needs no value, and in
+Kotlin is a `lateinit var`; every call through it calls the module. The settings page itself is the plugin's to build,
+in `SettingsLayerReady`, with the `ui` bindings. The exact rules, and every rejection, are in
+[java-subset.md](java-subset.md#the-plugin-class-and-settings) and
+[kotlin-subset.md](kotlin-subset.md#the-plugin-class-and-settings).
 
 ## Development helpers
 
-Code that must never ship, such as cheats that teleport or spawn items, goes in `src/dev/java/`. That source set
+Code that must never ship, such as cheats that teleport or spawn items, goes in `src/dev/java/`, or in
+`src/dev/kotlin/` for a plugin written in Kotlin. That source set
 compiles against the main one, and its Lua goes under `dev/` in `build/oneiro/dev-plugin/`, never into the zip. One of
 its classes may extend `DevPlugin`: it works like the plugin class, becomes `dev/main.lua`, which the development
 folder's `main.lua` requires last, subscribes its methods under `"<id>.dev.<method>"`, and wraps `PluginShutdown` so
@@ -275,8 +303,8 @@ stack traceback:
 	[string "-- main.lua..."]:19: in function 
 ```
 
-The client names a file by its first line, which is why every Lua file Oneiro writes starts with its path. To see the
-Java instead, copy the console's text into a file, as much of it as you like, and run:
+The client names a file by its first line, which is why every Lua file Oneiro writes starts with its path. To see your
+source instead, copy the console's text into a file, as much of it as you like, and run:
 
 ```sh
 ./gradlew explainError --input=console.txt
@@ -290,15 +318,16 @@ src/main/java/com/example/herbs/Tally.java:31: attempt to perform arithmetic on 
 1 error of Herb Tracker, newest first, as the console lists them.
 ```
 
-Each place is the Java file and line it came from, with that line's code, in the form IDEs link. The task picks the
+Each place is the file and line of the source it came from, a `.java` or a `.kt` file, with that line's code, in the
+form IDEs link. The task picks the
 plugin's errors by its name and leaves out everything else, including other plugins' errors, whose files can share
 a path with this plugin's. It reads the line maps of the latest build, so it explains the Lua that build wrote: after
 changing the code, build and reload the plugin, and reproduce the error, before explaining it.
 
-An error that the client raises itself names C++ types rather than Java's. Most come from a part of the API that the
-client has differently from the docs, which Oneiro's bindings follow, for instance after a client update. For the
-client's messages that Oneiro knows, the task adds what the message means and what to do instead: an argument the
-client requires and the call leaves out, a form of a function the client lacks, a value a field does not take, a
+An error that the client raises itself names C++ types rather than those of your code. Most come from a part of the
+API that the client has differently from the docs, which Oneiro's bindings follow, for instance after a client update.
+For the client's messages that Oneiro knows, the task adds what the message means and what to do instead: an argument
+the client requires and the call leaves out, a form of a function the client lacks, a value a field does not take, a
 field of a value the client handed out, and a name the client lacks.
 
 ```text
