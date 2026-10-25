@@ -16,9 +16,9 @@ import org.gradle.api.provider.ValueSourceParameters;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The latest commit of a remote stubs repository's default branch, looked up at most once a day, as Gradle does for
- * dynamic versions, and on every explicit {@code oneiroBindings} run. An {@code --offline} build uses the commit it
- * last looked up.
+ * The latest commit of a remote stubs repository's default branch, on GitHub, Codeberg or GitLab, looked up at most
+ * once a day, as Gradle does for dynamic versions, and on every explicit {@code oneiroBindings} run. An
+ * {@code --offline} build uses the commit it last looked up.
  */
 public abstract class LatestStubsCommit implements ValueSource<String, LatestStubsCommit.Parameters> {
 
@@ -41,8 +41,8 @@ public abstract class LatestStubsCommit implements ValueSource<String, LatestStu
 	@Override
 	public String obtain() {
 		Parameters parameters = getParameters();
-		RemoteStubs.Repository repository = RemoteStubs.Repository.parse(parameters.getRemote().get());
-		Path record = parameters.getCache().get().getAsFile().toPath().resolve(repository.folder()).resolve("latest");
+		RemoteRepository repository = RemoteRepository.parse(parameters.getRemote().get());
+		Path record = repository.folder(parameters.getCache().get().getAsFile().toPath()).resolve("latest");
 		String[] known = read(record);
 		if (parameters.getOffline().get()) {
 			if (known == null) {
@@ -58,7 +58,7 @@ public abstract class LatestStubsCommit implements ValueSource<String, LatestStu
 			return known[1];
 		}
 		try {
-			String commit = RemoteStubs.latestCommit(repository);
+			String commit = repository.latestCommit();
 			Files.createDirectories(record.getParent());
 			Files.writeString(record, Instant.now().getEpochSecond() + " " + commit + "\n");
 			return commit;

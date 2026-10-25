@@ -286,7 +286,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 	 */
 	private static Action<StubsTask> stubs(Project project, OneiroExtension extension, Configuration tool,
 			Provider<JavaLauncher> launcher, Provider<Boolean> kotlin) {
-		File cache = new File(project.getGradle().getGradleUserHomeDir(), "caches/oneiro/stubs");
+		File cache = new File(project.getGradle().getGradleUserHomeDir(), "caches/oneiro/repositories");
 		boolean refresh = project.getGradle().getStartParameter().getTaskNames().stream()
 				.anyMatch(name -> name.endsWith("oneiroBindings"));
 		boolean offline = project.getGradle().getStartParameter().isOffline();

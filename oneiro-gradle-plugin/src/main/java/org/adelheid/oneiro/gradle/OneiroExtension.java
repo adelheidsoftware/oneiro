@@ -85,8 +85,9 @@ public abstract class OneiroExtension {
 	}
 
 	/**
-	 * Where the stubs come from: a local checkout, or a GitHub repository that Oneiro fetches into Gradle's cache,
-	 * at a pinned commit or at the latest commit of its default branch, checked for at most once a day.
+	 * Where the stubs come from: a local checkout, or a repository on GitHub, Codeberg or GitLab that Oneiro fetches
+	 * into Gradle's cache, at a pinned commit or at the latest commit of its default branch, checked for at most once a
+	 * day.
 	 */
 	public abstract static class Stubs {
 
@@ -101,12 +102,12 @@ public abstract class OneiroExtension {
 			getLocal().set(directory);
 		}
 
-		/** A GitHub repository, at the latest commit of its default branch. */
+		/** A repository on GitHub, Codeberg or GitLab, at the latest commit of its default branch. */
 		public void remote(String url) {
 			getRemote().set(url);
 		}
 
-		/** A GitHub repository at a commit, which keeps builds the same on every machine. */
+		/** A repository on GitHub, Codeberg or GitLab at a commit, which keeps builds the same on every machine. */
 		public void remote(String url, String commit) {
 			getRemote().set(url);
 			getCommit().set(commit);

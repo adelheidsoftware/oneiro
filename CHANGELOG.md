@@ -18,12 +18,19 @@ All notable changes to Oneiro are listed here. The format follows
 - `checkPlugin` checks that each Lua file under `src/` starts with its path, by which the client's errors name it;
   finds a `require` in single quotes too; and finds, in any Lua that ships, the members of the client's that need a
   permission the manifest lacks, as the compiler does, beside those for development only.
+- `stubs { remote(...) }` fetches from Codeberg, `https://codeberg.org/<owner>/<repository>`, and GitLab,
+  `https://gitlab.com/<group>/<project>`, as well as from GitHub. A repository that does not exist, or a commit it
+  lacks, is reported as such.
 
 ### Changed
 
 - A class of the plugin's may no longer carry the annotations of the bindings, such as `@LuaModule` and `@LuaGlobal`,
   nor may a Java method be `native` or a Kotlin function `external`: hand-written declarations of existing Lua, which
   no build could ship, give way to the plugin's own Lua and the bindings of its annotations.
+
+- Fetched repositories are kept in Gradle's user home under `caches/oneiro/repositories/<host>/<path>/<commit>`,
+  where the stubs were under `caches/oneiro/stubs`; a build fetches the stubs once more, and the old folder can be
+  deleted.
 
 ### Fixed
 

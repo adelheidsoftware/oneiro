@@ -22,7 +22,7 @@ Maven Central rejects unsigned artifacts.
 1. Make sure `main` builds: `./gradlew clean build`, with StyLua configured and runescape-api-stubs checked out next to
    Oneiro (see [CONTRIBUTING.md](CONTRIBUTING.md)), so that every check runs.
 2. If the stubs have moved on, check the bindings against the latest commit, update the overrides where the client's
-   behaviour needs it, and set `RemoteStubs.TESTED_COMMIT` to that commit. It is the commit a plugin build without a
+   behaviour needs it, and set `StubsTask.TESTED_COMMIT` to that commit. It is the commit a plugin build without a
    `stubs { }` block is told to use.
 3. In `gradle.properties`, set `version` to the release version, such as `0.1.0`.
 4. In [CHANGELOG.md](CHANGELOG.md), rename `Unreleased` to the version and the date, and update the links at the end.

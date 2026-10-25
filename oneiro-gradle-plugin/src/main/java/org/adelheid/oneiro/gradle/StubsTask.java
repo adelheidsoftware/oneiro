@@ -32,13 +32,17 @@ import org.jspecify.annotations.Nullable;
 @DisableCachingByDefault(because = "The tasks that extend it, which say what they write, are cacheable.")
 public abstract class StubsTask extends DefaultTask {
 
+	/** The stubs commit this release of Oneiro was tested against; another builds with a warning. */
+	static final String TESTED_COMMIT = "8733037f8b0ae59b0da063ab1fecc60849b0cc98";
+	static final String DEFAULT_REMOTE = "https://github.com/FriendlyDevelopment/runescape-api-stubs";
+
 	/** A local checkout of the stubs. */
 	@Optional
 	@InputDirectory
 	@PathSensitive(PathSensitivity.RELATIVE)
 	public abstract DirectoryProperty getLocalStubs();
 
-	/** A GitHub repository of the stubs, fetched at {@link #getCommit()}. */
+	/** A repository of the stubs on GitHub, Codeberg or GitLab, fetched at {@link #getCommit()}. */
 	@Optional
 	@Input
 	public abstract Property<String> getRemote();
@@ -55,7 +59,7 @@ public abstract class StubsTask extends DefaultTask {
 	@Input
 	public abstract Property<String> getLanguage();
 
-	/** Where fetched stubs are kept, one folder per commit, in Gradle's user home. */
+	/** Where fetched repositories are kept, one folder per commit, in Gradle's user home. */
 	@Internal
 	public abstract DirectoryProperty getStubsCache();
 
@@ -90,7 +94,7 @@ public abstract class StubsTask extends DefaultTask {
 		if (getLocalStubs().isPresent()) {
 			Path local = getLocalStubs().get().getAsFile().toPath();
 			if (announce) {
-				warnIfUntested(RemoteStubs.localCommit(local), local.toString());
+				warnIfUntested(RemoteRepository.localCommit(local), local.toString());
 			}
 			return local;
 		}
@@ -105,7 +109,7 @@ public abstract class StubsTask extends DefaultTask {
 					            // or, fetched from GitHub at the commit this Oneiro was tested against:
 					            // remote("%s", "%s")
 					        }
-					    }""".formatted(RemoteStubs.DEFAULT_REMOTE, RemoteStubs.TESTED_COMMIT));
+					    }""".formatted(DEFAULT_REMOTE, TESTED_COMMIT));
 		}
 		String commit = getCommit().get();
 		if (announce) {
@@ -113,18 +117,17 @@ public abstract class StubsTask extends DefaultTask {
 			warnIfUntested(commit, remote);
 		}
 		try {
-			return RemoteStubs.checkout(RemoteStubs.Repository.parse(remote), commit,
-					getStubsCache().get().getAsFile().toPath());
+			return RemoteRepository.parse(remote).checkout(commit, getStubsCache().get().getAsFile().toPath());
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
 	}
 
 	private void warnIfUntested(@Nullable String commit, String source) {
-		if (commit != null && !commit.equals(RemoteStubs.TESTED_COMMIT)) {
+		if (commit != null && !commit.equals(TESTED_COMMIT)) {
 			getLogger().warn("The stubs in {} are at commit {}, but this Oneiro was tested against {}; the overrides"
 					+ " and bindings may not match them. Pin the tested commit to be sure.", source, commit,
-					RemoteStubs.TESTED_COMMIT);
+					TESTED_COMMIT);
 		}
 	}
 }
