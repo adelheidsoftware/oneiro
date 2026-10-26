@@ -12,6 +12,7 @@ class Tracker {
 	data class Summary(val seen: Int, val level: Int)
 
 	var seen = 0
+	var levels = 0
 
 	@LuaName("Ingest")
 	fun ingest(positions: List<Position>) {
@@ -26,5 +27,12 @@ class Tracker {
 	@LuaName("Summary")
 	fun summary(): Summary {
 		return Summary(seen, Levels.fromPenalty(seen) + Levels.PERFECT)
+	}
+
+	fun watch() {
+		Levels.computed.listen { level ->
+			levels += level
+			null
+		}
 	}
 }

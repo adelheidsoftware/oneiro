@@ -88,7 +88,7 @@ class LuaCatsReaderTest {
 		assertEquals(List.of("version"), gauges.fields.stream().map(ApiModel.FieldDef::name).toList());
 		ApiModel.ClassDef gauge = classNamed(model, "gauges.Gauge");
 		assertEquals(ApiModel.Binding.GLOBAL, gauge.binding);
-		assertEquals(List.of("new", "SetValue", "Destroy", "Follow"), functionNames(gauge));
+		assertEquals(List.of("new", "SetValue", "Destroy", "SetLabel", "Follow"), functionNames(gauge));
 		assertEquals(ApiModel.CallStyle.COLON, function(gauge, "SetValue").style());
 		assertEquals(ApiModel.Binding.NONE, classNamed(model, "gauges.GaugeOptions").binding);
 		assertTrue(model.modules.isEmpty());

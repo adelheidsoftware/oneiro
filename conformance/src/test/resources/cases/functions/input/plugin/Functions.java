@@ -79,4 +79,18 @@ public final class Functions {
 		each(values, found::add);
 		return found;
 	}
+
+	public static List<Integer> noted(List<Integer> values) {
+		List<Integer> noted = new ArrayList<>();
+		Function<Integer, Void> note = value -> {
+			noted.add(value);
+			return null;
+		};
+		Function<Integer, Void> ignore = _ -> null;
+		for (int value : values) {
+			note.apply(value);
+			ignore.apply(value);
+		}
+		return noted;
+	}
 }

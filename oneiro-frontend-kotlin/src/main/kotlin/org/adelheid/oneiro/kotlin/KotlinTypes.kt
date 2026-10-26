@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.analysis.api.types.KaFunctionType
 import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.psi.KtClass
 
@@ -59,6 +60,9 @@ internal class KotlinTypes(
 
 	/** `Nothing`, the type of code that never gives a value, such as `throw` and `error(...)`. */
 	fun isNothing(type: KaType): Boolean = classId(type) == StandardClassIds.Nothing
+
+	/** Java's `Void`, whose one value is null, as a lambda for a `Function<T, Void>` returns. */
+	fun isVoidObject(type: KaType): Boolean = classId(type) == VOID
 
 	/** The type's Lua Language Server name, with `?` when it can be null. */
 	fun luaType(type: KaType): String {
@@ -134,5 +138,6 @@ internal class KotlinTypes(
 	private companion object {
 		val INTEGRAL = setOf(StandardClassIds.Int, StandardClassIds.Long, StandardClassIds.Short, StandardClassIds.Byte)
 		val PRIMITIVE_ARRAYS = StandardClassIds.elementTypeByPrimitiveArrayType.keys
+		val VOID = ClassId.topLevel(FqName("java.lang.Void"))
 	}
 }

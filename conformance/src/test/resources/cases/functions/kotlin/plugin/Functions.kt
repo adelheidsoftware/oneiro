@@ -1,5 +1,7 @@
 package plugin
 
+import java.util.function.Function
+
 /** Lambdas, function types, fun interfaces, function references and generics. */
 object Functions {
 
@@ -67,5 +69,19 @@ object Functions {
 		val found = ArrayList<Int>()
 		each(values, found::add)
 		return found
+	}
+
+	fun noted(values: List<Int>): List<Int> {
+		val noted = ArrayList<Int>()
+		val note = Function<Int, Void?> { value ->
+			noted.add(value)
+			null
+		}
+		val ignore = Function<Int, Void?> { null }
+		for (value in values) {
+			note.apply(value)
+			ignore.apply(value)
+		}
+		return noted
 	}
 }

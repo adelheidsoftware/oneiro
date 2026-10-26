@@ -248,7 +248,9 @@ final class MemberBindings {
 			boolean generic = bindings.target.isRs3()
 					&& form.params().stream().anyMatch(param -> param.type().text().equals("C"));
 			List<String> variables = new ArrayList<>(generic ? List.of("C") : List.of());
-			variables.addAll(typeParams);
+			if (!typeParams.isEmpty()) {
+				variables.add(typeVariables(typeParams));
+			}
 			String key = javaName + "(" + erased(form.params()) + ")";
 			if (OBJECT_METHODS.contains(key)) {
 				warnings.add(target + " has the signature of Object's " + key + "; it is left out.");
@@ -527,6 +529,14 @@ final class MemberBindings {
 			results = next;
 		}
 		return results;
+	}
+
+	/**
+	 * Type variables as a class or method declares them, {@code T extends @Nullable Object}: any Lua value, nil among
+	 * them, can be one, as in {@code Event<Payload, nil>}.
+	 */
+	static String typeVariables(List<String> names) {
+		return names.stream().map(name -> name + " extends @Nullable Object").collect(Collectors.joining(", "));
 	}
 
 	static String erased(List<JParam> params) {

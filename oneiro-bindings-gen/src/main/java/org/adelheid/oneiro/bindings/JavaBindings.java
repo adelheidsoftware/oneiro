@@ -398,12 +398,19 @@ final class JavaBindings {
 
 	// ---- Preparation
 
-	/** The classes some function takes as a parameter: the data tables a plugin may build. */
+	/**
+	 * The classes some function takes as a parameter, alone or as one type of a union such as
+	 * {@code string|TextOptions}: the data tables a plugin may build.
+	 */
 	private void collectParameterTypes() {
 		for (ApiModel.FunctionDef function : model.allFunctions()) {
 			for (ApiModel.ParamDef param : function.params()) {
-				if (param.type().withoutNil() instanceof TypeRef.Named named) {
-					parameterTypes.add(model.resolveAlias(named.name()));
+				TypeRef type = param.type().withoutNil();
+				List<TypeRef> options = type instanceof TypeRef.Union union ? union.options() : List.of(type);
+				for (TypeRef option : options) {
+					if (option instanceof TypeRef.Named named) {
+						parameterTypes.add(model.resolveAlias(named.name()));
+					}
 				}
 			}
 		}
@@ -882,7 +889,10 @@ final class JavaBindings {
 					: "; its objects come from " + provider + ".");
 			case TYPE -> "<p>Lua: values of the type {@code " + luaName + "}" + (isBuiltByPlugin(node, classDef)
 					? ": tables the plugin builds and passes to " + provider + "."
-					: ", which " + target.provider() + " hands out.");
+					: isSharedByBuilt(node)
+							? ": the fields its subclasses share, whose tables the plugin builds and passes to "
+									+ provider + "."
+							: ", which " + target.provider() + " hands out.");
 		});
 		JavaText.javadoc(out, indent, doc);
 		if (payload != null) {
@@ -907,7 +917,7 @@ final class JavaBindings {
 		// The type variables of a class of objects; a namespace's functions are static, which cannot name them
 		String variables = shape == Shape.NAMESPACE || classDef.typeParams.isEmpty()
 				? ""
-				: "<" + String.join(", ", classDef.typeParams) + ">";
+				: "<" + MemberBindings.typeVariables(classDef.typeParams) + ">";
 		out.append(indent).append("public ").append(node.parent == null ? "" : "static ")
 				.append(isFinal ? "final " : "").append("class ").append(node.javaName).append(variables)
 				.append(superclass == null ? "" : " extends " + superclass).append(" {\n\n");
@@ -1249,21 +1259,41 @@ final class JavaBindings {
 
 	/** Whether one binding class extends another, directly or further up, by their Java references. */
 	boolean isSubclass(String subclass, String superclass) {
-		Node node = null;
 		for (Node candidate : byLuaName.values()) {
 			if (qualified(candidate).equals(subclass)) {
-				node = candidate;
-				break;
+				return superclasses(candidate).stream().anyMatch(node -> qualified(node).equals(superclass));
 			}
 		}
-		Set<String> visited = new HashSet<>();
-		while (node != null && node.classDef != null && visited.add(qualified(node))) {
-			String superName = node.classDef.superclass;
-			node = superName == null ? null : byLuaName.get(model.resolveAlias(superName));
-			if (node != null && qualified(node).equals(superclass)) {
+		return false;
+	}
+
+	/**
+	 * Whether a data table the plugin builds extends the class, which then holds the fields those tables share, such
+	 * as a library's options that every component's options extend.
+	 */
+	private boolean isSharedByBuilt(Node node) {
+		for (Node other : byLuaName.values()) {
+			ApiModel.ClassDef otherDef = other.classDef;
+			if (otherDef != null && isBuiltByPlugin(other, otherDef) && superclasses(other).contains(node)) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/** The classes a class extends, the nearest first, as far up as the bindings have them. */
+	private List<Node> superclasses(Node node) {
+		List<Node> found = new ArrayList<>();
+		Node current = node;
+		while (current.classDef != null) {
+			String superName = current.classDef.superclass;
+			Node next = superName == null ? null : byLuaName.get(model.resolveAlias(superName));
+			if (next == null || next == node || found.contains(next)) {
+				break;
+			}
+			found.add(next);
+			current = next;
+		}
+		return found;
 	}
 }

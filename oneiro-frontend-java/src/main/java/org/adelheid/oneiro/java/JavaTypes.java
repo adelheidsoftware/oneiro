@@ -14,6 +14,7 @@ import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementFilter;
@@ -258,6 +259,21 @@ final class JavaTypes {
 		return ElementFilter.methodsIn(elements.getAllMembers(element)).stream()
 				.filter(method -> method.getModifiers().contains(Modifier.ABSTRACT))
 				.anyMatch(method -> method.getReturnType().getKind() == TypeKind.VOID);
+	}
+
+	/**
+	 * Whether a functional interface's method returns {@code Void}, as {@code Function<T, Void>.apply} does, so that a
+	 * function standing for it can only return null; false for any other type.
+	 */
+	boolean returnsVoidObject(TypeMirror type) {
+		if (!(type instanceof DeclaredType declared) || !(declared.asElement() instanceof TypeElement element)
+				|| !elements.isFunctionalInterface(element)) {
+			return false;
+		}
+		return ElementFilter.methodsIn(elements.getAllMembers(element)).stream()
+				.filter(method -> method.getModifiers().contains(Modifier.ABSTRACT))
+				.map(method -> ((ExecutableType) types.asMemberOf(declared, method)).getReturnType())
+				.anyMatch(returned -> is(returned, "java.lang.Void"));
 	}
 
 	/** The plugin class a type names, or null for library types, arrays and primitives. */

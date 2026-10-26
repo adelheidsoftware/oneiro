@@ -28,6 +28,23 @@ public record Block(List<Entry> entries, List<Comment> closingComments) {
 	}
 
 	/**
+	 * A function's block without the {@code return nil} it ends with, since a function that ends returns nothing as
+	 * well; one with a comment of its own stays, so the comment does too.
+	 */
+	public Block withoutReturningNil() {
+		if (entries.isEmpty()) {
+			return this;
+		}
+		Entry last = entries.getLast();
+		if (last.statement() instanceof Statement.Return returned
+				&& returned.values().equals(List.of(new Expression.Nil()))
+				&& last.trivia().leading().isEmpty() && last.trivia().trailing() == null) {
+			return new Block(entries.subList(0, entries.size() - 1), closingComments);
+		}
+		return this;
+	}
+
+	/**
 	 * A statement as it sits in a block.
 	 *
 	 * @param trivia the blank line and comments around the statement

@@ -201,10 +201,10 @@ final class TypeMapping {
 		String reference = of == bindings ? of.qualified(node) : of.packageOf(node.top()) + "." + node.reference();
 		ApiModel.ClassDef nodeClass = node.classDef;
 		if (nodeClass != null && !nodeClass.typeParams.isEmpty() && nodeClass.typeParams.size() == args.size()) {
-			// zyklib.reactive.Event<LogicEventPayload, nil>: nil is no value, Void in Java
+			// Event<LogicEventPayload, nil>: nil is no value, Void in Java, whose one value is null
 			String arguments = args.stream()
 					.map(arg -> arg instanceof TypeRef.Named nil && nil.name().equals("nil")
-							? "Void"
+							? "@Nullable Void"
 							: javaType(arg).boxed())
 					.collect(Collectors.joining(", "));
 			return JType.reference(reference + "<" + arguments + ">");

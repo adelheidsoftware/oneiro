@@ -74,6 +74,9 @@ internal class Lambdas(private val body: BodyLowering) {
 		val block = when {
 			code.statements.isEmpty() -> Block.of()
 			symbol.returnType.isUnitType -> inner.block(code)
+			// The null that a lambda returning Java's Void ends with is what a Lua function does by ending
+			unit.types.isVoidObject(symbol.returnType) ->
+				inner.block(code) { last -> inner.returned(last) }.withoutReturningNil()
 			else -> inner.block(code) { last -> inner.returned(last) }
 		}
 		Expression.FunctionExpression(FunctionBody.of(names, block))

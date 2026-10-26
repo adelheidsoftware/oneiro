@@ -67,4 +67,17 @@ function Functions.collected(values)
     return found
 end
 
+function Functions.noted(values)
+    local noted = {}
+    local note = function(value)
+        noted[#noted + 1] = value
+    end
+    local ignore = function() end
+    for _, value in ipairs(values) do
+        note(value)
+        ignore(value)
+    end
+    return noted
+end
+
 return Functions

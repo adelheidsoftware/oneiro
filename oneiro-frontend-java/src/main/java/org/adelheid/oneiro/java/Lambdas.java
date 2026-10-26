@@ -69,6 +69,10 @@ final class Lambdas {
 			code = BodyLowering.blockOf(
 					unit.returnsVoid(lambda) ? inner.expressionStatement(expression) : inner.returned(expression));
 		}
+		// The return null; that a function returning Void needs in Java is what a Lua function does by ending
+		if (types.returnsVoidObject(unit.type(lambda))) {
+			code = code.withoutReturningNil();
+		}
 		return new Expression.FunctionExpression(FunctionBody.of(parameters, code));
 	}
 

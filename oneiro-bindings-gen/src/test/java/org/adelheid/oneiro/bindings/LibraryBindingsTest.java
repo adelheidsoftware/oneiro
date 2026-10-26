@@ -119,11 +119,14 @@ class LibraryBindingsTest {
 	@Test
 	void membersFollowTheirAnnotations() throws IOException {
 		String widgets = source("widgets", "widgets.java");
-		assertTrue(widgets.contains("public static native <T> @Nullable T find(List<T> list, Predicate<T> test);"));
+		// Any Lua value, nil among them, can be a type variable
+		assertTrue(widgets.contains("public static native <T extends @Nullable Object> @Nullable T find(List<T> list,"
+				+ " Predicate<T> test);"));
 		assertTrue(widgets.contains("public native widgets.Counter advance(int by);"));
 		assertTrue(widgets.contains("public record MeasureResult(int width, boolean cut) {"));
 		assertTrue(widgets.contains(
-				"public static native <T> String join(List<T> list, Function3<T, Integer, Boolean, String> format);"));
+				"public static native <T extends @Nullable Object> String join(List<T> list,"
+						+ " Function3<T, Integer, Boolean, String> format);"));
 		assertTrue(widgets.contains("public static native void paint(String colour);"));
 		assertTrue(widgets.contains("\t\t@Deprecated\n\t\tpublic native void bump();"));
 		String loudCounter = widgets.substring(widgets.indexOf("class LoudCounter"), widgets.indexOf("class text"));
@@ -145,6 +148,14 @@ class LibraryBindingsTest {
 		assertTrue(gauges.contains("public Gauge(ui.Component parent, gauges.GaugeOptions options) {"));
 		assertTrue(gauges.contains("\t@LuaType(\"gauges.GaugeOptions\")\n\tpublic static class GaugeOptions {"));
 		assertTrue(gauges.contains("\t\tpublic GaugeOptions() {"));
+		// A table the plugin builds for one type of a union parameter
+		assertTrue(gauges.contains("public native void SetLabel(String label);"));
+		assertTrue(gauges.contains("public native void SetLabel(gauges.LabelOptions label);"));
+		assertTrue(gauges.contains("\t\tpublic LabelOptions() {"));
+		// The class such tables extend, which only holds the fields they share
+		assertTrue(gauges.contains("<p>Lua: values of the type {@code gauges.Style}: the fields its subclasses share,"
+				+ " whose tables the plugin builds and passes to the library."), gauges);
+		assertTrue(gauges.contains("\t\tprotected Style() {"));
 		assertTrue(gauges.contains("public native gauges.Gauge Highlight(int colour);"));
 		// Prompt.new makes a gauge, not a prompt: a function of its table
 		assertTrue(gauges.contains(

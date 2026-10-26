@@ -31,6 +31,18 @@ function gauges.Gauge:SetValue(value) end
 
 function gauges.Gauge:Destroy() end
 
+--- How a gauge's parts are drawn, which the options of each part extend.
+---@class gauges.Style
+---@field colour integer?
+
+--- The options of a gauge's label.
+---@class gauges.LabelOptions: gauges.Style
+---@field text string
+
+--- Labels the gauge with a text, or with a text in a colour.
+---@param label string|gauges.LabelOptions
+function gauges.Gauge:SetLabel(label) end
+
 --- Shows a counter's value from now on, a type of another library.
 ---@param counter widgets.Counter
 function gauges.Gauge:Follow(counter) end

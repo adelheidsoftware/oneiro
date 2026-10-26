@@ -16,6 +16,7 @@ public class Tracker {
 	}
 
 	public int seen;
+	public int levels;
 
 	@LuaName("Ingest")
 	public void ingest(List<Position> positions) {
@@ -30,5 +31,12 @@ public class Tracker {
 	@LuaName("Summary")
 	public Summary summary() {
 		return new Summary(seen, Levels.fromPenalty(seen) + Levels.PERFECT);
+	}
+
+	public void watch() {
+		Levels.computed.listen(level -> {
+			levels += level;
+			return null;
+		});
 	}
 }
