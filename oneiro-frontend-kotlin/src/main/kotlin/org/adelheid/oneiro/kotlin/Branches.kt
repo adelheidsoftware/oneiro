@@ -64,7 +64,7 @@ internal class Branches(private val body: BodyLowering) {
 		while (true) {
 			val condition = current.condition ?: throw Rejection(current, "An if without a condition does not compile.")
 			val then = current.then ?: throw Rejection(current, "An if without a body does not compile.")
-			branches += Statement.If.Branch(body.expression(condition), branch(then, sink))
+			branches += Statement.If.Branch(body.condition(condition), branch(then, sink))
 			when (val otherwise = current.`else`) {
 				null -> {
 					if (sink != null) {

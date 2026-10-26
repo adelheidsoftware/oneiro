@@ -1,16 +1,19 @@
 package org.adelheid.oneiro.bindings;
 
 /**
- * What a set of bindings describes: the RS3 API, from the stubs; a Lua library, from its LuaCATS types; or the plugin's
- * own Lua, from its annotations. It decides the package the classes go in, how their files say where they come from,
- * and whether the parts that only the RS3 API has are written: its events and their payloads, the hooks, the constant
- * namespaces, {@code FromID} on enum tables, {@code Globals} and the event subscription types.
+ * What a set of bindings describes: the RS3 API, from the stubs; a Lua library the plugin vendors, or a library plugin
+ * it depends on, from its LuaCATS types; or the plugin's own Lua, from its annotations. It decides the package the
+ * classes go in, how their files say where they come from, and whether the parts that only the RS3 API has are
+ * written: its events and their payloads, the hooks, the constant namespaces, {@code FromID} on enum tables,
+ * {@code Globals} and the event subscription types.
  *
  * @param packageName the package of the classes; for the plugin's own Lua, its root package, below which each file's
  *     folder is a package
- * @param library the library's name, or the plugin source set's, {@code main} or {@code dev}; empty for the RS3 API
+ * @param library the library's name, a library plugin's alias, or the plugin source set's, {@code main} or
+ *     {@code dev}; empty for the RS3 API
+ * @param optional for a library plugin, whether the plugin can do without it, so that code checks it is loaded
  */
-record BindingsTarget(Kind kind, String packageName, String library) {
+record BindingsTarget(Kind kind, String packageName, String library, boolean optional) {
 
 	/** The package of the RS3 bindings. */
 	static final String RS3_PACKAGE = "org.adelheid.oneiro.rs3";
@@ -18,24 +21,35 @@ record BindingsTarget(Kind kind, String packageName, String library) {
 	/** Whose Lua the bindings stand for. */
 	enum Kind {
 		RS3,
+		/** A library the plugin vendors, whose modules it requires. */
 		LIBRARY,
+		/** A library plugin, which the client gives the plugin as the global of its alias. */
+		DEPENDENCY,
 		PLUGIN,
 	}
 
 	static BindingsTarget rs3() {
-		return new BindingsTarget(Kind.RS3, RS3_PACKAGE, "");
+		return new BindingsTarget(Kind.RS3, RS3_PACKAGE, "", false);
 	}
 
 	static BindingsTarget library(String name, String packageName) {
-		return new BindingsTarget(Kind.LIBRARY, packageName, name);
+		return new BindingsTarget(Kind.LIBRARY, packageName, name, false);
+	}
+
+	static BindingsTarget dependency(String alias, String packageName, boolean optional) {
+		return new BindingsTarget(Kind.DEPENDENCY, packageName, alias, optional);
 	}
 
 	static BindingsTarget plugin(String sourceSet, String rootPackage) {
-		return new BindingsTarget(Kind.PLUGIN, rootPackage, sourceSet);
+		return new BindingsTarget(Kind.PLUGIN, rootPackage, sourceSet, false);
 	}
 
 	boolean isRs3() {
 		return kind == Kind.RS3;
+	}
+
+	boolean isDependency() {
+		return kind == Kind.DEPENDENCY;
 	}
 
 	boolean isPlugin() {
@@ -61,7 +75,7 @@ record BindingsTarget(Kind kind, String packageName, String library) {
 	String origin() {
 		return switch (kind) {
 			case RS3 -> "runescape-api-stubs";
-			case LIBRARY -> "the LuaCATS types of " + library;
+			case LIBRARY, DEPENDENCY -> "the LuaCATS types of " + library;
 			case PLUGIN -> "the plugin's Lua";
 		};
 	}
@@ -70,7 +84,7 @@ record BindingsTarget(Kind kind, String packageName, String library) {
 	String provider() {
 		return switch (kind) {
 			case RS3 -> "the client";
-			case LIBRARY -> "the library";
+			case LIBRARY, DEPENDENCY -> "the library";
 			case PLUGIN -> "the plugin's Lua";
 		};
 	}

@@ -22,7 +22,7 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.adelheid.oneiro.api.LuaGlobal;
 import org.adelheid.oneiro.plugin.ClientFacts;
-import org.adelheid.oneiro.plugin.VendoredLibraries;
+import org.adelheid.oneiro.plugin.LuaLibraries;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -72,9 +72,10 @@ public final class BindingsGenerator {
 	 * @param modulePrefix what comes before a file's path in the path {@code require} loads it by: empty for a library
 	 *     whose folder goes to the plugin's root, as Zyklib's does
 	 * @param overrides the plugin's overrides file for the library; null when it keeps none
+	 * @param use what the library is to the plugin
 	 */
 	public record Library(String name, String packageName, Path folder, String modulePrefix,
-			@Nullable Path overrides) {
+			@Nullable Path overrides, LuaLibraries.Use use) {
 
 		/** The model of every Lua file under the folder, each loaded by its path from there after the prefix. */
 		ApiModel read() throws IOException {
@@ -211,21 +212,21 @@ public final class BindingsGenerator {
 	/**
 	 * {@link #generateLua} for the Gradle plugin's worker, called reflectively with plain strings, returning every
 	 * warning. The libraries are those {@code oneiroLibraries} staged in the folder {@code libraries}
-	 * ({@link VendoredLibraries}), each from its own LuaCATS annotations, with the overrides file the build keeps for
-	 * it.
+	 * ({@link LuaLibraries}), each from its LuaCATS files there, a vendored library's own Lua or the types the build
+	 * names for a library plugin, with the overrides file the build keeps for it.
 	 */
 	public static List<String> generateLuaForBuild(String stubsRoot, String rs3Jar, String output, String language,
 			String rootPackage, String libraries, String main, String dev) throws IOException {
 		Path staged = Path.of(libraries);
 		List<Library> mainLibraries = new ArrayList<>();
 		List<Library> devLibraries = new ArrayList<>();
-		for (VendoredLibraries.Library library
-				: VendoredLibraries.read(staged.resolve(VendoredLibraries.FILE)).libraries()) {
-			Path overrides = VendoredLibraries.overridesFile(staged, library.name());
-			// A vendored library's files go to the plugin's root, so Lua loads them by their paths from there
+		for (LuaLibraries.Library library : LuaLibraries.read(staged.resolve(LuaLibraries.FILE)).libraries()) {
+			Path overrides = LuaLibraries.overridesFile(staged, library.name());
+			// A vendored library's files go to the plugin's root, so Lua loads them by their paths from there; a
+			// library plugin's types are laid out as its own plugin folder is, main.lua at the top
 			(library.development() ? devLibraries : mainLibraries).add(new Library(library.name(),
-					LIBRARIES_PACKAGE + "." + library.name(), VendoredLibraries.typesFolder(staged, library.name()), "",
-					Files.isRegularFile(overrides) ? overrides : null));
+					LIBRARIES_PACKAGE + "." + library.name(), LuaLibraries.typesFolder(staged, library.name()), "",
+					Files.isRegularFile(overrides) ? overrides : null, library.use()));
 		}
 		return generateLua(Path.of(stubsRoot), Path.of(rs3Jar), Path.of(output), Language.valueOf(language),
 				rootPackage, mainLibraries, devLibraries, Path.of(main), Path.of(dev)).warnings();
@@ -334,7 +335,7 @@ public final class BindingsGenerator {
 		Jars.write(classes, classesJar, "");
 		Jars.write(sourceRoot, sourcesJar, "");
 		Path clientFacts = output.resolve(ClientFacts.FILE);
-		new ClientFacts(bindings.permissions, bindings.devOnly).write(clientFacts);
+		new ClientFacts(bindings.permissions, bindings.devOnly, bindings.globals()).write(clientFacts);
 		List<LibraryResult> libraryResults = generateLibraries(List.of(bindings), List.of(classesJar), libraries,
 				language, output, work.resolve("libraries")).results();
 		delete(work);
@@ -367,8 +368,11 @@ public final class BindingsGenerator {
 			}
 			Path overridesFile = library.overrides();
 			Overrides overrides = overridesFile == null ? Overrides.none() : Overrides.library(overridesFile);
-			all.add(new JavaBindings(model, Map.of(), overrides,
-					BindingsTarget.library(library.name(), library.packageName()), language, warnings));
+			BindingsTarget target = library.use() == LuaLibraries.Use.VENDORED
+					? BindingsTarget.library(library.name(), library.packageName())
+					: BindingsTarget.dependency(library.name(), library.packageName(),
+							library.use() == LuaLibraries.Use.OPTIONAL);
+			all.add(new JavaBindings(model, Map.of(), overrides, target, language, warnings));
 			allWarnings.add(warnings);
 			allOverrides.add(overrides);
 		}

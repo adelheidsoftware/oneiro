@@ -17,6 +17,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
 import org.adelheid.oneiro.lowering.ClientApi;
+import org.adelheid.oneiro.lowering.OptionalDependencies;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Expression;
 import org.adelheid.oneiro.lua.LuaNames;
@@ -51,6 +52,13 @@ final class ApiCalls {
 
 	Expression invocation(MethodInvocationTree call, ExecutableElement method, TypeElement owner,
 			@Nullable ExpressionTree receiver) {
+		String loaded = types().loadedCheck(method);
+		if (loaded != null) {
+			// Whether the optional dependency's global is there; a condition tests the global itself
+			// (BodyLowering.condition)
+			unit().useGlobal(loaded);
+			return Expression.binary(name(loaded), BinaryOperator.NOT_EQUAL, new Expression.Nil());
+		}
 		checkUse(method, call);
 		checkSubscription(method, receiver, call);
 		List<Expression> arguments = arguments(method, call.getArguments());
@@ -94,6 +102,10 @@ final class ApiCalls {
 	 */
 	Expression reference(MemberReferenceTree reference, ExecutableElement method, TypeElement owner,
 			@Nullable Expression receiver) {
+		String loaded = types().loadedCheck(method);
+		if (loaded != null) {
+			throw new Rejection(reference, OptionalDependencies.reference("() -> " + loaded + ".isLoaded()"));
+		}
 		checkUse(method, reference);
 		if (JavaTypes.hasAnnotation(method, JavaTypes.LUA_INDEX) || JavaTypes.hasAnnotation(method, JavaTypes.LUA_SAME)
 				|| JavaTypes.operator(method) != null || reference.getMode() == MemberReferenceTree.ReferenceMode.NEW) {
@@ -139,8 +151,14 @@ final class ApiCalls {
 		};
 	}
 
-	/** A field: of the global table for a static one, {@code Player.x}, or of the object, {@code npc.coordGrid}. */
+	/**
+	 * A field: of the global table for a static one, {@code Player.x}, or of the object, {@code npc.coordGrid}. A
+	 * string constant of the bindings, such as a dependency's {@code ALIAS}, is no field of the Lua's but its value.
+	 */
 	Expression field(VariableElement field, @Nullable ExpressionTree receiver, Tree where) {
+		if (field.getConstantValue() instanceof String value) {
+			return Expression.string(value);
+		}
 		checkUse(field, where);
 		TypeElement owner = JavaTypes.owner(field);
 		String name = types().memberName(field);
@@ -239,12 +257,16 @@ final class ApiCalls {
 	}
 
 	/**
-	 * Rejects what the build does not allow: a member that needs a permission the manifest does not declare, and a
-	 * development-only member outside the {@code dev} source set. A function moderation reviews closely is warned
-	 * about where it is called; a field, where it is assigned ({@link #assigned}) or, for an event, subscribed to
-	 * ({@link #checkSubscription}).
+	 * Rejects what the build does not allow: a member that needs a permission the manifest does not declare, a
+	 * development-only member outside the {@code dev} source set, and a use of an optional dependency's global that no
+	 * check reaches ({@link OptionalChecks}). A function moderation reviews closely is warned about where it is called;
+	 * a field, where it is assigned ({@link #assigned}) or, for an event, subscribed to ({@link #checkSubscription}).
 	 */
 	private void checkUse(Element member, Tree where) {
+		// A static member or a constructor reaches the global; a method or field of a value it handed out does not
+		if (member.getModifiers().contains(Modifier.STATIC) || member.getKind() == ElementKind.CONSTRUCTOR) {
+			unit().optionalChecks().check(member, where);
+		}
 		if (JavaTypes.hasOwnOrClass(member, JavaTypes.LUA_DEV_ONLY) && !unit().plugin.dev()) {
 			throw new Rejection(where, display(member) + " is for development only and must never ship; move the code"
 					+ " that uses it into the dev source set (src/dev/java), whose Lua stays out of the zip.");

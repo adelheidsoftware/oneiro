@@ -43,14 +43,22 @@ class ClientMessagesTest {
 	void aNameTheClientLacks() {
 		// Rich Death, ui.ModelCamera.new()
 		assertEquals("ModelCamera is nil in the client, so nothing can be read from it. Where ModelCamera is a part"
-				+ " of the RS3 API, " + BINDINGS + ", which describe it, but the client lacks it: leave it out until"
-				+ " the client has it, or reach what it offers another way.",
+				+ " of the RS3 API, " + BINDINGS + ", which describe it, but the client lacks it; where it is a library"
+				+ " plugin's, the library's types describe it, but the player's version of the library lacks it. Leave"
+				+ " it out until the client or the library has it, or reach what it offers another way.",
 				ClientMessages.explain("attempt to index a nil value (field 'ModelCamera')", List.of()));
 		// Lua's own message for a method the client lacks, when the code calls it; no run has given it yet
 		assertEquals("AlignTo is nil in the client, so it cannot be called. Where AlignTo is a part of the RS3 API, "
-				+ BINDINGS + ", which describe it, but the client lacks it: leave it out until the client has it, or"
-				+ " reach what it offers another way.",
+				+ BINDINGS + ", which describe it, but the client lacks it; where it is a library plugin's, the"
+				+ " library's types describe it, but the player's version of the library lacks it. Leave it out until"
+				+ " the client or the library has it, or reach what it offers another way.",
 				ClientMessages.explain("attempt to call a nil value (method 'AlignTo')", List.of()));
+		// A library plugin's table that the player's version lacks, as PrettyUI names its own
+		assertEquals("SimpleView is nil in the client, so nothing can be read from it. Where SimpleView is a part of"
+				+ " the RS3 API, " + BINDINGS + ", which describe it, but the client lacks it; where it is a library"
+				+ " plugin's, the library's types describe it, but the player's version of the library lacks it. Leave"
+				+ " it out until the client or the library has it, or reach what it offers another way.",
+				ClientMessages.explain("attempt to index a nil value (field 'SimpleView')", List.of()));
 	}
 
 	@Test

@@ -290,11 +290,11 @@ final class BodyLowering {
 			case ExpressionStatementTree expression -> expressionStatement(expression.getExpression());
 			case IfTree branch -> List.of(ifChain(branch));
 			case WhileLoopTree loop ->
-					List.of(new Statement.While(expression(loop.getCondition()),
+					List.of(new Statement.While(condition(loop.getCondition()),
 							loops.loopBody(loop.getStatement(), List.of())));
 			case DoWhileLoopTree loop -> List.of(new Statement.Repeat(
 					loops.loopBody(loop.getStatement(), List.of()),
-					new Expression.Unary(UnaryOperator.NOT, expression(loop.getCondition()))));
+					new Expression.Unary(UnaryOperator.NOT, condition(loop.getCondition()))));
 			case ForLoopTree loop -> loops.forLoop(loop);
 			case EnhancedForLoopTree loop -> List.of(loops.forEach(loop));
 			case BreakTree jump -> {
@@ -616,7 +616,7 @@ final class BodyLowering {
 		List<Statement.If.Branch> branches = new ArrayList<>();
 		IfTree current = first;
 		while (true) {
-			branches.add(new Statement.If.Branch(expression(current.getCondition()), body(current.getThenStatement())));
+			branches.add(new Statement.If.Branch(condition(current.getCondition()), body(current.getThenStatement())));
 			StatementTree orElse = current.getElseStatement();
 			if (orElse instanceof IfTree next) {
 				current = next;
@@ -624,6 +624,40 @@ final class BodyLowering {
 				return new Statement.If(branches, orElse == null ? null : body(orElse));
 			}
 		}
+	}
+
+	/**
+	 * An expression that decides a branch or a loop. An optional dependency's {@code isLoaded()} is its global itself
+	 * there, which Lua tests for nil as it tests the condition, {@code if prettyui then}, as it is in its negation and
+	 * beside another condition; elsewhere the check is a boolean, {@code prettyui ~= nil}.
+	 */
+	Expression condition(ExpressionTree condition) {
+		ExpressionTree inner = withoutParentheses(condition);
+		String alias = unit.optionalChecks().loaded(inner);
+		if (alias != null) {
+			unit.useGlobal(alias);
+			return name(alias);
+		}
+		if (inner instanceof UnaryTree not && not.getKind() == Tree.Kind.LOGICAL_COMPLEMENT
+				&& unit.optionalChecks().loaded(not.getExpression()) != null) {
+			return new Expression.Unary(UnaryOperator.NOT, condition(not.getExpression()));
+		}
+		boolean andOr = inner.getKind() == Tree.Kind.CONDITIONAL_AND || inner.getKind() == Tree.Kind.CONDITIONAL_OR;
+		if (andOr && inner instanceof BinaryTree both
+				&& (isLoadedCheck(both.getLeftOperand()) || isLoadedCheck(both.getRightOperand()))) {
+			return Expression.binary(condition(both.getLeftOperand()),
+					inner.getKind() == Tree.Kind.CONDITIONAL_AND ? BinaryOperator.AND : BinaryOperator.OR,
+					condition(both.getRightOperand()));
+		}
+		return expression(condition);
+	}
+
+	/** Whether an expression is an optional dependency's check, or its negation. */
+	private boolean isLoadedCheck(ExpressionTree expression) {
+		ExpressionTree inner = withoutParentheses(expression);
+		return unit.optionalChecks().loaded(inner) != null || (inner instanceof UnaryTree not
+				&& not.getKind() == Tree.Kind.LOGICAL_COMPLEMENT && unit.optionalChecks().loaded(not.getExpression())
+						!= null);
 	}
 
 	/**
@@ -644,7 +678,7 @@ final class BodyLowering {
 		ExpressionTree inner = withoutParentheses(value);
 		if (inner instanceof ConditionalExpressionTree conditional && !operators.safeAsAndOr(conditional)) {
 			List<Statement.If.Branch> branches = new ArrayList<>();
-			branches.add(new Statement.If.Branch(expression(conditional.getCondition()),
+			branches.add(new Statement.If.Branch(condition(conditional.getCondition()),
 					blockOf(deliver(conditional.getTrueExpression(), sink))));
 			ExpressionTree otherwise = conditional.getFalseExpression();
 			List<Statement> loweredOtherwise = deliver(otherwise, sink);

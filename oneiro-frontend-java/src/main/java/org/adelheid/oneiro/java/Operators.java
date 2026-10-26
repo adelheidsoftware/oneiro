@@ -196,7 +196,7 @@ final class Operators {
 					+ " nil; assign the conditional to a local first.");
 		}
 		return binary(
-				binary(body.expression(conditional.getCondition()), BinaryOperator.AND,
+				binary(body.condition(conditional.getCondition()), BinaryOperator.AND,
 						body.expression(conditional.getTrueExpression())),
 				BinaryOperator.OR,
 				body.expression(conditional.getFalseExpression()));

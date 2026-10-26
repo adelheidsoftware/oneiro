@@ -7,12 +7,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.adelheid.oneiro.plugin.ClientFacts;
+import org.adelheid.oneiro.plugin.LuaLibraries;
 import org.adelheid.oneiro.plugin.PackageChecks;
-import org.adelheid.oneiro.plugin.VendoredLibraries;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.SetProperty;
 import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.Input;
@@ -24,8 +25,9 @@ import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
 
 /**
- * {@code checkPlugin}: checks that the folder that ships holds only what a plugin may, its vendored libraries among it,
- * each of which the plugin's Lua requires; that each Lua file under {@code src/} starts with its path; that every
+ * {@code checkPlugin}: checks that every dependency the manifest names has a Mod.io ID; that the folder that ships
+ * holds only what a plugin may, its vendored libraries among it, each of which the plugin's Lua requires; that each Lua
+ * file under {@code src/} starts with its path; that every
  * {@code require} finds its file; and that no Lua in it uses a member of the client's that is for development only,
  * nor, but in a library, one that needs a permission the manifest lacks. It runs as part of {@code check}, and before
  * the zip is made.
@@ -46,10 +48,17 @@ public abstract class CheckPlugin extends DefaultTask {
 	@Input
 	public abstract SetProperty<String> getPermissions();
 
-	/** The list of the libraries the plugin vendors and their files, which {@code oneiroLibraries} writes. */
+	/** The list of the libraries the plugin uses and their files, which {@code oneiroLibraries} writes. */
 	@InputFile
 	@PathSensitive(PathSensitivity.NONE)
 	public abstract RegularFileProperty getLibraries();
+
+	/**
+	 * The dependencies that ship but name only a folder on this machine, each by its alias, with its kind,
+	 * {@code required} or {@code optional}.
+	 */
+	@Input
+	public abstract MapProperty<String, String> getUnpublishedDependencies();
 
 	/** The outcome, kept so that the check is up to date while the folder does not change. */
 	@OutputFile
@@ -60,7 +69,8 @@ public abstract class CheckPlugin extends DefaultTask {
 		try {
 			List<String> problems = PackageChecks.check(getPluginFolder().get().getAsFile().toPath(),
 					ClientFacts.read(getClientFacts().get().getAsFile().toPath()), getPermissions().get(),
-					VendoredLibraries.read(getLibraries().get().getAsFile().toPath()).shipped());
+					LuaLibraries.read(getLibraries().get().getAsFile().toPath()).shipped(),
+					getUnpublishedDependencies().get());
 			Path report = getReport().get().getAsFile().toPath();
 			Files.createDirectories(report.getParent());
 			String outcome = problems.isEmpty() ? "The plugin may ship.\n" : String.join("\n", problems) + "\n";

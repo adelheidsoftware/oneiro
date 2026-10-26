@@ -23,6 +23,7 @@ import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
+import org.adelheid.oneiro.plugin.LuaLibraries;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -50,9 +51,9 @@ class PluginLuaBindingsTest {
 				BindingsGenerator.Language.JAVA);
 		result = BindingsGenerator.generateLua(STUBS, rs3.classesJar(), output, BindingsGenerator.Language.JAVA, ROOT,
 				List.of(new BindingsGenerator.Library("widgets", "org.adelheid.oneiro.lib.widgets",
-						LIBRARIES.resolve("widgets"), "", null)),
+						LIBRARIES.resolve("widgets"), "", null, LuaLibraries.Use.VENDORED)),
 				List.of(new BindingsGenerator.Library("gauges", "org.adelheid.oneiro.lib.gauges",
-						LIBRARIES.resolve("addon").resolve("library"), "", null)),
+						LIBRARIES.resolve("addon").resolve("library"), "", null, LuaLibraries.Use.REQUIRED)),
 				LUA.resolve("main"), LUA.resolve("dev"));
 		main = result.main();
 		dev = result.dev();

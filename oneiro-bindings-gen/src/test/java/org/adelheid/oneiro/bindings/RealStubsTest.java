@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import org.adelheid.oneiro.plugin.LuaLibraries;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -55,9 +56,10 @@ class RealStubsTest {
 		BindingsGenerator.Result result = BindingsGenerator.generate(stubs, Path.of("build", "real-library-bindings"),
 				Overrides.bundled(), BindingsGenerator.Language.JAVA, List.of(
 						new BindingsGenerator.Library("zyklib", "org.adelheid.oneiro.lib.zyklib", zyklib, "",
-								Path.of("src", "test", "libraries", "zyklib-overrides.txt")),
+								Path.of("src", "test", "libraries", "zyklib-overrides.txt"),
+								LuaLibraries.Use.VENDORED),
 						new BindingsGenerator.Library("blueprint", "org.adelheid.oneiro.lib.blueprint", blueprintHelper,
-								"src/", null)));
+								"src/", null, LuaLibraries.Use.VENDORED)));
 		for (BindingsGenerator.LibraryResult library : result.libraries()) {
 			assertTrue(Files.size(library.classesJar()) > 0);
 			assertEquals(List.of(), library.warnings(), library.name());

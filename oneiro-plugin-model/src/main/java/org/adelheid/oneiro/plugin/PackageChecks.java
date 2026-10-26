@@ -12,12 +12,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * The checks {@code checkPlugin} runs on the folder that ships, before it is zipped. The folder may hold only
+ * The checks {@code checkPlugin} runs on the folder that ships, before it is zipped. Every dependency its manifest
+ * names has a Mod.io ID, by which players' clients find it. The folder may hold only
  * {@code main.lua}, {@code plugin.json}, Lua files under {@code src/}, PNG or Ogg files under {@code resources/}, and
  * the files of the libraries it vendors, their Lua and their licences. Every Lua file under {@code src/}, Oneiro's or
  * the plugin's own, starts with its path, by which the client's errors name it; every {@code require} names a file in
@@ -46,9 +48,11 @@ public final class PackageChecks {
 	 * @param facts the client's members that need a permission or are for development only
 	 * @param permissions the permissions the manifest requests, required or optional
 	 * @param libraries the libraries the plugin vendors and ships
+	 * @param unpublished the dependencies that ship but name only a folder on this machine, each by its alias, with
+	 *     its kind, {@code required} or {@code optional}
 	 */
 	public static List<String> check(Path folder, ClientFacts facts, Set<String> permissions,
-			List<VendoredLibraries.Library> libraries) throws IOException {
+			List<LuaLibraries.Library> libraries, Map<String, String> unpublished) throws IOException {
 		// Each vendored file by the library it comes from
 		Map<String, String> vendored = new HashMap<>();
 		libraries.forEach(library -> library.files().forEach(path -> vendored.put(path, library.name())));
@@ -58,6 +62,10 @@ public final class PackageChecks {
 				problems.add("The plugin has no " + required + ", which the client needs at the top of the folder.");
 			}
 		}
+		new TreeMap<>(unpublished).forEach((alias, kind) -> problems.add("The " + kind + " dependency " + alias
+				+ " names only a folder on this machine, with devFolder, so the plugin cannot ship: players' clients"
+				+ " find a dependency by its Mod.io ID. Once the library is published, name it, " + kind + "(\""
+				+ alias + "\", <Mod.io ID>) { devFolder(...) }, and the development folder still uses the folder."));
 		List<Path> files;
 		try (Stream<Path> walk = Files.walk(folder)) {
 			files = walk.filter(Files::isRegularFile).sorted().toList();
@@ -89,7 +97,7 @@ public final class PackageChecks {
 				}
 			}
 		}
-		for (VendoredLibraries.Library library : libraries) {
+		for (LuaLibraries.Library library : libraries) {
 			if (library.files().stream().noneMatch(required::contains)) {
 				problems.add(library.name() + " is vendored, but no Lua of the plugin's requires it, so moderators"
 						+ " would read its code for nothing; use it, or remove it from the build.");

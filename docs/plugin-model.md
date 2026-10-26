@@ -40,7 +40,9 @@ oneiro {
         contactEmail = "plugins@example.org"
         settingsIcon = true
         dependencies {
-            required("prettyui", 6398181)
+            required("prettyui", 6398181) {
+                types { local(file("lua-types/prettyui")) }
+            }
         }
         permissions {
             optional(chatAccess)
@@ -67,13 +69,14 @@ oneiro {
 | `plugin { id = "..." }` | The identifier: the dev link's name, the zip's name and the prefix of event subscriptions. Lowercase words joined by hyphens; by default the project's name. |
 | `plugin { name, contactEmail }` | What people see, and the address the legal sections require. Both are required. |
 | `plugin { settingsIcon, ribbonIcon }` | The manifest's `hasSettingsIcon` and `hasRibbonIcon`: icons whose layers the `SettingsLayerReady` and `ContentLayerReady` events fill. Subscribing to one of those events without its icon does not compile. |
-| `plugin { dependencies { required(alias, modId) } }` | Another plugin, by its Mod.io ID, exposed as the Lua global `alias`; `required(alias, "folder")` names a plugin on this machine by its folder, and `optional(...)` a dependency the plugin can do without. |
+| `plugin { dependencies { required(alias, modId) } }` | A library plugin the plugin cannot do without, by its Mod.io ID, which the client exposes as the Lua global `alias`; `optional(alias, modId)` one it uses when present, and `development(alias, modId)` one only the dev source set uses. Each may take a block, as [Library plugins](#library-plugins) explains. |
+| `types { ... }`, `devFolder(folder)` | In a dependency's block: where the LuaCATS types its classes are generated from come from; and the folder of a plugin on this machine that the development folder's manifest names instead of the Mod.io ID. `required(alias) { devFolder(folder) }` names a dependency not published yet, which `checkPlugin` does not let ship. |
 | `plugin { permissions { optional(chatAccess) } }` | `httpAccess`, `chatAccess` or `trackingAccess`. Prefer `optional`, and check `CurrentPlugin.HasPermission` before using what it unlocks; `required` makes the plugin unusable without it. Code that needs an undeclared permission does not compile, and Oneiro never adds one on its own. |
 | `plugin { urls { url(alias, url) } }` | A base URL the plugin may reach with `httpAccess`, read in code as `Urls.<alias>`. |
 | `libraries { vendored(name) { ... } }` | A Lua library the plugin vendors: copied into it and bound from its annotations, as [Vendored libraries](#vendored-libraries) explains. The name, lowercase letters and digits, names the package of its bindings, `org.adelheid.oneiro.lib.<name>`. |
 | `libraries { development(name) { ... } }` | A library only the dev source set uses, which goes into the development folder alone. |
-| `remote(url, commit)` or `local(dir)` | In a library's block: its code, a repository on GitHub, Codeberg or GitLab at a full commit, or a checkout on this machine. |
-| `from(folder)`, `licence(file)`, `overrides(file)` | In a library's block: the folder of it whose Lua goes to the plugin's root, its root by default; its licence's file, by default the one file at its root named like a licence; and an overrides file for its bindings. |
+| `remote(url, commit)` or `local(dir)` | In a library's block or a dependency's `types { }`: its code, a repository on GitHub, Codeberg or GitLab at a full commit, or a checkout on this machine. |
+| `from(folder)`, `licence(file)`, `overrides(file)` | In a library's block: the folder of it whose Lua goes to the plugin's root, its root by default; its licence's file, by default the one file at its root named like a licence; and an overrides file for its bindings. `from` and `overrides` work the same way in a dependency's `types { }`. |
 | `rootPackage` | The package whose subpackages become folders under `src/`; by default the plugin class's package. |
 | `warningsAsErrors` | Whether a warning, such as a comment Oneiro cannot place or a use moderation reviews closely, fails the build. |
 | `devPlugins` | The client's `dev_plugins` folder; by default the beta client's on Windows, `C:\ProgramData\Jagex\RuneScape-BETA\dev_plugins`. |
@@ -88,17 +91,17 @@ overrides Oneiro applies to them may no longer match.
 | Task | What it does | Output |
 | --- | --- | --- |
 | `oneiroBindings` | Generates the RS3 bindings from the stubs, in a worker process, and compiles them; for a plugin written in Kotlin, a member that takes a hook has a form for each callback the hook takes, so that the callback can be a trailing lambda | `build/oneiro/bindings/rs3-bindings.jar`, and a sources jar for the IDE |
-| `oneiroLibraries` | Fetches the libraries the plugin vendors and stages them as they ship, with their licences, and checks that they may | `build/oneiro/libraries/` |
-| `oneiroLuaBindings` | Generates classes from the LuaCATS annotations of the libraries and of the plugin's own Lua, `src/main/lua/` and `src/dev/lua/`, in a worker process, and compiles them; the main set's and its libraries' are on the main source set's classpath, the dev set's and its libraries' on the dev source set's alone | `build/oneiro/lua-bindings/`: `main-bindings.jar`, `dev-bindings.jar` and a jar per library under `libraries/`, each with a sources jar |
+| `oneiroLibraries` | Fetches the libraries the plugin vendors and stages them as they ship, with their licences, and checks that they may; and stages the types of the library plugins it depends on | `build/oneiro/libraries/` |
+| `oneiroLuaBindings` | Generates classes from the LuaCATS annotations of the libraries, of the library plugins' types and of the plugin's own Lua, `src/main/lua/` and `src/dev/lua/`, in a worker process, and compiles them; the main set's and its libraries' are on the main source set's classpath, the dev set's and its libraries' on the dev source set's alone | `build/oneiro/lua-bindings/`: `main-bindings.jar`, `dev-bindings.jar` and a jar per library under `libraries/`, each with a sources jar |
 | `oneiroSources` | Writes the typed `Resources` class from `src/main/resources/` and the `Urls` class from the manifest's URLs | `build/generated/sources/oneiro/java/main` |
 | `compileJava` | javac, with Oneiro as a javac plugin: once javac has analysed the sources without errors, Oneiro checks them and writes the Lua | `build/oneiro/lua/main/` |
 | `oneiroKotlin` | For a plugin written in Kotlin, after Kotlin's own `compileKotlin`: Oneiro's Kotlin front end checks the sources and writes the Lua, in a worker process | `build/oneiro/lua/main/` |
-| `pluginManifest` | Writes `plugin.json` from the `plugin { }` block, with every rule of the manifest checked | `build/oneiro/manifest/plugin.json` |
+| `pluginManifest` | Writes `plugin.json` from the `plugin { }` block, with every rule of the manifest checked, among them those on aliases, against the client's globals that the stubs declare | `build/oneiro/manifest/plugin.json` |
 | `assemblePlugin` | The plugin exactly as it ships | `build/oneiro/plugin/`: `main.lua`, `plugin.json`, `src/` with the plugin's own Lua, `resources/`, and each vendored library's Lua with its licence under `licences/` |
 | `checkPlugin` | Checks that folder; part of `check` | `build/oneiro/check-plugin.txt` |
 | `packagePlugin` | Zips that folder, with `main.lua` and `plugin.json` at the top; part of `assemble` | `build/distributions/<id>-<version>.zip` |
-| `assembleDevPlugin` | The shipped folder plus the dev source set's Lua, compiled and its own, under `dev/`, and its libraries | `build/oneiro/dev-plugin/` |
-| `linkDevPlugin` | Links the plugin into the client's `dev_plugins` folder under its identifier: the dev folder when there is a dev source set, the shipped folder otherwise | A junction on Windows, a symbolic link elsewhere |
+| `assembleDevPlugin` | The shipped folder plus the dev source set's Lua, compiled and its own, under `dev/`, and its libraries, with a manifest of its own, which names each dependency's `devFolder` where it has one and requires the development dependencies too | `build/oneiro/dev-plugin/` |
+| `linkDevPlugin` | Links the plugin into the client's `dev_plugins` folder under its identifier: the dev folder when there is a dev source set or its manifest differs from the shipped one, the shipped folder otherwise | A junction on Windows, a symbolic link elsewhere |
 | `testLua` | Runs each `*_test.lua` under `src/test/lua/` against the shipped folder, in a worker process; part of `check` | `build/oneiro/test-lua.txt` |
 | `explainError` | Shows the plugin's errors in text copied from the client's console as the source lines they came from: `./gradlew explainError --input=console.txt` | Printed; it reads the line maps the compile writes to `build/oneiro/line-maps/` |
 
@@ -279,7 +282,8 @@ compiles against the main one, and its Lua goes under `dev/` in `build/oneiro/de
 its classes may extend `DevPlugin`: it works like the plugin class, becomes `dev/main.lua`, which the development
 folder's `main.lua` requires last, subscribes its methods under `"<id>.dev.<method>"`, and wraps `PluginShutdown` so
 that the plugin's own shutdown runs first. When the dev source set exists, `linkDevPlugin` links the development
-folder, so the client runs the shipped files plus the helpers.
+folder, so the client runs the shipped files plus the helpers; it does too when a dependency names a `devFolder` or is
+for development alone, so that the client reads the development folder's manifest.
 
 ## The plugin's own Lua
 
@@ -395,11 +399,107 @@ Zyklib's `lifecycle.setupGlobals` wraps a `PluginShutdown` that exists when it r
 defined at the end of `main.lua`, after `startUp()`, and replaces the wrapper; a plugin built with Oneiro calls
 `zyklib.lifecycle.notifyShutdown()` from its `shutDown()` instead.
 
+## Library plugins
+
+A library plugin, such as PrettyUI (Mod.io 6398181), ships on its own: the player installs it, and the client gives
+each plugin whose manifest names it the library's table as a Lua global, named by the alias the manifest gives it. None
+of its code ships with the plugin. Its classes come from LuaCATS types the build names: definition files written from
+its public docs, kept with the plugin's sources and never shipped, or a repository of community types.
+
+```kotlin
+oneiro {
+    plugin {
+        dependencies {
+            required("prettyui", 6398181) {
+                types { local(file("lua-types/prettyui")) }
+            }
+        }
+    }
+}
+```
+
+`types { }` takes what a vendored library's block takes: `local(file(...))` or `remote(url, commit)`; `from(folder)`,
+for a folder such as `library` in a repository laid out for LLS-Addons; and `overrides(file(...))`. `oneiroLuaBindings`
+generates the classes in `org.adelheid.oneiro.lib.<alias>`. The types declare the library's global, `---@class
+prettyui` with `prettyui = {}`, or give the `main.lua` that returns its table, as the library's own code does; either is
+the class named like the alias, which stands for the global, so `prettyui.version` in Java and Kotlin is
+`prettyui.version` in Lua, and the tables it holds are classes nested in it. Its fields are final: the global is the
+plugin's copy of the library's table, which an assignment would not change for the library. Its constant `ALIAS` is the
+alias, which compiles to the string itself, to compare with the identifier an `OptionalDependencyChanged` payload
+carries. A dependency without `types { }` has no classes, so only the plugin's own Lua can use it, and code that uses a
+library the build does not declare does not compile.
+
+### Optional dependencies
+
+The player may not have an optional dependency, or may turn it off while the plugin runs, which the
+`OptionalDependencyChanged` event tells. Its class has `isLoaded()`, which in a condition is the global itself:
+
+```kotlin
+dependencies {
+    optional("prettyui", 6398181) {
+        types { local(file("lua-types/prettyui")) }
+    }
+}
+```
+
+```java
+if (prettyui.isLoaded()) {
+    log("PrettyUI " + prettyui.version);
+}
+```
+
+```lua
+if prettyui then
+    log(formatStr("PrettyUI {}", prettyui.version))
+end
+```
+
+As a value, elsewhere, it is `prettyui ~= nil`. Code that reaches the global, a field, function or constructor of the
+class or of a class nested in it, compiles only where a check reaches it in the same function: inside
+`if (prettyui.isLoaded())` or a `while` on it, in the `else` of `if (!prettyui.isLoaded())`, on the right of
+`prettyui.isLoaded() &&`, or after `if (!prettyui.isLoaded()) return;` or another exit. A lambda, a method or function,
+and a class stop the search, since their code runs later, when the library may be gone; their code checks again. A
+value the global handed out needs no check. An unchecked use is an error that shows the check, in Java and Kotlin
+alike.
+
+### Versions, folders and the dev source set
+
+Neither the client nor the manifest knows a dependency's version, so the types describe the version they were written
+for, and the player may have another; Oneiro adds no check of its own. A library that exposes its version, as
+PrettyUI's `prettyui.version` does, is read like any field, so the plugin can check it when it starts:
+
+```java
+private static final String TESTED_WITH = "1.4.0";
+
+@Override
+protected void startUp() {
+    if (!prettyui.version.equals(TESTED_WITH)) {
+        log("Tested with PrettyUI " + TESTED_WITH + "; the player has " + prettyui.version + ".");
+    }
+}
+```
+
+Where the player's version lacks a name the types describe, the client's error says that the name is nil, and
+`explainError` adds that the library's version may be why.
+
+`devFolder("prettyui")` in a dependency's block names the folder of a plugin on this machine, by its name in the
+client's plugin folders, which the development folder's manifest names in place of the Mod.io ID: a local copy of a
+library, or one not published yet. One not published yet is named by its folder alone,
+`required("rsprite") { devFolder("rsprite") }`: the plugin can be developed against it, but `checkPlugin` fails until
+it names the Mod.io ID too, since players' clients find a dependency by its ID. `development("probe", 5151)` names a
+dependency only the dev source set uses: only the development folder's manifest requires it, and only the dev source
+set has its classes.
+
+An alias is a Lua name that no global of Lua's or of the client's has already, such as `print` or `Player`, since the
+client exposes the dependency as the global of its alias, and a dependency is declared once, of one kind. An alias whose
+dependency has types names the package of its classes, so it is no vendored library's name, nor a word Java reserves.
+
 ## What `checkPlugin` checks
 
 `checkPlugin` reads the shipped folder as Mod.io would receive it and fails the build on any of these:
 
 - `main.lua` or `plugin.json` is missing.
+- A dependency names only a folder on this machine, with `devFolder`, and no Mod.io ID.
 - A file is something other than `main.lua`, `plugin.json`, a Lua file under `src/`, a PNG or Ogg Vorbis file under
   `resources/`, or a file of a vendored library, its Lua or its licence.
 - A Lua file under `src/` does not start with its path, `-- src/core/levels.lua`.
@@ -414,7 +514,8 @@ defined at the end of `main.lua`, after `startUp()`, and replaces the wrapper; a
 - An image is larger than 1024 by 1024 pixels, or a resource is not really a PNG or an Ogg Vorbis file.
 
 The manifest's own rules are checked when it is written: the identifier, name, version and contact address; known
-permissions, none both required and optional; dependency aliases that are Lua names, each with a Mod.io ID or a folder;
+permissions, none both required and optional; dependency aliases that are Lua names no global of Lua's or of the
+client's has, each declared once, with a Mod.io ID or a folder on this machine;
 URLs that are `http` or `https` with a host; and base URLs only together with `httpAccess`, and `httpAccess` only with
 a base URL.
 

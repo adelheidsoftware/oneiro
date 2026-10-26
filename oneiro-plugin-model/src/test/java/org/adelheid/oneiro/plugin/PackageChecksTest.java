@@ -16,7 +16,8 @@ import org.junit.jupiter.api.io.TempDir;
 class PackageChecksTest {
 
 	private static final ClientFacts FACTS = new ClientFacts(
-			Map.of("Chat.AddMessage", "chatAccess", "HTTPRequest", "httpAccess"), Set.of("ExecuteConsoleCommand"));
+			Map.of("Chat.AddMessage", "chatAccess", "HTTPRequest", "httpAccess"), Set.of("ExecuteConsoleCommand"),
+			Set.of("Chat", "ExecuteConsoleCommand", "HTTPRequest"));
 
 	@TempDir
 	Path folder;
@@ -53,9 +54,9 @@ class PackageChecksTest {
 		write("zyklib.lua", "local array = require \"zyklib/array\"\nreturn { array = array }\n");
 		write("zyklib/array.lua", "local function fetch() return HTTPRequest.new(nil, \"/\") end\nreturn {}\n");
 		write("licences/zyklib/LICENCE.md", "MIT License\n");
-		VendoredLibraries.Library zyklib = new VendoredLibraries.Library("zyklib", false,
+		LuaLibraries.Library zyklib = new LuaLibraries.Library("zyklib", LuaLibraries.Use.VENDORED, false,
 				List.of("zyklib.lua", "zyklib/array.lua", "licences/zyklib/LICENCE.md"));
-		assertEquals(List.of(), PackageChecks.check(folder, FACTS, Set.of("chatAccess"), List.of(zyklib)));
+		assertEquals(List.of(), PackageChecks.check(folder, FACTS, Set.of("chatAccess"), List.of(zyklib), Map.of()));
 	}
 
 	@Test
@@ -67,10 +68,14 @@ class PackageChecksTest {
 		writePng("resources/huge.png", 2048, 16);
 		write("json.lua", "ExecuteConsoleCommand(\"!give 995 1000\")\nreturn {}\n");
 		write("licences/json/LICENSE", "MIT License\n");
-		VendoredLibraries.Library json = new VendoredLibraries.Library("json", false,
+		LuaLibraries.Library json = new LuaLibraries.Library("json", LuaLibraries.Use.VENDORED, false,
 				List.of("json.lua", "licences/json/LICENSE"));
 		assertEquals(List.of(
 				"The plugin has no plugin.json, which the client needs at the top of the folder.",
+				"The optional dependency rsprite names only a folder on this machine, with devFolder, so the plugin"
+						+ " cannot ship: players' clients find a dependency by its Mod.io ID. Once the library is"
+						+ " published, name it, optional(\"rsprite\", <Mod.io ID>) { devFolder(...) }, and the"
+						+ " development folder still uses the folder.",
 				"README.md is not part of a plugin: only main.lua, plugin.json, Lua files under src/, PNG or Ogg files"
 						+ " under resources/, and the files of the libraries the build vendors ship.",
 				"resources/huge.png is 2048 by 16 pixels; the client loads images up to 1024 by 1024.",
@@ -84,6 +89,6 @@ class PackageChecksTest {
 						+ " add it to the build, oneiro { plugin { permissions { optional(httpAccess) } } }.",
 				"json is vendored, but no Lua of the plugin's requires it, so moderators would read its code for"
 						+ " nothing; use it, or remove it from the build."),
-				PackageChecks.check(folder, FACTS, Set.of(), List.of(json)));
+				PackageChecks.check(folder, FACTS, Set.of(), List.of(json), Map.of("rsprite", "optional")));
 	}
 }

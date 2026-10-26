@@ -15,7 +15,7 @@ public final class BindingAnnotations {
 
 	private static final Set<String> NAMES = Set.of("LuaColon", "LuaConstants", "LuaCopy", "LuaDevOnly", "LuaDot",
 			"LuaEvent", "LuaFromId", "LuaGlobal", "LuaIndex", "LuaManifestFlag", "LuaModule", "LuaOperator",
-			"LuaPermission", "LuaReview", "LuaSame", "LuaType");
+			"LuaOptional", "LuaPermission", "LuaReview", "LuaSame", "LuaType");
 
 	private static final String OWN_LUA = "keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations"
 			+ " such as ---@param and ---@return, and call the class Oneiro generates from them.";

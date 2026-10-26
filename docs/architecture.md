@@ -166,8 +166,11 @@ only the RS3 API's have its events, hooks, constant namespaces and `Globals`.
    library names but does not declare resolves to the RS3 bindings' class, then to another library's; LuaCATS
    generics become Java's. The plugin's language (`BindingsGenerator.Language`) decides how a member that takes a
    hook types the callback: one generic method, from which javac types a lambda, or for Kotlin one method for each
-   callback. Beside the RS3 jars, the generator writes the members its bindings mark as needing a permission or for
-   development only, which `checkPlugin` looks for in the Lua that ships (`ClientFacts`).
+   callback. A library plugin's class named like its alias stands for the global the client gives the plugin
+   (`BindingsTarget.dependency`): its static fields are final, `ALIAS` holds the alias, and an optional one's carries
+   `@LuaOptional` and `isLoaded()`. Beside the RS3 jars, the generator writes the members its bindings mark as needing
+   a permission or for development only, which `checkPlugin` looks for in the Lua that ships, and the client's
+   globals, which a dependency's alias may not take (`ClientFacts`).
 4. The constant namespaces hold about half a million names; `config.Loc` alone has more than one class can hold.
    `ConstantChunks` writes them straight to class files with the JDK's ClassFile API, as a chain of chunk classes
    that each extend the one before, which is also far faster than compiling them from Java. `Jars` packs everything
@@ -175,16 +178,19 @@ only the RS3 API's have its events, hooks, constant namespaces and `Globals`.
    go into a jar of their own. In a plugin's build, the libraries it vendors come first, those of its main source
    set and then those of its dev source set alone, and its own Lua after them, which gives two jars more: its main
    source set's, compiled against the RS3 jar and the main set's libraries, and its dev source set's, compiled against
-   everything. The Gradle plugin stages the libraries for this with `oneiroLibraries` (`VendorLibraries`), which
-   copies each library's Lua and licence as they ship and lists them (`VendoredLibraries`, in the plugin model) for
-   the generator and for `checkPlugin`.
+   everything. The Gradle plugin stages the libraries for this with `oneiroLibraries` (`StageLibraries`), which
+   copies each vendored library's Lua and licence as they ship, and each library plugin's types, and lists them
+   (`LuaLibraries`, in the plugin model) for the generator and for `checkPlugin`.
 
 The front ends call a class of the bindings as its annotations say. A module's class, `@LuaModule`, and the classes
 nested in it start their path at the local that the file's `require` of the module binds, where a global table's start
 at the global. The annotations belong to generated code alone: `BindingAnnotations` names them, and both front ends
 reject them on a class of the plugin's, with Java's `native` methods and Kotlin's `external` functions. The generated
 `Resources` and `Urls`, which are compiled with the plugin's sources, carry `@Generated`, by which the Java front end
-tells them apart.
+tells them apart. A String constant of the bindings, such as a library plugin's `ALIAS`, compiles to its value. Each
+front end's `OptionalChecks` holds the uses of an optional dependency's global to the rule `OptionalDependencies`
+states: it walks up from a use to the method or lambda around it, looking for a check that reaches it, and
+`isLoaded()` is the global itself in a condition and `alias ~= nil` elsewhere.
 
 `ClientAudit`, in a source set of its own that is not published, compares the members the client's objects have, as
 a development plugin logs them from their metatables, with the bindings: `./gradlew :oneiro-bindings-gen:auditClient
@@ -194,7 +200,8 @@ update, each difference it finds ends as an overrides line.
 ## Tests
 
 - **Conformance.** Each folder under `conformance/src/test/resources/cases/` is one case. `ConformanceTest` compiles
-  its `input/`, against the bindings of its own Lua in `lua/` when it has some, and compares the Lua with the
+  its `input/`, against the bindings of its own Lua in `lua/` when it has some and of the library plugins whose types
+  are in `dependencies/required/` and `dependencies/optional/`, and compares the Lua with the
   hand-written `expected/` files, or the errors with `diagnostics.txt`, and does the same for its Kotlin twin in
   `kotlin/`, which must give the same Lua. It then runs `check.lua` against the
   generated modules on Lua 5.4, and checks that the expected Lua is formatted as StyLua formats it. Every row of

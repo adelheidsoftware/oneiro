@@ -24,6 +24,7 @@ import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
+import org.adelheid.oneiro.plugin.LuaLibraries;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -31,9 +32,11 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * The bindings of the library fixtures in {@code src/test/libraries}, against the RS3 bindings of the stubs fixture:
- * {@code widgets}, a library's annotated code, whose modules become classes nested as Lua reaches them, and
- * {@code gauges}, definition files for a library plugin seen as a global, whose types name the RS3 API's. They generate
- * without a warning, a file that uses each shape compiles against them, and each library's jar holds its own classes.
+ * {@code widgets}, a vendored library's annotated code, whose modules become classes nested as Lua reaches them;
+ * {@code gauges}, definition files for an optional library plugin seen as a global, whose types name the RS3 API's;
+ * and {@code beacons}, a required library plugin's own code, whose {@code main.lua} returns the table the global is.
+ * They generate without a warning, a file that uses each shape compiles against them, and each library's jar holds its
+ * own classes.
  */
 class LibraryBindingsTest {
 
@@ -53,9 +56,11 @@ class LibraryBindingsTest {
 				Path.of("build", "library-bindings-" + language.name().toLowerCase(Locale.ROOT)), Overrides.bundled(),
 				language, List.of(
 						new BindingsGenerator.Library("widgets", "org.adelheid.oneiro.lib.widgets",
-								LIBRARIES.resolve("widgets"), "", null),
+								LIBRARIES.resolve("widgets"), "", null, LuaLibraries.Use.VENDORED),
 						new BindingsGenerator.Library("gauges", "org.adelheid.oneiro.lib.gauges",
-								LIBRARIES.resolve("addon").resolve("library"), "", null)));
+								LIBRARIES.resolve("addon").resolve("library"), "", null, LuaLibraries.Use.OPTIONAL),
+						new BindingsGenerator.Library("beacons", "org.adelheid.oneiro.lib.beacons",
+								LIBRARIES.resolve("beacons"), "", null, LuaLibraries.Use.REQUIRED)));
 	}
 
 	@Test
@@ -147,6 +152,38 @@ class LibraryBindingsTest {
 		// A type of another library the build declares
 		assertTrue(gauges.contains("import org.adelheid.oneiro.lib.widgets.widgets;\n"));
 		assertTrue(gauges.contains("public native void Follow(widgets.Counter counter);"));
+	}
+
+	/**
+	 * A library plugin's global is the plugin's copy of its table, whose fields it cannot change; its class holds the
+	 * alias, and for an optional dependency, the check that it is loaded.
+	 */
+	@Test
+	void anOptionalLibraryPluginsGlobalHasItsCheck() throws IOException {
+		String gauges = source("gauges", "gauges.java");
+		assertTrue(gauges.contains("@LuaOptional\n@LuaGlobal(\"gauges\")\npublic final class gauges {"), gauges);
+		assertTrue(gauges.contains("\tpublic static final String ALIAS = \"gauges\";\n"), gauges);
+		assertTrue(gauges.contains("\tpublic static native boolean isLoaded();\n"), gauges);
+		assertTrue(gauges.contains("\tpublic static final String version = LuaOnly.value();\n"), gauges);
+	}
+
+	/**
+	 * Read from a library plugin's own code, the global is what its main.lua returns, and the tables that holds are
+	 * nested in it; a required dependency needs no check.
+	 */
+	@Test
+	void aLibraryPluginsMainIsItsGlobal() throws IOException {
+		String beacons = source("beacons", "beacons.java");
+		assertTrue(beacons.contains("@LuaGlobal(\"beacons\")\npublic final class beacons {"), beacons);
+		assertFalse(beacons.contains("@LuaModule"), beacons);
+		assertTrue(beacons.contains("\tpublic static final String ALIAS = \"beacons\";\n"), beacons);
+		assertFalse(beacons.contains("isLoaded"), beacons);
+		assertTrue(beacons.contains("\tpublic static final String version = LuaOnly.value();\n"), beacons);
+		assertTrue(beacons.contains("\tpublic static native int lit();\n"), beacons);
+		assertTrue(beacons.contains("\t@LuaGlobal(\"beacons.Beacon\")\n\tpublic static class Beacon {"), beacons);
+		assertTrue(beacons.contains("\t\tpublic Beacon(String label) {"), beacons);
+		assertTrue(beacons.contains("\t\tpublic static native int count();\n"), beacons);
+		assertTrue(beacons.contains("\t\tpublic boolean lit;\n"), beacons);
 	}
 
 	@Test

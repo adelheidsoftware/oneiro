@@ -1,0 +1,19 @@
+plugin/Unchecked.java:14: error: gauges is an optional dependency, which the player may not have, or may turn off while the plugin runs; reach it where a check does: inside if (gauges.isLoaded()) { ... }, or after if (!gauges.isLoaded()) return; in the same function. Code in a lambda checks again, as it runs later.
+		return gauges.version;
+		       ^
+
+plugin/Unchecked.java:21: error: gauges is an optional dependency, which the player may not have, or may turn off while the plugin runs; reach it where a check does: inside if (gauges.isLoaded()) { ... }, or after if (!gauges.isLoaded()) return; in the same function. Code in a lambda checks again, as it runs later.
+		new gauges.Gauge("health").SetValue(value);
+		^
+
+plugin/Unchecked.java:28: error: gauges is an optional dependency, which the player may not have, or may turn off while the plugin runs; reach it where a check does: inside if (gauges.isLoaded()) { ... }, or after if (!gauges.isLoaded()) return; in the same function. Code in a lambda checks again, as it runs later.
+		values.forEach(value -> new gauges.Gauge("health").SetValue(value));
+		                        ^
+
+plugin/Unchecked.java:32: error: gauges is an optional dependency, which the player may not have, or may turn off while the plugin runs; reach it where a check does: inside if (gauges.isLoaded()) { ... }, or after if (!gauges.isLoaded()) return; in the same function. Code in a lambda checks again, as it runs later.
+		return gauges.isLoaded() ? "loaded" : gauges.version;
+		                                      ^
+
+plugin/Unchecked.java:36: error: isLoaded() checks the dependency's global, which is no function of the library's; write the reference as a lambda, () -> gauges.isLoaded(), which checks it when it is called.
+		return gauges::isLoaded;
+		       ^

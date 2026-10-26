@@ -31,6 +31,7 @@ import org.adelheid.oneiro.lowering.Diagnostic;
 import org.adelheid.oneiro.lowering.LuaModule;
 import org.adelheid.oneiro.lowering.PluginFacts;
 import org.adelheid.oneiro.lua.LuaPrinter;
+import org.adelheid.oneiro.plugin.LuaLibraries;
 import org.adelheid.oneiro.runner.LuaRunner;
 import org.adelheid.oneiro.runner.LuaTests;
 import org.jspecify.annotations.Nullable;
@@ -52,6 +53,8 @@ import org.junit.jupiter.api.TestFactory;
  *       generated modules under {@code src/}, and whose annotations give the bindings the sources compile against;
  *   <li>{@code types/}: definition files that give those bindings instead, where the Lua is another's, such as
  *       Blueprint-Helper's;
+ *   <li>{@code dependencies/required/<alias>/} and {@code dependencies/optional/<alias>/}: definition files of the
+ *       library plugins the case depends on, whose bindings it compiles against too;
  *   <li>{@code case.properties}: the plugin's {@code id}, {@code permissions} and {@code flags}, and whether the
  *       sources are the {@code dev} source set;
  *   <li>{@code kotlin/}: the same plugin in Kotlin, its twin, which must give the same Lua, and its own
@@ -264,7 +267,7 @@ class ConformanceTest {
 		List<Path> classpath = new ArrayList<>(
 				Stream.of(System.getProperty("java.class.path").split(File.pathSeparator)).map(Path::of).toList());
 		classpath.add(FixtureBindings.JAVA);
-		classpath.addAll(ownLuaBindings(folder, BindingsGenerator.Language.JAVA, FixtureBindings.JAVA));
+		classpath.addAll(luaBindings(folder, BindingsGenerator.Language.JAVA, FixtureBindings.JAVA));
 		return classpath;
 	}
 
@@ -277,28 +280,45 @@ class ConformanceTest {
 		List<Path> classpath = new ArrayList<>(Stream.of(System.getProperty("oneiro.kotlinClasspath")
 				.split(File.pathSeparator)).map(Path::of).toList());
 		classpath.add(FixtureBindings.KOTLIN);
-		classpath.addAll(ownLuaBindings(folder, BindingsGenerator.Language.KOTLIN, FixtureBindings.KOTLIN));
+		classpath.addAll(luaBindings(folder, BindingsGenerator.Language.KOTLIN, FixtureBindings.KOTLIN));
 		return classpath;
 	}
 
 	/**
-	 * The bindings of a case's own Lua, from the definition files in its {@code types/}, or else from its {@code lua/},
-	 * which must generate without a warning; none for a case without Lua of its own.
+	 * The bindings of the Lua a case uses, which must generate without a warning: the library plugins it depends on,
+	 * from the definition files in {@code dependencies/required/<alias>/} and {@code dependencies/optional/<alias>/},
+	 * and its own Lua, from the definition files in its {@code types/}, or else from its {@code lua/}; none for a case
+	 * without either.
 	 */
-	private static List<Path> ownLuaBindings(Path folder, BindingsGenerator.Language language, Path rs3Jar)
+	private static List<Path> luaBindings(Path folder, BindingsGenerator.Language language, Path rs3Jar)
 			throws IOException {
+		List<BindingsGenerator.Library> dependencies = new ArrayList<>();
+		for (LuaLibraries.Use use : List.of(LuaLibraries.Use.REQUIRED, LuaLibraries.Use.OPTIONAL)) {
+			Path declared = folder.resolve("dependencies").resolve(use.name().toLowerCase(Locale.ROOT));
+			if (Files.isDirectory(declared)) {
+				try (Stream<Path> aliases = Files.list(declared)) {
+					for (Path types : aliases.sorted().toList()) {
+						String alias = types.getFileName().toString();
+						dependencies.add(new BindingsGenerator.Library(alias, "org.adelheid.oneiro.lib." + alias, types,
+								"", null, use));
+					}
+				}
+			}
+		}
 		Path types = folder.resolve("types");
 		Path lua = Files.isDirectory(types) ? types : folder.resolve("lua");
-		if (!Files.isDirectory(lua)) {
+		if (dependencies.isEmpty() && !Files.isDirectory(lua)) {
 			return List.of();
 		}
 		Path output = Path.of("build", "case-bindings",
 				folder.getFileName() + "-" + language.name().toLowerCase(Locale.ROOT));
 		BindingsGenerator.LuaResult result = BindingsGenerator.generateLua(
-				Path.of(System.getProperty("oneiro.stubsFixture")), rs3Jar, output, language, ROOT_PACKAGE, List.of(),
-				List.of(), lua, null);
-		assertEquals(List.of(), result.warnings(), "the bindings of " + lua);
-		return List.of(result.main().classesJar());
+				Path.of(System.getProperty("oneiro.stubsFixture")), rs3Jar, output, language, ROOT_PACKAGE,
+				dependencies, List.of(), lua, null);
+		assertEquals(List.of(), result.warnings(), "the bindings of the Lua " + folder.getFileName() + " uses");
+		List<Path> jars = new ArrayList<>(List.of(result.main().classesJar()));
+		result.libraries().forEach(library -> jars.add(library.classesJar()));
+		return jars;
 	}
 
 	/**

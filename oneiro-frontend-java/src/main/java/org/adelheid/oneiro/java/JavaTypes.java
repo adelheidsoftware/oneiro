@@ -49,6 +49,7 @@ final class JavaTypes {
 	static final String LUA_FROM_ID = API + "LuaFromId";
 	static final String LUA_PERMISSION = API + "LuaPermission";
 	static final String LUA_MANIFEST_FLAG = API + "LuaManifestFlag";
+	private static final String LUA_OPTIONAL = API + "LuaOptional";
 	private static final String LUA_REVIEW = API + "LuaReview";
 
 	private final Types types;
@@ -372,11 +373,35 @@ final class JavaTypes {
 	 * table or of a type.
 	 */
 	@Nullable String module(TypeElement type) {
+		return annotationValue(outermost(type), LUA_MODULE);
+	}
+
+	/**
+	 * The alias of the optional dependency a binding class belongs to: the {@code @LuaGlobal} path of its outermost
+	 * class, where that is marked {@code @LuaOptional}; null for any other class.
+	 */
+	@Nullable String optionalAlias(TypeElement type) {
+		TypeElement outermost = outermost(type);
+		return hasAnnotation(outermost, LUA_OPTIONAL) ? annotationValue(outermost, LUA_GLOBAL) : null;
+	}
+
+	/**
+	 * The alias of the optional dependency whose check a method is, the {@code isLoaded()} of its global's class; null
+	 * for any other method.
+	 */
+	@Nullable String loadedCheck(ExecutableElement method) {
+		boolean check = method.getSimpleName().contentEquals("isLoaded") && method.getParameters().isEmpty()
+				&& method.getModifiers().contains(Modifier.STATIC)
+				&& hasAnnotation(owner(method), LUA_OPTIONAL);
+		return check ? annotationValue(owner(method), LUA_GLOBAL) : null;
+	}
+
+	private static TypeElement outermost(TypeElement type) {
 		TypeElement outermost = type;
 		while (outermost.getEnclosingElement() instanceof TypeElement outer) {
 			outermost = outer;
 		}
-		return annotationValue(outermost, LUA_MODULE);
+		return outermost;
 	}
 
 	/**

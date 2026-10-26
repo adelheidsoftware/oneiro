@@ -45,6 +45,12 @@ internal class ApiCalls(private val unit: FileLowering) {
 	/** A call of a method: on the global table for a static one, or on the object. */
 	fun call(where: PsiElement, method: KaNamedFunctionSymbol, owner: KaClassSymbol, receiver: Expression?,
 		arguments: List<Expression>): Expression {
+		unit.optionals.loadedCheck(method)?.let { alias ->
+			// Whether the optional dependency's global is there; a condition tests the global itself
+			// (BodyLowering.condition)
+			unit.useGlobal(alias)
+			return Expression.binary(Expression.name(alias), BinaryOperator.NOT_EQUAL, Expression.Nil())
+		}
 		checkUse(method, owner, where)
 		val name = memberName(method, owner)
 		if (annotations.has(method, Annotations.LUA_INDEX)) {
@@ -103,8 +109,14 @@ internal class ApiCalls(private val unit: FileLowering) {
 			else "change a local copy and assign it back: $copy; ${holder.text} = $name")
 	}
 
-	/** A field: of the global table for a static one, `Player.x`, or of the object, `npc.coordGrid`. */
+	/**
+	 * A field: of the global table for a static one, `Player.x`, or of the object, `npc.coordGrid`. A string constant
+	 * of the bindings, such as a dependency's `ALIAS`, is no field of the Lua's but its value.
+	 */
 	fun field(where: PsiElement, field: KaJavaFieldSymbol, owner: KaClassSymbol, receiver: Expression?): Expression {
+		with(unit.session) { (where as? KtExpression)?.evaluate()?.value as? String }?.let {
+			return Expression.string(it)
+		}
 		checkUse(field, owner, where)
 		val name = memberName(field, owner)
 		if (field.isStatic) {
@@ -185,10 +197,17 @@ internal class ApiCalls(private val unit: FileLowering) {
 		if (LuaNames.isName(name)) Expression.field(table, name) else Expression.Index(table, Expression.string(name))
 
 	/**
-	 * Rejects what the build does not allow: a member that needs a permission the manifest does not declare, and a
-	 * development-only member outside the dev source set.
+	 * Rejects what the build does not allow: a member that needs a permission the manifest does not declare, a
+	 * development-only member outside the dev source set, and a use of an optional dependency's global that no check
+	 * reaches ([OptionalChecks]).
 	 */
 	private fun checkUse(member: KaSymbol, owner: KaClassSymbol, where: PsiElement) {
+		// A static member or a constructor reaches the global; a function or field of a value it handed out does not
+		val static = member is KaConstructorSymbol || member is KaEnumEntrySymbol ||
+			(member as? KaNamedFunctionSymbol)?.isStatic == true || (member as? KaJavaFieldSymbol)?.isStatic == true
+		if (static) {
+			unit.optionals.check(owner, where)
+		}
 		val display = display(member, owner)
 		val devOnly = annotations.has(member, Annotations.LUA_DEV_ONLY) ||
 			annotations.has(owner, Annotations.LUA_DEV_ONLY)

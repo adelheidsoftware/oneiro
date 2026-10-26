@@ -553,6 +553,84 @@ class OneiroPluginFunctionalTest {
 				+ " without a licence cannot be vendored: nobody may pass on its code without one."), output);
 	}
 
+	/**
+	 * Library plugins the plugin depends on: {@code gauges}, published and optional, whose definition file the build
+	 * names, used where a check that it is loaded reaches; {@code beacons}, not published yet, named by its folder on
+	 * this machine; and {@code probe}, which only the dev source set uses.
+	 */
+	@Test
+	void dependsOnLibraryPlugins() throws IOException {
+		plugin();
+		write("lua-types/gauges/gauges.lua", """
+				---@meta
+				-- Gauges, a library plugin: bars that show a value.
+
+				---@class gauges
+				---@field version string
+				gauges = {}
+
+				---@class gauges.Gauge
+				gauges.Gauge = {}
+
+				---@param label string
+				---@return gauges.Gauge
+				function gauges.Gauge.new(label) end
+
+				---@param value number
+				function gauges.Gauge:SetValue(value) end
+				""");
+		String build = Files.readString(project.resolve("build.gradle.kts"));
+		write("build.gradle.kts", build + """
+
+				oneiro {
+				    plugin {
+				        dependencies {
+				            optional("gauges", 4242) {
+				                types { local(file("lua-types/gauges")) }
+				            }
+				            required("beacons") { devFolder("beacons") }
+				            development("probe", 5151)
+				        }
+				    }
+				}
+				""");
+		write("src/main/java/com/example/herbs/Meters.java", """
+				package com.example.herbs;
+
+				import org.adelheid.oneiro.lib.gauges.gauges;
+
+				/** Shows a count on a gauge, where the optional library is loaded. */
+				public final class Meters {
+
+					private Meters() {
+					}
+
+					public static void show(int count) {
+						if (!gauges.isLoaded()) {
+							return;
+						}
+						new gauges.Gauge("ticks").SetValue(count);
+					}
+				}
+				""");
+		gradle("assembleDevPlugin").build();
+
+		String meters = Files.readString(project.resolve("build/oneiro/plugin/src/meters.lua"));
+		assertTrue(meters.contains("if not gauges then"), meters);
+		assertTrue(meters.contains("gauges.Gauge.new(\"ticks\"):SetValue(count)"), meters);
+		assertTrue(Files.notExists(project.resolve("build/oneiro/plugin/gauges.lua")), "the types never ship");
+		String shipped = Files.readString(project.resolve("build/oneiro/plugin/plugin.json"));
+		assertTrue(shipped.contains("\"requiredDependencies\": { \"beacons\": \"beacons\" },"), shipped);
+		assertTrue(shipped.contains("\"optionalDependencies\": { \"gauges\": 4242 },"), shipped);
+		String dev = Files.readString(project.resolve("build/oneiro/dev-plugin/plugin.json"));
+		assertTrue(dev.contains("\"requiredDependencies\": { \"beacons\": \"beacons\", \"probe\": 5151 },"), dev);
+		assertTrue(dev.contains("\"optionalDependencies\": { \"gauges\": 4242 },"), dev);
+
+		String output = gradle("checkPlugin").buildAndFail().getOutput();
+		assertTrue(output.contains("The required dependency beacons names only a folder on this machine, with"
+				+ " devFolder, so the plugin cannot ship"), output);
+	}
+
 	/** The same plugin written in Kotlin, built with the Kotlin JVM plugin applied before Oneiro's. */
 	private void kotlinPlugin() throws IOException {
 		plugin();

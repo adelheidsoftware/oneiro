@@ -437,16 +437,21 @@ plugin's Java needs no annotations of its own.
 
 Lua that Oneiro does not write is called through classes Oneiro generates from its LuaCATS annotations: the RS3 API's,
 from the stubs; the libraries the plugin vendors, as [plugin-model.md](plugin-model.md#vendored-libraries) explains;
-and the plugin's own Lua, from its files under `src/main/lua/`, as
-[plugin-model.md](plugin-model.md#the-plugins-own-lua) explains. Three features of the `oneiro-api` artifact describe
-the tables and values that pass between the plugin's code and that Lua: `@LuaName`, records, and `@LuaReturnValues`
-for several return values. Java code cannot call a library plugin, such as PrettyUI, yet.
+the library plugins it depends on, such as PrettyUI, from the types the build names for them, as
+[plugin-model.md](plugin-model.md#library-plugins) explains; and the plugin's own Lua, from its files under
+`src/main/lua/`, as [plugin-model.md](plugin-model.md#the-plugins-own-lua) explains. Three features of the
+`oneiro-api` artifact describe the tables and values that pass between the plugin's code and that Lua: `@LuaName`,
+records, and `@LuaReturnValues` for several return values.
 
 | Java | Lua | Notes |
 | --- | --- | --- |
 | `Levels.fromPenalty(penalty)` and `Levels.PERFECT`, of the class generated from `src/main/lua/core/levels.lua` | `local Levels = require("src/core/levels")` at the top of the file, then `Levels.fromPenalty(penalty)` and `Levels.PERFECT` | The class is in the package of the file's folder, `<root>.core`, and named by the module's `---@class`, or else by its file. `---@param`, `---@field` and `---@return` give the members' types; a value without one is an `Object`. |
 | `new Tally(5)` and `tally.add(2)`, of a module whose `---@class Tally` has a `new` and colon functions | `Tally.new(5)` and `tally:add(2)` | |
 | `zyklib.objects.getOrElseUpdate(counts, "starts", () -> 0)`, of the vendored library's class `org.adelheid.oneiro.lib.zyklib.zyklib` | `local zyklib = require("zyklib")` at the top of the file, then `zyklib.objects.getOrElseUpdate(counts, "starts", function() return 0 end)` | A library's module is a class named as its `require` binds it, and the tables it holds are classes nested in it. |
+| `prettyui.version`, of the class `org.adelheid.oneiro.lib.prettyui.prettyui` generated from a library plugin's types | `prettyui.version`, a field of the global the client gives the plugin | The class named like the alias stands for the global, and the tables it holds are classes nested in it. Its fields are final, as the global is the plugin's copy of the library's table. `prettyui.ALIAS` is the string `"prettyui"`. |
+| `prettyui.isLoaded()`, of an optional dependency | `if prettyui then` in a condition, `not prettyui` negated, `wanted and prettyui` beside another condition; elsewhere `prettyui ~= nil` | |
+| A use of an optional dependency's global that no check reaches | *Never*: "prettyui is an optional dependency, which the player may not have, or may turn off while the plugin runs; reach it where a check does: inside if (prettyui.isLoaded()) { ... }, or after if (!prettyui.isLoaded()) return; in the same function. Code in a lambda checks again, as it runs later." | A check reaches the `then` branch of `if (prettyui.isLoaded())` and the `else` of the negated check, the branches of `?:` alike, the right of `&&`, or of `\|\|` after a negated check, a `while` body, and what follows `if (!prettyui.isLoaded())` with a `return`, `throw`, `break` or `continue`, in the same method. It stops at a lambda, a method and a class. A value the global handed out needs no check. |
+| `prettyui::isLoaded` | *Never*: "isLoaded() checks the dependency's global, which is no function of the library's; write the reference as a lambda, () -> prettyui.isLoaded(), which checks it when it is called." | |
 | `@LuaName("Ingest") public void ingest(...)` | `function Tracker:Ingest(...)`; every call is `tracker:Ingest(...)` | Keeps a name that existing Lua code calls, or uses a Lua name Java cannot spell (`@LuaName("new")`). Works on methods, fields and record components. |
 | A record describing a table that Lua passes in | Field reads, `position.spriteId` | `@Nullable` components for fields the Lua may leave out. |
 | A class of the plugin's annotated `@LuaGlobal`, `@LuaModule` or another annotation of the generated bindings | *Never*: "@LuaModule belongs to the bindings Oneiro generates, not to the plugin's own classes; keep the Lua the plugin calls under src/main/lua, with LuaCATS annotations such as ---@param and ---@return, and call the class Oneiro generates from them." | The others are `@LuaType`, `@LuaColon`, `@LuaDot`, `@LuaIndex`, `@LuaSame`, `@LuaOperator`, `@LuaCopy`, `@LuaConstants`, `@LuaEvent`, `@LuaFromId`, `@LuaPermission`, `@LuaManifestFlag`, `@LuaReview` and `@LuaDevOnly`. |

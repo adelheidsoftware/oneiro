@@ -220,6 +220,25 @@ final class JavaBindings {
 	final Set<String> devOnly = new TreeSet<>();
 
 	/**
+	 * The names the model's Lua takes in the global table, the client's for the RS3 API: the first part of each global
+	 * class's table path and enum's name, such as {@code Event}, {@code ui} and {@code id}, and the global functions.
+	 */
+	Set<String> globals() {
+		Set<String> names = new TreeSet<>();
+		model.classes.values().stream()
+				.filter(classDef -> classDef.binding == ApiModel.Binding.GLOBAL)
+				.forEach(classDef -> names.add(firstPart(luaPath(classDef.name))));
+		model.enums.keySet().forEach(name -> names.add(firstPart(name)));
+		model.globalFunctions.forEach(function -> names.add(firstPart(function.name())));
+		return names;
+	}
+
+	private static String firstPart(String luaName) {
+		int dot = luaName.indexOf('.');
+		return dot < 0 ? luaName : luaName.substring(0, dot);
+	}
+
+	/**
 	 * @param csvs the name lists of the RS3 API's constant namespaces; empty for a library
 	 */
 	JavaBindings(ApiModel model, Map<String, CsvConstants.Namespace> csvs, Overrides overrides, BindingsTarget target,
@@ -249,6 +268,16 @@ final class JavaBindings {
 			collectEvents();
 		}
 		buildTree();
+		Node global = dependencyGlobal();
+		if (target.isDependency() && (global == null || global.classDef == null)) {
+			warnings.add("The types of " + target.library() + " declare neither the global " + target.library()
+					+ " nor a main.lua that returns the library's table, so no class stands for the global.");
+		}
+	}
+
+	/** For a library plugin, the class of its global, named like its alias; null for other bindings, or none. */
+	private @Nullable Node dependencyGlobal() {
+		return target.isDependency() ? tops.get(target.library()) : null;
 	}
 
 	TypeMapping typeMapping() {
@@ -452,6 +481,10 @@ final class JavaBindings {
 	 * is a top-level class, named as its {@code require} binds it; the tables its table holds in fields, the modules it
 	 * requires there and the classes and enums it declares there, are classes nested in it, and theirs in them. A table
 	 * that two modules hold is placed where it is reached first.
+	 *
+	 * <p>A library plugin's code is read the same way, but the plugin reaches only one of its tables, what its
+	 * {@code main.lua} returns, which the client gives it as the global of its alias: that module is the class named
+	 * like the alias, and the plugin cannot require the others, so a table of theirs that it does not hold is no class.
 	 */
 	private void placeModules() {
 		Set<String> held = new HashSet<>();
@@ -459,6 +492,14 @@ final class JavaBindings {
 		for (ApiModel.ModuleDef module : new TreeMap<>(model.modules).values()) {
 			ApiModel.ClassDef classDef = model.classes.get(module.export());
 			if (held.contains(module.export()) || classDef == null || placed.contains(classDef.name)) {
+				continue;
+			}
+			if (target.isDependency()) {
+				if (module.path().equals("main")) {
+					Node node = new Node(target.library(), target.library(), null);
+					tops.put(node.javaName, node);
+					placeTable(node, classDef);
+				}
 				continue;
 			}
 			String name = moduleName(module, classDef);
@@ -471,6 +512,11 @@ final class JavaBindings {
 			node.module = module.path();
 			tops.put(name, node);
 			placeTable(node, classDef);
+		}
+		if (target.isDependency()) {
+			model.modules.values().stream()
+					.filter(module -> module.implicit() && !placed.contains(module.export()))
+					.forEach(module -> placed.add(module.export()));
 		}
 	}
 
@@ -529,9 +575,15 @@ final class JavaBindings {
 				.anyMatch(module -> module.implicit() && module.export().equals(classDef.name));
 	}
 
-	/** Whether a class has a table plugins reach: a global one, or a module's. */
+	/**
+	 * Whether a class has a table plugins reach: a global one, or a module's. A library plugin exposes one global, its
+	 * alias, so a global its types declare outside it is a type.
+	 */
 	private boolean hasTable(ApiModel.ClassDef classDef) {
-		return classDef.binding == ApiModel.Binding.GLOBAL || placed.contains(classDef.name);
+		String path = luaPath(classDef.name);
+		boolean global = classDef.binding == ApiModel.Binding.GLOBAL && (!target.isDependency()
+				|| path.equals(target.library()) || path.startsWith(target.library() + "."));
+		return global || placed.contains(classDef.name);
 	}
 
 	/**
@@ -557,6 +609,12 @@ final class JavaBindings {
 			return "the global table {@code " + path + "}";
 		}
 		Node top = node.top();
+		if (top.module == null) {
+			// A library plugin's global, which the client gives the plugin as a copy of what its main.lua returns
+			return node == top
+					? "the global {@code " + path + "}, the plugin's copy of the library's table"
+					: "the table {@code " + path + "} of the global {@code " + top.luaSegment + "}";
+		}
 		String module = "{@code " + top.module + "}";
 		return node == top
 				? "the module " + module + ", the table {@code require(\"" + top.module + "\")} gives"
@@ -895,6 +953,10 @@ final class JavaBindings {
 		if (node.module != null) {
 			out.append(indent).append("@LuaModule(").append(JavaText.javaString(node.module)).append(")\n");
 		}
+		boolean global = node == dependencyGlobal();
+		if (global && target.optional()) {
+			out.append(indent).append("@LuaOptional\n");
+		}
 		if (shape != Shape.TYPE && moduleTables.contains(node) && !path.equals(luaName) && !isImplicit(classDef)) {
 			// A module's table whose class has a name of its own, which Lua Language Server annotations use
 			out.append(indent).append("@LuaType(\"").append(luaName).append("\")\n");
@@ -914,16 +976,25 @@ final class JavaBindings {
 		Map<String, Inherited> inherited = inheritedMethods(classDef);
 		Set<String> signatures = new HashSet<>();
 		constructors(out, node, classDef, shape, inner, signatures);
+		if (global) {
+			dependencyMembers(out, inner);
+		}
 		boolean isStatic = shape == Shape.NAMESPACE;
 		for (ApiModel.FieldDef field : classDef.fields) {
-			if (target.isRs3() && luaName.equals("Event")) {
+			if (global && isDependencyMember(field.name())) {
+				warnings.add(target.library() + "." + field.name() + " has the name of a member the plugin's class of"
+						+ " the global has; it is left out.");
+			} else if (target.isRs3() && luaName.equals("Event")) {
 				memberBindings.eventField(out, field, inner);
 			} else if (!overrides.has("skip", classDef.name + "." + field.name())) {
 				memberBindings.field(out, classDef, field, isStatic, inner, signatures);
 			}
 		}
 		for (ApiModel.FunctionDef function : classDef.functions) {
-			if (!(shape == Shape.INSTANCE && isConstructor(classDef, function))
+			if (global && isDependencyMember(function.name())) {
+				warnings.add(target.library() + "." + function.name() + " has the name of a member the plugin's class"
+						+ " of the global has; it is left out.");
+			} else if (!(shape == Shape.INSTANCE && isConstructor(classDef, function))
 					&& !isLeftToSubclasses(classDef, function)) {
 				memberBindings.method(out, classDef, function, shape, inner, signatures, inherited);
 			}
@@ -931,6 +1002,34 @@ final class JavaBindings {
 		operators(out, classDef, inner, signatures);
 		writeChildren(out, node, inner);
 		out.append(indent).append("}\n");
+	}
+
+	/**
+	 * The members the class of a library plugin's global has for the plugin, which the library has not: its alias, a
+	 * constant to compare with the identifier an {@code OptionalDependencyChanged} payload names it by, and for an
+	 * optional dependency, {@code isLoaded()}, the check that code reaching the global needs.
+	 */
+	private void dependencyMembers(StringBuilder out, String indent) {
+		String alias = target.library();
+		out.append("\n");
+		JavaText.javadoc(out, indent, List.of("The alias the build gives the dependency, which is the global it is to"
+				+ " the plugin, and which an {@code OptionalDependencyChanged} payload names it by.", "",
+				"<p>Lua: {@code \"" + alias + "\"}, the alias itself"));
+		out.append(indent).append("public static final String ALIAS = ").append(JavaText.javaString(alias))
+				.append(";\n");
+		if (target.optional()) {
+			out.append("\n");
+			JavaText.javadoc(out, indent, List.of("Whether the library is loaded: the player has it and has it turned"
+					+ " on. Code reaches the global only where this check reaches it: inside {@code if (" + alias
+					+ ".isLoaded())}, or after {@code if (!" + alias + ".isLoaded()) return;} in the same method.", "",
+					"<p>Lua: {@code if " + alias + " then}, or elsewhere {@code " + alias + " ~= nil}"));
+			out.append(indent).append("public static native boolean isLoaded();\n");
+		}
+	}
+
+	/** Whether a name is one of the members the class of a library plugin's global has for the plugin. */
+	private boolean isDependencyMember(String name) {
+		return name.equals("ALIAS") || (target.optional() && name.equals("isLoaded"));
 	}
 
 	/**

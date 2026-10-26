@@ -127,6 +127,7 @@ final class UnitLowering {
 	private final DeclarationChecks declarationChecks;
 	private final NonNegativeMembers nonNegativeMembers;
 	private final ReviewWarnings reviewWarnings;
+	private final OptionalChecks optionalChecks;
 
 	/**
 	 * @param names the Lua names for Java locals, which avoid the helpers and globals a first lowering found
@@ -159,6 +160,7 @@ final class UnitLowering {
 		this.declarationChecks = new DeclarationChecks(this);
 		this.nonNegativeMembers = new NonNegativeMembers(this);
 		this.reviewWarnings = new ReviewWarnings(this);
+		this.optionalChecks = new OptionalChecks(this);
 	}
 
 	/** The errors and warnings found while lowering, in source order. */
@@ -190,6 +192,10 @@ final class UnitLowering {
 
 	ReviewWarnings reviewWarnings() {
 		return reviewWarnings;
+	}
+
+	OptionalChecks optionalChecks() {
+		return optionalChecks;
 	}
 
 	/** The Lua globals the module reads: the first name of each API path, such as {@code ui} for {@code ui.Text}. */

@@ -73,6 +73,9 @@ final class SourceFiles {
 		if (target.isPlugin()) {
 			imports.add("org.jspecify.annotations.NullMarked");
 		}
+		if (target.optional()) {
+			imports.add("org.adelheid.oneiro.api.LuaOptional");
+		}
 		Set<String> taken = new HashSet<>(shadowed);
 		String body = classes;
 		Matcher qualified = JDK_TYPE.matcher(classes);
@@ -176,7 +179,7 @@ final class SourceFiles {
 				}
 				""".formatted(packageName, target.provider(), switch (target.kind()) {
 					case RS3 -> "RS3 bindings";
-					case LIBRARY -> "The bindings of " + target.library();
+					case LIBRARY, DEPENDENCY -> "The bindings of " + target.library();
 					case PLUGIN -> "The bindings of the plugin's Lua";
 				});
 	}

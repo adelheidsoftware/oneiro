@@ -1,6 +1,7 @@
 package usage;
 
 import java.util.List;
+import org.adelheid.oneiro.lib.beacons.beacons;
 import org.adelheid.oneiro.lib.gauges.gauges;
 import org.adelheid.oneiro.lib.widgets.widgets;
 import org.adelheid.oneiro.rs3.ui;
@@ -39,5 +40,14 @@ final class LibraryUsage {
 		gauge.Destroy();
 		gauges.Gauge answer = gauges.Prompt.create(parent);
 		String version = gauges.version;
+		boolean loaded = gauges.isLoaded();
+		String alias = gauges.ALIAS;
+
+		// A library plugin's global, read from its main.lua
+		beacons.Beacon beacon = new beacons.Beacon("north");
+		beacon.light();
+		boolean lit = beacon.lit;
+		int litCount = beacons.lit() + beacons.Beacon.count();
+		String beaconsVersion = beacons.version;
 	}
 }

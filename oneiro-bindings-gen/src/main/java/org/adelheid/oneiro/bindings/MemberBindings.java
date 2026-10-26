@@ -119,7 +119,8 @@ final class MemberBindings {
 			return;
 		}
 		JType javaType = nullability(target, type, typeMapping.javaType(type));
-		boolean readOnly = isReadOnly(owner, field);
+		// A library plugin's global is the plugin's copy of the library's table, which the library never sees changed
+		boolean readOnly = isReadOnly(owner, field) || (isStatic && bindings.target.isDependency());
 		boolean copied = !isStatic && isCopied(owner, field);
 		out.append("\n");
 		List<String> doc = new ArrayList<>(JavaText.lines(field.description()));

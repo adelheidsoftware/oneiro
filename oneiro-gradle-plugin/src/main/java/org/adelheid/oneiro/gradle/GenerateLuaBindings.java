@@ -24,9 +24,10 @@ import org.gradle.api.tasks.TaskAction;
 /**
  * {@code oneiroLuaBindings}: the bindings of the Lua the plugin uses, generated from its LuaCATS annotations, as jars
  * of classes the plugin compiles against and of their sources for the IDE: a jar for each library it vendors, in
- * {@code org.adelheid.oneiro.lib.<name>}; one for {@code src/main/lua}, on the main source set's classpath; and one for
- * {@code src/dev/lua}, on the dev source set's alone, as are the libraries of the dev source set alone. Each Lua file
- * of the plugin's own is a class of the package of its folder below the root package, so that
+ * {@code org.adelheid.oneiro.lib.<name>}, and for each library plugin it depends on whose types the build names, in
+ * {@code org.adelheid.oneiro.lib.<alias>}; one for {@code src/main/lua}, on the main source set's classpath; and one
+ * for {@code src/dev/lua}, on the dev source set's alone, as are the libraries of the dev source set alone. Each Lua
+ * file of the plugin's own is a class of the package of its folder below the root package, so that
  * {@code src/main/lua/core/levels.lua} is the class {@code <root>.core.Levels} and loads as
  * {@code require("src/core/levels")}. The stubs give the RS3 API's types, which the Lua may name, as the plugin's own
  * Lua may name its libraries'.
@@ -44,7 +45,7 @@ public abstract class GenerateLuaBindings extends StubsTask {
 	@PathSensitive(PathSensitivity.NONE)
 	public abstract RegularFileProperty getRootPackageFile();
 
-	/** The libraries {@code oneiroLibraries} staged, each with its Lua and the build's overrides file for it. */
+	/** The libraries {@code oneiroLibraries} staged, each with its types and the build's overrides file for it. */
 	@InputDirectory
 	@PathSensitive(PathSensitivity.RELATIVE)
 	public abstract DirectoryProperty getLibraries();

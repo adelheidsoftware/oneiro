@@ -2,6 +2,7 @@ package org.adelheid.oneiro.kotlin
 
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
+import org.adelheid.oneiro.lowering.OptionalDependencies
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.FunctionBody
@@ -218,6 +219,9 @@ internal class Lambdas(private val body: BodyLowering) {
 	 */
 	private fun functionReference(reference: KtCallableReferenceExpression, function: KaNamedFunctionSymbol,
 		receiver: KtExpression?): Expression = with(unit.session) {
+		unit.optionals.loadedCheck(function)?.let { alias ->
+			throw Rejection(reference, OptionalDependencies.reference("{ $alias.isLoaded() }"))
+		}
 		val owner = body.api.owner(function)
 		if (owner != null && body.api.isApi(owner)) {
 			throw Rejection.notYet(reference, "A reference to a function of the client")

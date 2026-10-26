@@ -132,14 +132,14 @@ internal class Loops(private val body: BodyLowering) {
 	/** `while (condition) { ... }`. */
 	fun whileLoop(loop: KtWhileExpression): Statement {
 		val condition = loop.condition ?: throw Rejection(loop, "A while loop without a condition does not compile.")
-		return Statement.While(body.expression(condition), loopBody(loop))
+		return Statement.While(body.condition(condition), loopBody(loop))
 	}
 
 	/** `do { ... } while (condition)` as `repeat ... until not (condition)`, which Lua tests after the body too. */
 	fun doWhileLoop(loop: KtDoWhileExpression): Statement {
 		val condition = loop.condition ?: throw Rejection(loop, "A do-while loop without a condition does not compile.")
 		val block = loopBody(loop)
-		return Statement.Repeat(block, Expression.Unary(UnaryOperator.NOT, body.expression(condition)))
+		return Statement.Repeat(block, Expression.Unary(UnaryOperator.NOT, body.condition(condition)))
 	}
 
 	/** `break`, which leaves the innermost loop, as Lua's does. */

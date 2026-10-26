@@ -70,6 +70,7 @@ internal class FileLowering(
 	val annotations = Annotations(session)
 	val types = KotlinTypes(session, annotations, ::isPluginType, ::isObjectEnum)
 	val reviews = ReviewWarnings(this)
+	val optionals = OptionalChecks(this)
 
 	/** The parameters of the loops that count from 1, decided for the whole file at once. */
 	val oneBased: Set<KtParameter> by lazy { OneBasedLoops.find(this) }

@@ -49,6 +49,7 @@ internal class Annotations(private val session: KaSession) {
 		val LUA_DEV_ONLY = api("LuaDevOnly")
 		val LUA_REVIEW = api("LuaReview")
 		val LUA_MODULE = api("LuaModule")
+		val LUA_OPTIONAL = api("LuaOptional")
 		val LUA_RETURN_VALUES = api("LuaReturnValues")
 		val LUA_FROM_ID = api("LuaFromId")
 		val LUA_SAME = api("LuaSame")

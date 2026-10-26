@@ -1,10 +1,15 @@
 package org.adelheid.oneiro.gradle;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
 import javax.lang.model.SourceVersion;
+import org.adelheid.oneiro.plugin.LuaLibraries;
 import org.adelheid.oneiro.plugin.Permission;
 import org.gradle.api.Action;
 import org.gradle.api.GradleException;
@@ -22,6 +27,7 @@ import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code oneiro { }} block of a plugin's build:
@@ -35,7 +41,11 @@ import org.gradle.api.tasks.PathSensitivity;
  *         name = "Herb Tracker"
  *         contactEmail = "plugins@example.org"
  *         settingsIcon = true
- *         dependencies { required("prettyui", 6398181) }
+ *         dependencies {
+ *             required("prettyui", 6398181) {
+ *                 types { local(file("lua-types/prettyui")) }
+ *             }
+ *         }
  *         permissions { optional(chatAccess) }
  *         urls { url("prices", "https://prices.example.org") }
  *     }
@@ -146,6 +156,14 @@ public abstract class OneiroExtension {
 	/** The manifest: what people see, what the plugin may do, and what it needs. */
 	public abstract static class PluginManifest {
 
+		private final ObjectFactory objects;
+		private final List<PluginDependency> dependencies = new ArrayList<>();
+
+		@Inject
+		public PluginManifest(ObjectFactory objects) {
+			this.objects = objects;
+		}
+
 		/**
 		 * The plugin's identifier, lowercase words joined by hyphens: the name of its link in {@code dev_plugins}, of
 		 * its zip, and the prefix of its event subscriptions. By default the project's name.
@@ -163,18 +181,6 @@ public abstract class OneiroExtension {
 
 		/** An icon in the Plugins ribbon window, which the {@code ContentLayerReady} event fills. */
 		public abstract Property<Boolean> getRibbonIcon();
-
-		/**
-		 * Each required dependency by alias, as {@code mod:<id>} or {@code folder:<name>}; set through
-		 * {@link #dependencies}.
-		 */
-		public abstract MapProperty<String, String> getRequiredDependencies();
-
-		/**
-		 * Each optional dependency by alias, as {@code mod:<id>} or {@code folder:<name>}; set through
-		 * {@link #dependencies}.
-		 */
-		public abstract MapProperty<String, String> getOptionalDependencies();
 
 		/** The {@code plugin.json} names of the required permissions; set through {@link #permissions}. */
 		public abstract SetProperty<String> getRequiredPermissions();
@@ -197,27 +203,105 @@ public abstract class OneiroExtension {
 			action.execute(new Urls());
 		}
 
-		/** Plugins this one needs or uses, each exposed to it as the Lua global of its alias. */
+		/** The dependencies the build declares. */
+		List<PluginDependency> declaredDependencies() {
+			return List.copyOf(dependencies);
+		}
+
+		/**
+		 * The dependencies that ship but name only a folder on this machine, which {@code checkPlugin} refuses: each by
+		 * its alias, with its kind, {@code required} or {@code optional}.
+		 */
+		Map<String, String> unpublishedDependencies() {
+			Map<String, String> unpublished = new TreeMap<>();
+			for (PluginDependency dependency : dependencies) {
+				if (!dependency.getDevelopment().get() && !dependency.getModId().isPresent()) {
+					unpublished.put(dependency.getName(), dependency.getUse().get().name().toLowerCase(Locale.ROOT));
+				}
+			}
+			return unpublished;
+		}
+
+		/**
+		 * Whether the development folder's manifest differs from the shipped one: a dependency names a folder on this
+		 * machine, or only the dev source set uses one.
+		 */
+		boolean developsDependencies() {
+			return dependencies.stream()
+					.anyMatch(dependency -> dependency.getDevelopment().get() || dependency.getDevFolder().isPresent());
+		}
+
+		/**
+		 * Plugins this one needs or uses, each exposed to it as the Lua global of its alias: a published one by its
+		 * Mod.io ID, as a library such as PrettyUI documents, and each with a block for its types and its folder on
+		 * this machine, {@code required("prettyui", 6398181) { types { local(file("lua-types/prettyui")) } }}.
+		 */
 		public final class Dependencies {
 
-			/** A published plugin, by its Mod.io ID, as a library such as PrettyUI documents. */
+			/** A plugin this one cannot do without. */
 			public void required(String alias, int modId) {
-				getRequiredDependencies().put(alias, "mod:" + modId);
+				declare(alias, LuaLibraries.Use.REQUIRED, false, modId, dependency -> { });
 			}
 
-			/** A plugin on this machine, by its folder name in the client's plugin folders. */
-			public void required(String alias, String folder) {
-				getRequiredDependencies().put(alias, "folder:" + folder);
+			/** A plugin this one cannot do without, with its types or its folder on this machine. */
+			public void required(String alias, int modId, Action<? super PluginDependency> action) {
+				declare(alias, LuaLibraries.Use.REQUIRED, false, modId, action);
 			}
 
-			/** A published plugin used when present, by its Mod.io ID. */
+			/** A plugin not published yet, by its folder on this machine, {@code devFolder(...)}, which cannot ship. */
+			public void required(String alias, Action<? super PluginDependency> action) {
+				declare(alias, LuaLibraries.Use.REQUIRED, false, null, action);
+			}
+
+			/**
+			 * A plugin used when present, which the player may not have, or may turn off while this one runs; code
+			 * reaches it where a check of {@code isLoaded()} does.
+			 */
 			public void optional(String alias, int modId) {
-				getOptionalDependencies().put(alias, "mod:" + modId);
+				declare(alias, LuaLibraries.Use.OPTIONAL, false, modId, dependency -> { });
 			}
 
-			/** A plugin on this machine used when present, by its folder name in the client's plugin folders. */
-			public void optional(String alias, String folder) {
-				getOptionalDependencies().put(alias, "folder:" + folder);
+			/** A plugin used when present, with its types or its folder on this machine. */
+			public void optional(String alias, int modId, Action<? super PluginDependency> action) {
+				declare(alias, LuaLibraries.Use.OPTIONAL, false, modId, action);
+			}
+
+			/** A plugin used when present that is not published yet, by its folder on this machine. */
+			public void optional(String alias, Action<? super PluginDependency> action) {
+				declare(alias, LuaLibraries.Use.OPTIONAL, false, null, action);
+			}
+
+			/**
+			 * A plugin only the dev source set uses, which only the development folder's manifest requires; only the
+			 * dev source set has its bindings.
+			 */
+			public void development(String alias, int modId) {
+				declare(alias, LuaLibraries.Use.REQUIRED, true, modId, dependency -> { });
+			}
+
+			/** A plugin only the dev source set uses, with its types or its folder on this machine. */
+			public void development(String alias, int modId, Action<? super PluginDependency> action) {
+				declare(alias, LuaLibraries.Use.REQUIRED, true, modId, action);
+			}
+
+			/** A plugin only the dev source set uses, by its folder on this machine. */
+			public void development(String alias, Action<? super PluginDependency> action) {
+				declare(alias, LuaLibraries.Use.REQUIRED, true, null, action);
+			}
+
+			private void declare(String alias, LuaLibraries.Use use, boolean development, @Nullable Integer modId,
+					Action<? super PluginDependency> action) {
+				if (dependencies.stream().anyMatch(dependency -> dependency.getName().equals(alias))) {
+					throw new GradleException("The dependency " + alias + " is declared twice; keep one.");
+				}
+				PluginDependency dependency = objects.newInstance(PluginDependency.class, alias);
+				dependency.getUse().set(use);
+				dependency.getDevelopment().set(development);
+				if (modId != null) {
+					dependency.getModId().set(modId);
+				}
+				action.execute(dependency);
+				dependencies.add(dependency);
 			}
 		}
 
@@ -307,19 +391,87 @@ public abstract class OneiroExtension {
 	}
 
 	/**
-	 * A library the plugin vendors: where its code comes from, a checkout on this machine or a repository at a full
-	 * commit; the folder of it whose Lua files go to the plugin's root; its licence; and an overrides file for its
-	 * bindings. As a task's input, its local checkout counts by the files that are read from it.
+	 * A plugin this one depends on, which the client gives it as the global of its alias: by its Mod.io ID, the folder
+	 * of a plugin on this machine that the development folder's manifest names instead, and the LuaCATS files its
+	 * bindings come from. Without types, it has no bindings, and only Lua of the plugin's own can use it.
 	 */
-	public abstract static class VendoredLibrary implements Named {
+	public abstract static class PluginDependency implements Named {
+
+		private final String name;
+		private @Nullable LibraryTypes types;
+
+		@Inject
+		public PluginDependency(String name) {
+			this.name = name;
+		}
+
+		/** The alias: the Lua global the client gives the plugin, and the package of its bindings. */
+		@Input
+		@Override
+		public String getName() {
+			return name;
+		}
+
+		/** Whether the plugin cannot do without it; set by {@code required(...)} or {@code optional(...)}. */
+		@Input
+		public abstract Property<LuaLibraries.Use> getUse();
+
+		/** Whether only the dev source set uses it; set by {@code development(...)}. */
+		@Input
+		public abstract Property<Boolean> getDevelopment();
+
+		/** Its Mod.io ID, by which players' clients find it; unset for a plugin not published yet. */
+		@Optional
+		@Input
+		public abstract Property<Integer> getModId();
+
+		/** The folder of a plugin on this machine that the development folder's manifest names instead. */
+		@Optional
+		@Input
+		public abstract Property<String> getDevFolder();
+
+		@Inject
+		protected abstract ObjectFactory getObjects();
+
+		/** The types its bindings come from, which {@code oneiroLibraries} stages; null when the build names none. */
+		@Internal
+		public @Nullable LibraryTypes getTypes() {
+			return types;
+		}
+
+		/**
+		 * The folder of a plugin on this machine, by its name in the client's plugin folders, which the development
+		 * folder's manifest names in place of the Mod.io ID: a library not published yet, or a local copy of one.
+		 */
+		public void devFolder(String folder) {
+			getDevFolder().set(folder);
+		}
+
+		/** Where its LuaCATS files come from: definition files of the plugin's, or a repository of community types. */
+		public void types(Action<? super LibraryTypes> action) {
+			LibraryTypes declared = types;
+			if (declared == null) {
+				declared = getObjects().newInstance(LibraryTypes.class, name);
+				declared.getUse().set(getUse());
+				declared.getDevelopment().set(getDevelopment());
+				types = declared;
+			}
+			action.execute(declared);
+		}
+	}
+
+	/**
+	 * Lua the build names: a checkout on this machine or a repository at a full commit, the folder of it that counts,
+	 * and an overrides file for its bindings. As a task's input, its local checkout counts by the files that are read
+	 * from it.
+	 */
+	public abstract static class LuaCode implements Named {
 
 		private final String name;
 
-		@Inject
-		public VendoredLibrary(String name) {
+		protected LuaCode(String name) {
 			this.name = name;
 			getFrom().convention("");
-			getDevelopment().convention(false);
 		}
 
 		@Input
@@ -328,23 +480,63 @@ public abstract class OneiroExtension {
 			return name;
 		}
 
-		/** A checkout of the library on this machine. */
+		/** A checkout on this machine. */
 		@Internal
 		public abstract DirectoryProperty getLocal();
 
-		/** A repository of the library on GitHub, Codeberg or GitLab, fetched at {@link #getCommit()}. */
+		/** A repository on GitHub, Codeberg or GitLab, fetched at {@link #getCommit()}. */
 		@Optional
 		@Input
 		public abstract Property<String> getRemote();
 
-		/** The full commit of the remote that is vendored. */
+		/** The full commit of the remote. */
 		@Optional
 		@Input
 		public abstract Property<String> getCommit();
 
-		/** The folder of the library, from its root, whose Lua files go to the plugin's root; its root by default. */
+		/** The folder of it, from its root, whose Lua files count; its root by default. */
 		@Input
 		public abstract Property<String> getFrom();
+
+		/** The plugin's overrides file for the bindings, in the format of Oneiro's own. */
+		@Optional
+		@InputFile
+		@PathSensitive(PathSensitivity.NONE)
+		public abstract RegularFileProperty getOverrides();
+
+		/** The code from a checkout on this machine. */
+		public void local(File directory) {
+			getLocal().set(directory);
+		}
+
+		/** The code from a repository on GitHub, Codeberg or GitLab, at a full commit. */
+		public void remote(String url, String commit) {
+			getRemote().set(url);
+			getCommit().set(commit);
+		}
+
+		/** The folder of it whose Lua files count, from its root. */
+		public void from(String folder) {
+			getFrom().set(folder);
+		}
+
+		/** An overrides file for the bindings, for what the annotations do not say. */
+		public void overrides(File file) {
+			getOverrides().set(file);
+		}
+	}
+
+	/**
+	 * A library the plugin vendors: its code, of which the Lua files of {@code from} go to the plugin's root, as the
+	 * library's documentation lays them out, and its licence.
+	 */
+	public abstract static class VendoredLibrary extends LuaCode {
+
+		@Inject
+		public VendoredLibrary(String name) {
+			super(name);
+			getDevelopment().convention(false);
+		}
 
 		/**
 		 * The file of the library's licence, from its root; by default the one file at its root named like a licence,
@@ -354,41 +546,35 @@ public abstract class OneiroExtension {
 		@Input
 		public abstract Property<String> getLicence();
 
-		/** The plugin's overrides file for the library's bindings, in the format of Oneiro's own. */
-		@Optional
-		@InputFile
-		@PathSensitive(PathSensitivity.NONE)
-		public abstract RegularFileProperty getOverrides();
-
 		/** Whether only the dev source set uses the library; set by {@code development(...)}. */
 		@Input
 		public abstract Property<Boolean> getDevelopment();
-
-		/** The library's code from a checkout on this machine. */
-		public void local(File directory) {
-			getLocal().set(directory);
-		}
-
-		/** The library's code from a repository on GitHub, Codeberg or GitLab, at a full commit. */
-		public void remote(String url, String commit) {
-			getRemote().set(url);
-			getCommit().set(commit);
-		}
-
-		/** The folder whose Lua files go to the plugin's root, as the library's documentation lays them out. */
-		public void from(String folder) {
-			getFrom().set(folder);
-		}
 
 		/** The file of the library's licence, which ships under {@code licences/<name>/}. */
 		public void licence(String file) {
 			getLicence().set(file);
 		}
+	}
 
-		/** An overrides file for the library's bindings, for what its annotations do not say. */
-		public void overrides(File file) {
-			getOverrides().set(file);
+	/**
+	 * The LuaCATS files of a library plugin the plugin depends on, which never ship: definition files written from its
+	 * docs, or a repository of community types, with {@code from} for a folder of it, such as {@code library} in one
+	 * laid out for LLS-Addons. They declare the global of its alias, or give the {@code main.lua} that returns it.
+	 */
+	public abstract static class LibraryTypes extends LuaCode {
+
+		@Inject
+		public LibraryTypes(String name) {
+			super(name);
 		}
+
+		/** Whether the plugin cannot do without the library; its dependency's. */
+		@Input
+		public abstract Property<LuaLibraries.Use> getUse();
+
+		/** Whether only the dev source set uses the library; its dependency's. */
+		@Input
+		public abstract Property<Boolean> getDevelopment();
 	}
 
 	/** The Lua 5.4 that runs the plugin's Lua tests: the bundled Lua 5.4.8 unless an installed one is named. */

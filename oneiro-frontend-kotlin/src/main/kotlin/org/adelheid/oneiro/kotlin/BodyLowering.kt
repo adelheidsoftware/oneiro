@@ -12,6 +12,7 @@ import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.Trivia
+import org.adelheid.oneiro.lua.UnaryOperator
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.analysis.api.resolution.KaCallableMemberCall
 import org.jetbrains.kotlin.analysis.api.resolution.KaFunctionCall
@@ -659,8 +660,41 @@ internal class BodyLowering(
 		if (!isSafeConditional(conditional)) {
 			return hoisted(conditional)
 		}
-		val test = Expression.binary(expression(condition), BinaryOperator.AND, expression(then))
+		val test = Expression.binary(this.condition(condition), BinaryOperator.AND, expression(then))
 		return Expression.binary(test, BinaryOperator.OR, expression(otherwise))
+	}
+
+	/**
+	 * An expression that decides a branch or a loop. An optional dependency's `isLoaded()` is its global itself there,
+	 * which Lua tests for nil as it tests the condition, `if prettyui then`, as it is in its negation and beside
+	 * another condition; elsewhere the check is a boolean, `prettyui ~= nil`.
+	 */
+	fun condition(condition: KtExpression): Expression {
+		val inner = KtPsiUtil.safeDeparenthesize(condition)
+		unit.optionals.loaded(inner)?.let { alias ->
+			unit.useGlobal(alias)
+			return Expression.name(alias)
+		}
+		val negated = (inner as? KtPrefixExpression)?.takeIf { it.operationToken == KtTokens.EXCL }?.baseExpression
+		if (negated != null && unit.optionals.loaded(negated) != null) {
+			return Expression.Unary(UnaryOperator.NOT, this.condition(negated))
+		}
+		val left = (inner as? KtBinaryExpression)?.left
+		val right = (inner as? KtBinaryExpression)?.right
+		val token = (inner as? KtBinaryExpression)?.operationToken
+		if (left != null && right != null && (token == KtTokens.ANDAND || token == KtTokens.OROR) &&
+			(isLoadedCheck(left) || isLoadedCheck(right))) {
+			return Expression.binary(this.condition(left),
+				if (token == KtTokens.ANDAND) BinaryOperator.AND else BinaryOperator.OR, this.condition(right))
+		}
+		return expression(condition)
+	}
+
+	/** Whether an expression is an optional dependency's check, or its negation. */
+	private fun isLoadedCheck(expression: KtExpression): Boolean {
+		val inner = KtPsiUtil.safeDeparenthesize(expression)
+		val negated = (inner as? KtPrefixExpression)?.takeIf { it.operationToken == KtTokens.EXCL }?.baseExpression
+		return unit.optionals.loaded(inner) != null || (negated != null && unit.optionals.loaded(negated) != null)
 	}
 
 	/** Whether an `if` has single values that are never false or nil, so that Lua can say it as `c and a or b`. */

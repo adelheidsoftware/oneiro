@@ -8,122 +8,156 @@ All notable changes to Oneiro are listed here. The format follows
 
 ### Added
 
-- The plugin's own Lua: files under `src/main/lua/` ship under `src/`, as written, so that
-  `src/main/lua/core/levels.lua` is `src/core/levels.lua`, and those under `src/dev/lua/` go under `dev/` in the
-  development folder alone. Java and Kotlin call them through classes that the new `oneiroLuaBindings` task generates
-  from their LuaCATS annotations, one per module, in the plugin's package for its folder: `Levels.fromPenalty(penalty)`
-  becomes `local Levels = require("src/core/levels")` and `Levels.fromPenalty(penalty)`. `testLua` loads them as it
-  loads Oneiro's modules, and `explainError` shows a place in one as the line of its file. See
-  [plugin-model.md](docs/plugin-model.md#the-plugins-own-lua).
-- `checkPlugin` checks that each Lua file under `src/` starts with its path, by which the client's errors name it;
-  finds a `require` in single quotes too; and finds, in any Lua that ships, the members of the client's for
-  development only, and outside a vendored library those that need a permission the manifest lacks, as the compiler
-  does.
-- Vendored libraries: `oneiro { libraries { vendored("zyklib") { remote(url, commit); from("src") } } }` copies a Lua
-  library's files into the plugin's root, as the library documents them, with its licence under `licences/<name>/`,
-  and Java and Kotlin call it through classes generated from its own LuaCATS annotations, in
-  `org.adelheid.oneiro.lib.<name>`: `zyklib.objects.getOrElseUpdate(...)` becomes `local zyklib = require("zyklib")`
-  and the call. `local(file(...))` names a checkout instead, `licence(...)` and `overrides(...)` a licence file and an
-  overrides file, and `development(name) { ... }` a library of the dev source set alone. The build fails for a library
-  without a licence, one whose files would ship where the plugin's own go, or that two libraries share, and
-  `checkPlugin` for a library nothing requires. See [plugin-model.md](docs/plugin-model.md#vendored-libraries).
-- `stubs { remote(...) }` fetches from Codeberg, `https://codeberg.org/<owner>/<repository>`, and GitLab,
-  `https://gitlab.com/<group>/<project>`, as well as from GitHub. A repository that does not exist, or a commit it
-  lacks, is reported as such.
+- **Write part of your plugin in Lua.** Lua files in `src/main/lua/` ship unchanged in the plugin's `src/` folder:
+  `src/main/lua/core/levels.lua` becomes `src/core/levels.lua`. Oneiro reads their LuaCATS annotations (`---@param`,
+  `---@return`, ...) and generates classes for them, so Java and Kotlin code can call them directly. Lua in
+  `src/dev/lua/` works the same way, but only goes into the development folder. `testLua` and `explainError` cover
+  these files too. See [The plugin's own Lua](docs/plugin-model.md#the-plugins-own-lua).
+- **Copy a Lua library into your plugin** ("vendoring"), such as Zyklib:
+
+  ```kotlin
+  oneiro {
+      libraries {
+          vendored("zyklib") {
+              remote("https://codeberg.org/ZyklopMarco/runescape-api-zyklib", "<commit>")
+              from("src")
+          }
+      }
+  }
+  ```
+
+  The library's Lua files and its licence ship inside your plugin, and Java and Kotlin call it through generated
+  classes in `org.adelheid.oneiro.lib.zyklib`. A library without a licence fails the build. Use
+  `development("name") { ... }` for a library that only your development helpers use. See
+  [Vendored libraries](docs/plugin-model.md#vendored-libraries).
+- **Call a library plugin from Java or Kotlin**, such as PrettyUI. A library plugin is installed by the player and
+  never ships with your plugin. Point the build at LuaCATS type definitions for it, and Oneiro generates a class for
+  it:
+
+  ```kotlin
+  dependencies {
+      required("prettyui", 6398181) {
+          types { local(file("lua-types/prettyui")) }
+      }
+  }
+  ```
+
+  For an `optional(...)` dependency, check `prettyui.isLoaded()` before using it: the player may not have the library,
+  or may turn it off while your plugin runs, so code that uses it without a check does not compile. See
+  [Library plugins](docs/plugin-model.md#library-plugins).
+- **Develop against a library plugin that is not published yet**, or against a local copy of one:
+  `devFolder("rsprite")` makes the development folder load it from a folder on your machine instead of by its Mod.io
+  ID. `development("probe", 5151)` adds a dependency that only your development helpers use.
+- **More checks before you ship.** `checkPlugin` now also fails when:
+  - a Lua file in `src/` does not start with its own path as a comment, `-- src/core/levels.lua` (the client's error
+    messages name a file by that line);
+  - a `require('...')` in single quotes names a file the plugin does not have (double quotes were already checked);
+  - any Lua file, a library's included, uses a development-only function such as `ExecuteConsoleCommand`;
+  - Lua outside a vendored library uses something that needs a permission the manifest does not request;
+  - no Lua requires a vendored library;
+  - a dependency has a `devFolder` but no Mod.io ID.
+- **`explainError` mentions library versions.** When the client says a name is nil, `explainError` now adds that the
+  player may have a different version of a library plugin than the one your types describe.
+- **Stubs from Codeberg and GitLab.** `stubs { remote(...) }` now takes Codeberg and GitLab repositories as well as
+  GitHub ones, and says clearly when it cannot find a repository or commit.
 
 ### Changed
 
-- A class of the plugin's may no longer carry the annotations of the bindings, such as `@LuaModule` and `@LuaGlobal`,
-  nor may a Java method be `native` or a Kotlin function `external`: hand-written declarations of existing Lua, which
-  no build could ship, give way to the plugin's own Lua and the bindings of its annotations.
-
-- Fetched repositories are kept in Gradle's user home under `caches/oneiro/repositories/<host>/<path>/<commit>`,
-  where the stubs were under `caches/oneiro/stubs`; a build fetches the stubs once more, and the old folder can be
-  deleted.
+- **No more hand-written declarations of Lua.** Your own classes can no longer describe existing Lua with the
+  bindings' annotations (`@LuaModule`, `@LuaGlobal`, ...), Java `native` methods or Kotlin `external` functions. Put
+  that Lua in `src/main/lua/` with LuaCATS annotations instead, and Oneiro generates the classes.
+- **Dependencies named by a folder.** `required(alias, "folder")` and `optional(alias, "folder")` are removed; write
+  `required(alias) { devFolder("folder") }` instead. The build properties `getRequiredDependencies()` and
+  `getOptionalDependencies()` are removed too.
+- **Dependency aliases.** An alias can no longer be a name that Lua or the client already uses as a global, such as
+  `print` or `Player`.
+- **`linkDevPlugin`** now links the development folder whenever its manifest differs from the shipped one, because
+  of a `devFolder` or a `development(...)` dependency, and no longer only when the plugin has a dev source set.
+- **Download cache moved.** Downloaded repositories are now kept in `caches/oneiro/repositories/` in Gradle's user
+  home, instead of `caches/oneiro/stubs/`. The stubs are downloaded once more, and the old folder can be deleted.
 
 ### Fixed
 
-- Two classes of one name from two packages, used in one file, are reported; both became one `require`, of the first.
+- Two classes with the same name from different packages, used in the same file, now give an error. Before, Oneiro
+  required the first one for both.
 
 ## [0.2.0] - 2026-10-25
 
 ### Added
 
-- `explainError`: copy errors from the client's console into a file, run `./gradlew explainError --input=<file>`,
-  and each error of the plugin is shown with the source file, line and code of every place it names. The compiler
-  writes the line maps it reads to `build/oneiro/line-maps/`. A message of the client's own, which names C++ types,
-  is followed by what it means and what to do instead, such as for an argument the client requires where the docs
-  let it be left out.
-- Compliance warnings: a use that Jagex's moderators review closely (the chat, HTTP requests, the tracking ID,
-  changes to the right-click menu, finding other players) compiles with a warning that names what they look at.
-  `@SuppressWarnings("oneiro:<area>")`, or `@Suppress("oneiro:<area>")` in Kotlin, silences an area's warnings once
-  the plugin meets them.
-- [From RuneLite to RS3](docs/from-runelite.md), a guide for RuneLite developers: what a RuneLite plugin's events,
-  getters, settings, overlays, notifiers and timers become, and how the rules differ between the games.
-- Plugins written in Kotlin: apply the Kotlin JVM plugin beside Oneiro's and put the sources in `src/main/kotlin/`.
-  `oneiroKotlin` compiles them to Lua with Oneiro's Kotlin front end, in a worker process, and reports a rejection as
-  kotlinc reports an error. [kotlin-subset.md](docs/kotlin-subset.md) lists the Kotlin it accepts: everything the
-  conformance suite covers for Java, which every case now checks from Kotlin too, and Kotlin's own forms, such as a
-  chain of collection functions as one loop, `require` and `check`, fun interfaces and object expressions, and maps
-  and sets that keep the order Kotlin promises. The RS3 bindings generated for such a plugin have a `Subscribe` for
-  each callback a hook takes, so a hook's callback is a trailing lambda, `label.Subscribe(ui.Hook.ONCLICK) { ... }`.
-  It runs on the Kotlin Analysis API, which JetBrains publishes only to its own repositories: the Gradle plugin adds
-  them to a build that declares its repositories in `build.gradle.kts`, for those libraries alone, and
-  [plugin-model.md](docs/plugin-model.md#where-the-kotlin-front-ends-libraries-come-from) shows what to add to
-  `settings.gradle.kts` where a build declares them there.
-- Kotlin's own constructs: extension functions, which take their receiver first as `self`; the scope functions `let`,
-  `also`, `apply`, `run` and `with`, whose code runs where they are called, so that
-  `ui.Text(parent).apply { SetPos(10, 20) }` configures the new component in place, and on `receiver?.`, as a
-  statement or, for `apply` and `also`, as a local's value, their code runs when the receiver is not nil; in both,
-  the receiver's members named without it, the Kotlin library's included, as in `fun List<Int>.total() = sum()`; an
-  `if` or `when` with blocks inside an expression, whose value a local before the statement takes; chains over a map
-  or its entries, such as `counts.maxByOrNull { it.value }?.key`, and loops that read `entry.key` and `entry.value`;
-  the collection functions `distinct`, `take`, `drop`, `takeWhile`, `dropWhile`, `flatMap`, `groupBy` and
-  `associate`, and the string functions `padStart`, `padEnd`, `removePrefix`, `removeSuffix`, `substringBefore`,
-  `substringAfter`, `isBlank`, `trimStart` and `trimEnd`; `requireNotNull` and `checkNotNull`; and the casts `as`
-  and `as?`. An expression body can be anything a `return` can, and a class's property can be built with `apply`.
-- `LuaString`, Lua's string patterns where Java and Kotlin have regular expressions: `match`, `captures`, `find`,
-  `gsub` and `gmatch`, each Lua's string function of its name, with the pattern syntax in its Javadoc. The errors for
-  regular expressions named it before it existed.
+- **Write plugins in Kotlin.** Apply the Kotlin JVM plugin next to Oneiro's and put your sources in
+  `src/main/kotlin/`. The new `oneiroKotlin` task compiles them to Lua, and reports problems the way the Kotlin
+  compiler reports errors. Everything Oneiro supports in Java works in Kotlin too, along with Kotlin's own features
+  (next entry). A hook's callback can be a trailing lambda: `label.Subscribe(ui.Hook.ONCLICK) { ... }`. See
+  [kotlin-subset.md](docs/kotlin-subset.md) for everything it accepts.
+
+  Oneiro's Kotlin support needs libraries that JetBrains publishes only in its own repositories. The Gradle plugin
+  adds those repositories for you when your build declares its repositories in `build.gradle.kts`; when it declares
+  them in `settings.gradle.kts`, [add them there](docs/plugin-model.md#where-the-kotlin-front-ends-libraries-come-from).
+- **Kotlin's own features**, among them:
+  - extension functions;
+  - the scope functions `let`, `also`, `apply`, `run` and `with`, also after `?.`, so that
+    `ui.Text(parent).apply { SetPos(10, 20) }` sets up a new component in place;
+  - `if` and `when` blocks used as values, and function bodies written as `= expression`, whatever the expression;
+  - chains of collection functions, which become one loop, over maps too: `counts.maxByOrNull { it.value }?.key`;
+  - the collection functions `distinct`, `take`, `drop`, `takeWhile`, `dropWhile`, `flatMap`, `groupBy` and
+    `associate`;
+  - the string functions `padStart`, `padEnd`, `removePrefix`, `removeSuffix`, `substringBefore`, `substringAfter`,
+    `isBlank`, `trimStart` and `trimEnd`;
+  - `require`, `check`, `requireNotNull`, `checkNotNull`, `as` and `as?`;
+  - fun interfaces and object expressions;
+  - maps and sets that keep the order items were added in, as Kotlin's do.
+- **`explainError` turns client errors into source lines.** Copy errors from the client's console into a file and run
+  `./gradlew explainError --input=<file>`: each error is shown with the file, line and code of your Java or Kotlin
+  source that it came from. For some of the client's own messages, which name C++ types, it also explains what went
+  wrong and what to do instead.
+- **Warnings for what moderators look at.** Code that uses something Jagex's moderators review closely (the chat, HTTP
+  requests, the tracking ID, changes to the right-click menu, finding other players) compiles with a warning that says
+  what they check. Once your plugin meets it, silence that area's warnings with `@SuppressWarnings("oneiro:<area>")`,
+  or `@Suppress("oneiro:<area>")` in Kotlin.
+- **A guide for RuneLite developers**, [From RuneLite to RS3](docs/from-runelite.md): what RuneLite's events,
+  getters, settings, overlays, notifiers and timers become, and how the two games' rules differ.
+- **`LuaString`, for Lua's string patterns.** Lua has its own patterns instead of regular expressions.
+  `LuaString.match`, `captures`, `find`, `gsub` and `gmatch` call Lua's string functions of the same names, and their
+  Javadoc explains the pattern syntax. The errors for regular expressions already suggested `LuaString`; now it
+  exists.
 
 ### Changed
 
 - Stubs updated.
-- Threads, executors, futures and timers, and reading the current time, fail with an error that says what to write
-  instead, counting the ticks of `Event.ServerLogic` or `Event.Logic`, rather than as not supported yet: the client
-  runs plugins on one thread and gives them no clock.
-- Every Lua file starts with its path inside the plugin, `-- src/core/row.lua`, before its description. The client
-  names a file in its errors only by the file's first line, so its errors now say which file they come from.
-- The RS3 bindings declare the values a function takes any number of, such as `log`'s, as nullable, as Lua's `...`
-  takes nil.
-- `Permission`, the type of the build's `permissions { }` block, moved from `org.adelheid.oneiro.gradle` to
-  `org.adelheid.oneiro.plugin`. Build scripts that write `optional(chatAccess)` need no change; one that imports the
-  type imports it from its new package.
-- The RS3 bindings follow what the client has, where a check on the beta world found it differs from the docs. They
-  no longer have `new ui.ModelCamera()`, `ui.ModelGroup.AddCamera()` without a camera, `ui.Model.rotation`, `ui.Text`'s
-  `lineSpacing`, `shadowColour` and `shadowRGBA`, or `ui.Sprite.AlignTo`, which compiled and then failed or read
-  `nil`. They gain the members the client has and the docs leave out: `aabb` on `LocEntity`, `paramCount` on NPC, loc
-  and object types, `isValid` on object types, `valid` on coordinates, `ShapeEntity.drawDistance`, and the menu of
-  `MiniMenuEntryAdded`'s payload; `NPCType.attackOpPriority` is now `attackOpHasPriority`, the client's name. The
-  Javadoc of a member whose behaviour in the client differs from its documentation says how, in a paragraph that
-  begins "In the client:", as for `SetPos`'s self percentages.
+- **Threads, timers and the clock** now give an error that says what to do instead: count the ticks of
+  `Event.ServerLogic` or `Event.Logic`. They used to be reported as not supported yet, but the client runs plugins on
+  one thread and gives them no clock, so they will never work.
+- **Every generated Lua file starts with its path**, `-- src/core/row.lua`. The client names a file in its errors only
+  by the file's first line, so its errors now say which file they come from.
+- **Functions that take any number of values**, such as `log`, now accept `null` among them, as Lua accepts `nil`.
+- **`Permission` moved** from `org.adelheid.oneiro.gradle` to `org.adelheid.oneiro.plugin`. Build scripts that write
+  `optional(chatAccess)` need no change; one that imports the type imports it from the new package.
+- **The RS3 bindings match the real client** where testing on the beta world found that it differs from the docs:
+  - removed, because they compiled and then failed or read `nil`: `new ui.ModelCamera()`, `ui.ModelGroup.AddCamera()`
+    without a camera, `ui.Model.rotation`, `ui.Text`'s `lineSpacing`, `shadowColour` and `shadowRGBA`, and
+    `ui.Sprite.AlignTo`;
+  - added, because the client has them although the docs leave them out: `aabb` on `LocEntity`, `paramCount` on NPC,
+    loc and object types, `isValid` on object types, `valid` on coordinates, `ShapeEntity.drawDistance`, and the menu
+    on `MiniMenuEntryAdded`'s payload;
+  - renamed to the client's name: `NPCType.attackOpPriority` is now `attackOpHasPriority`;
+  - where a member behaves differently in the client than documented, its Javadoc says how, in a paragraph that
+    starts "In the client:", as on `SetPos`.
 
 ### Fixed
 
-- A local or parameter named like a private method or static field of the file, or like a member of the plugin class,
-  no longer hides that member in the Lua when the same method uses it. `this.shown = shown` in the plugin class
-  compiled to `shown = shown`, which changed nothing, and a private method `step` that declared a local `step` called
-  the local. Such a local now gets a trailing underscore, `shown_`.
-- A method reference to a private method declared further down the file, such as `this::label`, no longer reaches
-  `nil`: the method's local is declared ahead, as it is for a call. A parameter of the method named like the method
-  itself no longer hides it in the function the reference becomes.
-- A record with methods stores each component under the name its accessor reads. A component named like a Lua global,
-  such as `type`, was stored as `self.type_` and read back as `nil`.
-- A reference to `list.add` or `set.add` whose value the code reads, as `stream.filter(seen::add)` does, is now an
-  error that says to write a lambda. Its Lua function, an assignment, gave no value, so the filter kept nothing. Where
-  nothing reads the value, a stream's `forEach(found::add)` is now opened in place, `found[#found + 1] = item`, and a
-  stream's `forEach(String::length)`, whose value would go nowhere, is an error instead of a failure inside the
-  compiler.
+- **A local or parameter could hide a member of the same name.** When a method used both a local and a private
+  method, a static field or a member of the plugin class with the same name, the Lua mixed them up: `this.shown =
+  shown` in the plugin class compiled to `shown = shown`, which did nothing, and a private method `step` that declared
+  a local `step` called the local. Such a local now gets a trailing underscore, `shown_`.
+- **A method reference to a private method defined further down the file**, such as `this::label`, was `nil`. It now
+  works, as a call already did, and a parameter named like the method no longer hides it.
+- **A record component named like a Lua global**, such as `type`, in a record with methods, was stored as
+  `self.type_` and read back as `nil`. Each component is now stored under the name its accessor reads.
+- **`stream.filter(seen::add)` kept nothing**, because the Lua for `add` gives no value. Using the value of a
+  `list.add` or `set.add` reference is now an error that says to write a lambda. Where nothing uses the value, as in
+  `forEach(found::add)`, the Lua is written in place, `found[#found + 1] = item`; `forEach(String::length)`, whose
+  value goes nowhere, is now an error instead of crashing the compiler.
 
 ## [0.1.0] - 2026-10-24
 
@@ -131,19 +165,23 @@ The first release.
 
 ### Added
 
-- The Java front end: a plugin written in Java 25 compiles to Lua 5.4 for the RS3 Client Plugin API inside its own
-  `compileJava`. It supports classes, interfaces, records, enums, nested and anonymous classes, generics, lambdas and
-  method references, switches and patterns, `try`/`catch`, collections, streams, strings and `String.format`.
-  [docs/java-subset.md](docs/java-subset.md) lists every construct and the Lua it becomes.
-- The plugin model: the class that extends `Plugin` becomes `main.lua`, `@Subscribe` methods subscribe to client
-  events, and `@ConfigGroup` interfaces become settings kept in `PersistentDB`.
-- RS3 bindings generated on the developer's machine from runescape-api-stubs, from a local checkout or fetched from
-  GitHub at a pinned or the latest commit.
-- The Gradle plugin `org.adelheid.oneiro`: `plugin.json` from the build, typed `Resources` and `Urls` classes, checks
-  of the folder that ships, a reproducible zip, a dev source set for helpers that never ship, `linkDevPlugin` for the
-  client's `dev_plugins` folder, and Lua tests on the bundled Lua 5.4.8.
-- Compile-time checks against the manifest: code that needs a permission or an icon does not compile unless the build
-  declares it, and development-only members such as `ExecuteConsoleCommand` compile only in the dev source set.
+- **The Java compiler.** A plugin written in Java 25 compiles to Lua 5.4 for the RS3 Client Plugin API, as part of the
+  normal `compileJava`. It supports classes, interfaces, records, enums, nested and anonymous classes, generics,
+  lambdas and method references, switches and patterns, `try`/`catch`, collections, streams, strings and
+  `String.format`. [docs/java-subset.md](docs/java-subset.md) lists every construct and the Lua it becomes.
+- **The plugin model.** The class that extends `Plugin` becomes `main.lua`, `@Subscribe` methods subscribe to client
+  events, and `@ConfigGroup` interfaces become settings saved in `PersistentDB`.
+- **RS3 bindings**, Java classes for the client's API, generated on your machine from the RS3 API stubs: a local
+  checkout, or a download from GitHub at a fixed or the latest commit.
+- **The Gradle plugin `org.adelheid.oneiro`**, which:
+  - writes `plugin.json` from the build;
+  - generates typed `Resources` and `Urls` classes for your files and base URLs;
+  - checks the folder that ships, and zips it the same way every time;
+  - adds a dev source set for helpers that never ship;
+  - links the plugin into the client's `dev_plugins` folder with `linkDevPlugin`;
+  - runs Lua tests on a bundled Lua 5.4.8.
+- **Checks against the manifest when compiling.** Code that needs a permission or an icon compiles only if the build
+  declares it, and development-only functions such as `ExecuteConsoleCommand` compile only in the dev source set.
 
 [Unreleased]: https://github.com/adelheidsoftware/oneiro/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/adelheidsoftware/oneiro/compare/v0.1.0...v0.2.0

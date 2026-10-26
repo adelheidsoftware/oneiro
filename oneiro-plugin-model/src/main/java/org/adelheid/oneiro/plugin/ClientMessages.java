@@ -82,7 +82,9 @@ final class ClientMessages {
 			return name + " is nil in the client, so "
 					+ (nil.group(1).equals("index") ? "nothing can be read from it" : "it cannot be called")
 					+ ". Where " + name + " is a part of the RS3 API, " + BINDINGS + ", which describe it, but the"
-					+ " client lacks it: leave it out until the client has it, or reach what it offers another way.";
+					+ " client lacks it; where it is a library plugin's, the library's types describe it, but the"
+					+ " player's version of the library lacks it. Leave it out until the client or the library has"
+					+ " it, or reach what it offers another way.";
 		}
 		return null;
 	}
@@ -115,9 +117,11 @@ final class ClientMessages {
 	}
 
 	/**
-	 * Whether a nil name may be one of the RS3 API's. A plugin compiled by Oneiro names nothing global but the API,
-	 * and the API names its tables and functions with a capital, where Java and Kotlin name fields and methods in
-	 * camel case; a name in capitals, such as a constant's, is left out.
+	 * Whether a nil name may be one of the RS3 API's or of a library plugin's, whose types may describe another version
+	 * than the player has. A plugin compiled by Oneiro names nothing global but the API and its library plugins'
+	 * aliases, and the API names its tables and functions with a capital, as libraries such as PrettyUI name their
+	 * tables, where Java and Kotlin name fields and methods in camel case; a name in capitals, such as a constant's, is
+	 * left out. A vendored library ships with the plugin, so its names are always there.
 	 */
 	private static boolean isApiName(String kind, String name) {
 		return kind.equals("global")
