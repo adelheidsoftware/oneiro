@@ -299,6 +299,7 @@ game world, it registers shapes, which the client draws.
 | `Overlay`, `OverlayPanel` with a `PanelComponent` | A `ui.GroupBox` with `ui.Text`, `ui.Sprite` and other components, on the plugin layer |
 | `InfoBox`, `Counter`, `Timer` | No info box bar: a small box of the plugin's own, like the one below |
 | `PluginPanel` behind a `NavigationButton` | The content layer behind the plugin's icon in the Plugins ribbon: `ribbonIcon = true`, and `ContentLayerReady`, which hands out an empty layer each time it opens |
+| A panel built from Swing components: `JPanel`, `JButton`, `JLabel`, `JCheckBox`, layouts | [PrettyUI](https://prettyui.j3.gg/), a library plugin of views, windows, buttons, tabs, fields and dialogs in the game's look, with a layout that places each component below or beside the one before: a dependency, which [using-lua.md](using-lua.md#writing-a-definition-file) shows in use. Or the `ui` components themselves, placed by hand |
 | Tile markers, NPC highlights, `OverlayUtil.renderPolygon` | Shapes in the world: `ShapeData`, drawn by a `ShapeEntity` (a fixed marker), a `ShapeInstance` (one that moves), or `ShapeList.Draw` in `Draw` or `EntityDraw` (for one frame) |
 | Hiding NPCs or players | `EntityDraw`, whose callback returns `false` to hide one |
 | `RuneLiteObject` with a model from `client.loadModel` | No counterpart: nothing puts a model into the world. Shapes draw geometry of the plugin's own; a real model can be a `ui.Model` laid over the scene, as described below |

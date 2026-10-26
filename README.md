@@ -232,6 +232,8 @@ client's own messages mean.
   notifiers and timers become, and how the rules differ between the games.
 - [The plugin model and the build](docs/plugin-model.md): the project layout, the `oneiro { }` block, the tasks and
   the checks.
+- [Using Lua](docs/using-lua.md): library plugins, vendored libraries and Lua of your own, where their types come
+  from, and how to write and share types for a library that has none.
 - [Supported Java](docs/java-subset.md) and [supported Kotlin](docs/kotlin-subset.md): every construct Oneiro
   accepts, the Lua it becomes, and what it rejects.
 - [Architecture](docs/architecture.md): how Oneiro is put together, for contributors.

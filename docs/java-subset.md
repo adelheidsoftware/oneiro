@@ -68,6 +68,7 @@ only when it uses them. Each one is listed in [Helpers](#helpers).
 | Record with methods, constructors, static members or interfaces | An object record: a class whose fields are its components, `Tile.new(x, y, plane)` | A compact constructor's code runs before the components are assigned, as in Java. Accessor calls are field reads, `tile.x`. The `equals`, `hashCode` and `toString` javac gives a record stay *Never*, below; ones the record declares are its methods. |
 | `equals`, `hashCode` or `toString` of a record | *Never*: "A record is a plain Lua table, compared by identity and without methods; use its components instead." | |
 | Lambda `x -> x + 1`, block lambda | `function(x) return x + 1 end` | Java captures only effectively final variables, so Lua's by-reference capture behaves the same. An unnamed parameter, `_`, stays `_`, except at the end, where it is left out as Lua drops the arguments a function does not name: `(_, x, _) -> ...` is `function(_, x) ... end`, and `(_, _, _) -> ...` is `function() ... end`. |
+| A lambda for an interface whose method returns `Void`, `Function<Integer, Void> note = value -> { noted.add(value); return null; }` | `function(value) noted[#noted + 1] = value end` | `Void`'s one value is null, which a Lua function gives by ending, so the `return null;` that ends the lambda is left out. |
 | Functional interface call `pred.test(x)` | `pred(x)` | Any interface with one abstract method. |
 | Method reference `Row::complete` (static) | `Row.complete` | |
 | Method reference `this::onTick` | `function(event) self:onTick(event) end`; in the plugin class, the local function `onTick` | The function takes the parameters the method names. |
@@ -439,7 +440,8 @@ Lua that Oneiro does not write is called through classes Oneiro generates from i
 from the stubs; the libraries the plugin vendors, as [plugin-model.md](plugin-model.md#vendored-libraries) explains;
 the library plugins it depends on, such as PrettyUI, from the types the build names for them, as
 [plugin-model.md](plugin-model.md#library-plugins) explains; and the plugin's own Lua, from its files under
-`src/main/lua/`, as [plugin-model.md](plugin-model.md#the-plugins-own-lua) explains. Three features of the
+`src/main/lua/`, as [plugin-model.md](plugin-model.md#the-plugins-own-lua) explains. How to write the types of a
+library that has none, and check and share them, is in [using-lua.md](using-lua.md). Three features of the
 `oneiro-api` artifact describe the tables and values that pass between the plugin's code and that Lua: `@LuaName`,
 records, and `@LuaReturnValues` for several return values.
 

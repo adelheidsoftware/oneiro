@@ -3,7 +3,8 @@
 How a plugin written in Java or Kotlin becomes an RS3 plugin: the project's layout, the `oneiro { }` block that
 configures it, the tasks that turn it into the folder the client loads and the zip that goes to Mod.io, and the checks
 on the way. What each construct becomes is in [java-subset.md](java-subset.md) for Java and
-[kotlin-subset.md](kotlin-subset.md) for Kotlin.
+[kotlin-subset.md](kotlin-subset.md) for Kotlin. Using Lua that Oneiro does not write, and writing the types of a
+library that has none, is in [using-lua.md](using-lua.md).
 
 ## A plugin project
 
@@ -405,6 +406,7 @@ A library plugin, such as PrettyUI (Mod.io 6398181), ships on its own: the playe
 each plugin whose manifest names it the library's table as a Lua global, named by the alias the manifest gives it. None
 of its code ships with the plugin. Its classes come from LuaCATS types the build names: definition files written from
 its public docs, kept with the plugin's sources and never shipped, or a repository of community types.
+[Writing a definition file](using-lua.md#writing-a-definition-file) shows how to write one.
 
 ```kotlin
 oneiro {

@@ -60,6 +60,9 @@ All notable changes to Oneiro are listed here. The format follows
   player may have a different version of a library plugin than the one your types describe.
 - **Stubs from Codeberg and GitLab.** `stubs { remote(...) }` now takes Codeberg and GitLab repositories as well as
   GitHub ones, and says clearly when it cannot find a repository or commit.
+- **A guide to using Lua.** [Using Lua](docs/using-lua.md) explains the three kinds of Lua a plugin can use, where
+  their types come from, how to write a definition file for a library that has none, how to check it and share it,
+  and the overrides file.
 
 ### Changed
 
@@ -97,11 +100,21 @@ All notable changes to Oneiro are listed here. The format follows
   of a `devFolder` or a `development(...)` dependency, and no longer only when the plugin has a dev source set.
 - **Download cache moved.** Downloaded repositories are now kept in `caches/oneiro/repositories/` in Gradle's user
   home, instead of `caches/oneiro/stubs/`. The stubs are downloaded once more, and the old folder can be deleted.
+- **A lambda for an interface that returns `Void`**, such as `Function<T, Void>`, no longer ends in `return nil` in
+  its Lua: the `return null;` Java needs, or the `null` a Kotlin lambda ends with, is what a Lua function does by
+  ending.
 
 ### Fixed
 
 - Two classes with the same name from different packages, used in the same file, now give an error. Before, Oneiro
   required the first one for both.
+- A class of fields that a function takes as one type of a union, as in `string|Options`, is now a table your plugin
+  can build, with a public constructor, as it already was for a parameter of that type alone.
+- Kotlin can now use a library's generic classes and functions where `nil` is a type argument, such as an event
+  whose listeners return nothing. Type variables now take any value, and `nil` is `@Nullable Void`; before, Kotlin saw
+  a `Void` that could not be null, which no lambda could return.
+- The Javadoc of a class that only holds the fields its subclasses share now says so, rather than that the library
+  hands out its values.
 
 ## [0.2.0] - 2026-10-25
 
