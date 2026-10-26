@@ -1,15 +1,27 @@
 package org.adelheid.oneiro.gradle;
 
 import java.io.File;
+import java.util.List;
+import java.util.regex.Pattern;
 import javax.inject.Inject;
+import javax.lang.model.SourceVersion;
 import org.adelheid.oneiro.plugin.Permission;
 import org.gradle.api.Action;
+import org.gradle.api.GradleException;
+import org.gradle.api.Named;
+import org.gradle.api.NamedDomainObjectContainer;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.SetProperty;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 
 /**
  * The {@code oneiro { }} block of a plugin's build:
@@ -27,6 +39,12 @@ import org.gradle.api.provider.SetProperty;
  *         permissions { optional(chatAccess) }
  *         urls { url("prices", "https://prices.example.org") }
  *     }
+ *     libraries {
+ *         vendored("zyklib") {
+ *             remote("https://codeberg.org/ZyklopMarco/runescape-api-zyklib", "<commit>")
+ *             from("src")
+ *         }
+ *     }
  * }
  * }</pre>
  */
@@ -34,12 +52,14 @@ public abstract class OneiroExtension {
 
 	private final Stubs stubs;
 	private final PluginManifest plugin;
+	private final Libraries libraries;
 	private final Lua lua;
 
 	@Inject
 	public OneiroExtension(ObjectFactory objects) {
 		this.stubs = objects.newInstance(Stubs.class);
 		this.plugin = objects.newInstance(PluginManifest.class);
+		this.libraries = objects.newInstance(Libraries.class);
 		this.lua = objects.newInstance(Lua.class);
 	}
 
@@ -73,6 +93,15 @@ public abstract class OneiroExtension {
 
 	public void plugin(Action<? super PluginManifest> action) {
 		action.execute(plugin);
+	}
+
+	/** The Lua libraries the plugin vendors. */
+	public Libraries getLibraries() {
+		return libraries;
+	}
+
+	public void libraries(Action<? super Libraries> action) {
+		action.execute(libraries);
 	}
 
 	/** The Lua that runs the plugin's Lua tests. */
@@ -225,6 +254,140 @@ public abstract class OneiroExtension {
 			public void url(String alias, String url) {
 				getUrls().put(alias, url);
 			}
+		}
+	}
+
+	/**
+	 * The Lua libraries the plugin vendors: copied into it, as their documentation lays them out, with their licences,
+	 * and bound from their LuaCATS annotations, so that Java and Kotlin call them as Lua does. Each has a name, which
+	 * names the package of its bindings, {@code org.adelheid.oneiro.lib.<name>}, and the folder of its licence,
+	 * {@code licences/<name>/}.
+	 */
+	public abstract static class Libraries {
+
+		/** A library's name: a word of lowercase letters and digits that Java can take for a package. */
+		private static final Pattern NAME = Pattern.compile("[a-z][a-z0-9]*");
+
+		private final NamedDomainObjectContainer<VendoredLibrary> declared;
+
+		@Inject
+		public Libraries(ObjectFactory objects) {
+			this.declared = objects.domainObjectContainer(VendoredLibrary.class);
+		}
+
+		/** A library that ships with the plugin, its Lua in the plugin's root. */
+		public void vendored(String name, Action<? super VendoredLibrary> action) {
+			declared.create(checked(name), action);
+		}
+
+		/**
+		 * A library that only the dev source set uses, which goes into the development folder alone and never ships;
+		 * only the dev source set has its bindings.
+		 */
+		public void development(String name, Action<? super VendoredLibrary> action) {
+			declared.create(checked(name), library -> {
+				library.getDevelopment().set(true);
+				action.execute(library);
+			});
+		}
+
+		/** The libraries the build declares. */
+		List<VendoredLibrary> declared() {
+			return List.copyOf(declared);
+		}
+
+		private static String checked(String name) {
+			if (!NAME.matcher(name).matches() || SourceVersion.isKeyword(name)) {
+				throw new GradleException("A library's name, " + name + ", names the package of its bindings,"
+						+ " org.adelheid.oneiro.lib.<name>: lowercase letters and digits, starting with a letter, and"
+						+ " no word Java reserves, such as zyklib.");
+			}
+			return name;
+		}
+	}
+
+	/**
+	 * A library the plugin vendors: where its code comes from, a checkout on this machine or a repository at a full
+	 * commit; the folder of it whose Lua files go to the plugin's root; its licence; and an overrides file for its
+	 * bindings. As a task's input, its local checkout counts by the files that are read from it.
+	 */
+	public abstract static class VendoredLibrary implements Named {
+
+		private final String name;
+
+		@Inject
+		public VendoredLibrary(String name) {
+			this.name = name;
+			getFrom().convention("");
+			getDevelopment().convention(false);
+		}
+
+		@Input
+		@Override
+		public String getName() {
+			return name;
+		}
+
+		/** A checkout of the library on this machine. */
+		@Internal
+		public abstract DirectoryProperty getLocal();
+
+		/** A repository of the library on GitHub, Codeberg or GitLab, fetched at {@link #getCommit()}. */
+		@Optional
+		@Input
+		public abstract Property<String> getRemote();
+
+		/** The full commit of the remote that is vendored. */
+		@Optional
+		@Input
+		public abstract Property<String> getCommit();
+
+		/** The folder of the library, from its root, whose Lua files go to the plugin's root; its root by default. */
+		@Input
+		public abstract Property<String> getFrom();
+
+		/**
+		 * The file of the library's licence, from its root; by default the one file at its root named like a licence,
+		 * such as {@code LICENSE} or {@code LICENCE.md}.
+		 */
+		@Optional
+		@Input
+		public abstract Property<String> getLicence();
+
+		/** The plugin's overrides file for the library's bindings, in the format of Oneiro's own. */
+		@Optional
+		@InputFile
+		@PathSensitive(PathSensitivity.NONE)
+		public abstract RegularFileProperty getOverrides();
+
+		/** Whether only the dev source set uses the library; set by {@code development(...)}. */
+		@Input
+		public abstract Property<Boolean> getDevelopment();
+
+		/** The library's code from a checkout on this machine. */
+		public void local(File directory) {
+			getLocal().set(directory);
+		}
+
+		/** The library's code from a repository on GitHub, Codeberg or GitLab, at a full commit. */
+		public void remote(String url, String commit) {
+			getRemote().set(url);
+			getCommit().set(commit);
+		}
+
+		/** The folder whose Lua files go to the plugin's root, as the library's documentation lays them out. */
+		public void from(String folder) {
+			getFrom().set(folder);
+		}
+
+		/** The file of the library's licence, which ships under {@code licences/<name>/}. */
+		public void licence(String file) {
+			getLicence().set(file);
+		}
+
+		/** An overrides file for the library's bindings, for what its annotations do not say. */
+		public void overrides(File file) {
+			getOverrides().set(file);
 		}
 	}
 

@@ -7,6 +7,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -16,12 +18,15 @@ import java.util.stream.Stream;
 
 /**
  * The checks {@code checkPlugin} runs on the folder that ships, before it is zipped. The folder may hold only
- * {@code main.lua}, {@code plugin.json}, Lua files under {@code src/} and PNG or Ogg files under {@code resources/}.
- * Every Lua file under {@code src/}, Oneiro's or the plugin's own, starts with its path, by which the client's errors
- * name it; every {@code require} names a file in the folder; no image is larger than the client loads; and no Lua uses
- * a member of the client's that needs a permission the manifest lacks, or that is for development only, such as
- * {@code ExecuteConsoleCommand}, the client's way into the console's cheats. The compiler holds the Lua it writes to
- * those last two already; the check holds the plugin's own Lua to them.
+ * {@code main.lua}, {@code plugin.json}, Lua files under {@code src/}, PNG or Ogg files under {@code resources/}, and
+ * the files of the libraries it vendors, their Lua and their licences. Every Lua file under {@code src/}, Oneiro's or
+ * the plugin's own, starts with its path, by which the client's errors name it; every {@code require} names a file in
+ * the folder; each library is required by the plugin's own Lua or the Lua Oneiro writes, since moderators would read
+ * its code for nothing otherwise; no image is larger than the client loads; and no Lua uses a member of the client's
+ * that is for development only, such as {@code ExecuteConsoleCommand}, the client's way into the console's cheats, nor,
+ * but in a library, one that needs a permission the manifest lacks. The compiler holds the Lua it writes to those last
+ * two already; the check holds the Lua it did not write to them. A library's code may name members of every
+ * permission, in parts the plugin does not call, so the permissions are the plugin's own Lua's to check.
  */
 public final class PackageChecks {
 
@@ -40,8 +45,13 @@ public final class PackageChecks {
 	 *
 	 * @param facts the client's members that need a permission or are for development only
 	 * @param permissions the permissions the manifest requests, required or optional
+	 * @param libraries the libraries the plugin vendors and ships
 	 */
-	public static List<String> check(Path folder, ClientFacts facts, Set<String> permissions) throws IOException {
+	public static List<String> check(Path folder, ClientFacts facts, Set<String> permissions,
+			List<VendoredLibraries.Library> libraries) throws IOException {
+		// Each vendored file by the library it comes from
+		Map<String, String> vendored = new HashMap<>();
+		libraries.forEach(library -> library.files().forEach(path -> vendored.put(path, library.name())));
 		List<String> problems = new ArrayList<>();
 		for (String required : List.of("main.lua", "plugin.json")) {
 			if (!Files.isRegularFile(folder.resolve(required))) {
@@ -54,7 +64,7 @@ public final class PackageChecks {
 		}
 		for (Path file : files) {
 			String path = folder.relativize(file).toString().replace('\\', '/');
-			if (path.equals("main.lua") || path.equals("plugin.json")) {
+			if (path.equals("main.lua") || path.equals("plugin.json") || vendored.containsKey(path)) {
 				continue;
 			}
 			if (path.startsWith("src/") && path.endsWith(".lua")) {
@@ -64,34 +74,55 @@ public final class PackageChecks {
 				resourceProblems(file, path, problems);
 				continue;
 			}
-			problems.add(path + " is not part of a plugin: only main.lua, plugin.json, Lua files under src/ and"
-					+ " PNG or Ogg files under resources/ ship.");
+			problems.add(path + " is not part of a plugin: only main.lua, plugin.json, Lua files under src/, PNG or"
+					+ " Ogg files under resources/, and the files of the libraries the build vendors ship.");
 		}
+		// The files the plugin's own Lua and Oneiro's require, which a library must be among
+		Set<String> required = new HashSet<>();
 		for (Path file : files) {
 			String path = folder.relativize(file).toString().replace('\\', '/');
 			if (path.endsWith(".lua")) {
-				luaProblems(folder, file, path, facts, permissions, problems);
+				Set<String> requires = luaProblems(folder, file, path, vendored.containsKey(path), facts, permissions,
+						problems);
+				if (!vendored.containsKey(path)) {
+					required.addAll(requires);
+				}
+			}
+		}
+		for (VendoredLibraries.Library library : libraries) {
+			if (library.files().stream().noneMatch(required::contains)) {
+				problems.add(library.name() + " is vendored, but no Lua of the plugin's requires it, so moderators"
+						+ " would read its code for nothing; use it, or remove it from the build.");
 			}
 		}
 		return problems;
 	}
 
-	private static void luaProblems(Path folder, Path file, String path, ClientFacts facts, Set<String> permissions,
-			List<String> problems) throws IOException {
+	/**
+	 * The problems of a Lua file, and the files it requires.
+	 *
+	 * @param vendored whether the file is a library's, which need not start with its path, and may name members of
+	 *     permissions the manifest lacks
+	 */
+	private static Set<String> luaProblems(Path folder, Path file, String path, boolean vendored, ClientFacts facts,
+			Set<String> permissions, List<String> problems) throws IOException {
 		String text = Files.readString(file, StandardCharsets.UTF_8);
-		if (path.startsWith("src/") && !text.startsWith("-- " + path + "\n") && !text.startsWith("-- " + path + "\r")) {
+		boolean startsWithPath = text.startsWith("-- " + path + "\n") || text.startsWith("-- " + path + "\r");
+		if (path.startsWith("src/") && !vendored && !startsWithPath) {
 			problems.add(path + " does not start with its path, -- " + path
 					+ ", by which the client's errors name it.");
 		}
+		Set<String> requires = new HashSet<>();
 		Matcher required = REQUIRE.matcher(text);
 		while (required.find()) {
-			String module = required.group(2);
-			if (!Files.isRegularFile(folder.resolve(module + ".lua"))) {
-				problems.add(path + " requires \"" + module + "\", which is not in the plugin.");
+			String module = required.group(2) + ".lua";
+			requires.add(module);
+			if (!Files.isRegularFile(folder.resolve(module))) {
+				problems.add(path + " requires \"" + required.group(2) + "\", which is not in the plugin.");
 			}
 		}
 		for (Map.Entry<String, String> needed : facts.permissions().entrySet()) {
-			if (!permissions.contains(needed.getValue()) && uses(text, needed.getKey())) {
+			if (!vendored && !permissions.contains(needed.getValue()) && uses(text, needed.getKey())) {
 				problems.add(path + " uses " + needed.getKey() + ", which needs the " + needed.getValue()
 						+ " permission the manifest does not declare; add it to the build, oneiro { plugin {"
 						+ " permissions { optional(" + needed.getValue() + ") } } }.");
@@ -102,6 +133,7 @@ public final class PackageChecks {
 				problems.add(path + " uses " + devOnly + ", which is for development only and must never ship.");
 			}
 		}
+		return requires;
 	}
 
 	/** Whether Lua code names a member by its path, as a whole: {@code HTTPRequest} in {@code HTTPRequest.new(...)}. */

@@ -294,12 +294,11 @@ class ConformanceTest {
 		}
 		Path output = Path.of("build", "case-bindings",
 				folder.getFileName() + "-" + language.name().toLowerCase(Locale.ROOT));
-		List<BindingsGenerator.LibraryResult> results = BindingsGenerator.generatePluginLua(
-				Path.of(System.getProperty("oneiro.stubsFixture")), rs3Jar, output, language, ROOT_PACKAGE, lua, null);
-		for (BindingsGenerator.LibraryResult result : results) {
-			assertEquals(List.of(), result.warnings(), "the bindings of " + lua);
-		}
-		return List.of(results.getFirst().classesJar());
+		BindingsGenerator.LuaResult result = BindingsGenerator.generateLua(
+				Path.of(System.getProperty("oneiro.stubsFixture")), rs3Jar, output, language, ROOT_PACKAGE, List.of(),
+				List.of(), lua, null);
+		assertEquals(List.of(), result.warnings(), "the bindings of " + lua);
+		return List.of(result.main().classesJar());
 	}
 
 	/**

@@ -9,11 +9,9 @@ import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.tools.Diagnostic;
@@ -24,6 +22,7 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.adelheid.oneiro.api.LuaGlobal;
 import org.adelheid.oneiro.plugin.ClientFacts;
+import org.adelheid.oneiro.plugin.VendoredLibraries;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -40,6 +39,9 @@ public final class BindingsGenerator {
 	public static final String CLASSES_JAR = "rs3-bindings.jar";
 	/** The jar of the classes' sources, for an IDE's documentation. */
 	public static final String SOURCES_JAR = "rs3-bindings-sources.jar";
+
+	/** The package below which each library a plugin vendors has a package of its own, named after it. */
+	static final String LIBRARIES_PACKAGE = "org.adelheid.oneiro.lib";
 
 	/**
 	 * What a run produced.
@@ -71,7 +73,8 @@ public final class BindingsGenerator {
 	 *     whose folder goes to the plugin's root, as Zyklib's does
 	 * @param overrides the plugin's overrides file for the library; null when it keeps none
 	 */
-	record Library(String name, String packageName, Path folder, String modulePrefix, @Nullable Path overrides) {
+	public record Library(String name, String packageName, Path folder, String modulePrefix,
+			@Nullable Path overrides) {
 
 		/** The model of every Lua file under the folder, each loaded by its path from there after the prefix. */
 		ApiModel read() throws IOException {
@@ -130,76 +133,147 @@ public final class BindingsGenerator {
 	}
 
 	/**
-	 * Generates the bindings of the plugin's own Lua into {@code output}, replacing what an earlier run left there:
-	 * from the LuaCATS files of the main source set, which ship under {@code src/}, {@code main-bindings.jar}, and from
-	 * those of the dev source set, which go under {@code dev/}, {@code dev-bindings.jar}, each with a sources jar. A
-	 * file's folders below its source set's folder are packages below the root package, so that
-	 * {@code core/levels.lua} is the class {@code <root>.core.Levels}. A type the Lua names but does not declare
-	 * resolves to the RS3 bindings' class, and the dev set's also to the main set's; the main set's classes compile
-	 * against the RS3 jar, and the dev set's against both.
+	 * What generating the bindings of the Lua a plugin uses produced: those of each library it vendors, the main
+	 * source set's and then the dev source set's, and those of its own Lua.
+	 *
+	 * @param main what the main source set's own Lua gave
+	 * @param dev what the dev source set's own Lua gave
+	 */
+	public record LuaResult(List<LibraryResult> libraries, LibraryResult main, LibraryResult dev) {
+
+		public LuaResult {
+			libraries = List.copyOf(libraries);
+		}
+
+		/** Every warning, the libraries' first. */
+		public List<String> warnings() {
+			List<String> warnings = new ArrayList<>();
+			libraries.forEach(library -> warnings.addAll(library.warnings()));
+			warnings.addAll(main.warnings());
+			warnings.addAll(dev.warnings());
+			return warnings;
+		}
+	}
+
+	/** One set of bindings compiled together: what each gave, the bindings, and the folder of their classes. */
+	private record Generated(List<LibraryResult> results, List<JavaBindings> bindings, List<Path> classes) {
+	}
+
+	/**
+	 * Generates the bindings of the Lua a plugin uses into {@code output}, replacing what an earlier run left there:
+	 * for each library it vendors, {@code libraries/main/<name>-bindings.jar}, or {@code libraries/dev/} for one the
+	 * dev source set alone uses, in the package {@code org.adelheid.oneiro.lib.<name>}; for its own Lua, from the
+	 * LuaCATS files of the main source set, which ship under {@code src/}, {@code main-bindings.jar}, and from those of
+	 * the dev source set, which go under {@code dev/}, {@code dev-bindings.jar}; each with a sources jar. A file of the
+	 * plugin's own Lua is a class of the package of its folder below the root package, so that
+	 * {@code core/levels.lua} is {@code <root>.core.Levels}.
+	 *
+	 * <p>A type the Lua names but does not declare resolves to the RS3 bindings' class, then to a library's; the dev
+	 * source set's own Lua names the main set's types before those. Each set compiles against the sets it may name: the
+	 * main libraries against the RS3 jar, the dev libraries against those, the main set's own Lua against the RS3 jar
+	 * and the main libraries, and the dev set's against everything.
 	 *
 	 * @param rs3Jar the classes of the RS3 bindings the stubs gave
 	 * @param main the folder of the main source set's LuaCATS files, its Lua or definition files for it; a folder that
 	 *     does not exist has none
 	 * @param dev the folder of the dev source set's, or null for none
-	 * @return what each source set's bindings produced, the main set's first
 	 */
-	public static List<LibraryResult> generatePluginLua(Path stubsRoot, Path rs3Jar, Path output, Language language,
-			String rootPackage, Path main, @Nullable Path dev) throws IOException {
-		Map<String, ApiModel> models = new LinkedHashMap<>();
-		models.put("main", read(main, "src/"));
-		models.put("dev", dev == null ? new ApiModel() : read(dev, "dev/"));
+	public static LuaResult generateLua(Path stubsRoot, Path rs3Jar, Path output, Language language, String rootPackage,
+			List<Library> mainLibraries, List<Library> devLibraries, Path main, @Nullable Path dev) throws IOException {
+		ApiModel mainModel = read(main, "src/");
+		ApiModel devModel = dev == null ? new ApiModel() : read(dev, "dev/");
 		Path work = output.resolve("work");
+		Path libraries = output.resolve("libraries");
 		delete(work);
-		List<LibraryResult> results = new ArrayList<>();
-		List<JavaBindings> named = new ArrayList<>();
-		if (models.values().stream().anyMatch(model -> !model.classes.isEmpty() || !model.enums.isEmpty())) {
+		delete(libraries);
+		List<JavaBindings> rs3 = new ArrayList<>();
+		if (!mainLibraries.isEmpty() || !devLibraries.isEmpty() || declares(mainModel) || declares(devModel)) {
 			// The RS3 API's types, which the Lua may name; Lua that declares nothing names none
-			named.add(new JavaBindings(Stubs.readTypes(stubsRoot).model(), Map.of(), Overrides.bundled(),
+			rs3.add(new JavaBindings(Stubs.readTypes(stubsRoot).model(), Map.of(), Overrides.bundled(),
 					BindingsTarget.rs3(), language, new ArrayList<>()));
 		}
-		List<Path> classpath = new ArrayList<>(List.of(rs3Jar));
-		for (Map.Entry<String, ApiModel> entry : models.entrySet()) {
-			String sourceSet = entry.getKey();
-			ApiModel model = entry.getValue();
-			Path folder = sourceSet.equals("main") ? main : dev;
-			List<String> warnings = new ArrayList<>();
-			for (ApiModel.Unparsed unparsed : model.unparsed) {
-				warnings.add(Objects.requireNonNull(folder).resolve(unparsed.file()) + ":" + unparsed.line()
-						+ ": not understood (" + unparsed.pattern() + "): " + unparsed.text());
-			}
-			JavaBindings bindings = new JavaBindings(model, Map.of(), Overrides.none(),
-					BindingsTarget.plugin(sourceSet, rootPackage), language, warnings);
-			// The dev set's Lua names the main set's types before the RS3 API's, as its own come first
-			bindings.foreign.addAll(named.reversed());
-			Path sources = Files.createDirectories(work.resolve(sourceSet).resolve("sources"));
-			Path classes = Files.createDirectories(work.resolve(sourceSet).resolve("classes"));
-			List<Path> sourceFiles = write(bindings.sources(), sources);
-			if (!sourceFiles.isEmpty()) {
-				compile(sourceFiles, classes, classpath);
-			}
-			Path classesJar = output.resolve(sourceSet + "-bindings.jar");
-			Path sourcesJar = output.resolve(sourceSet + "-bindings-sources.jar");
-			Jars.write(classes, classesJar, "");
-			Jars.write(sources, sourcesJar, "");
-			results.add(new LibraryResult(sourceSet, classesJar, sourcesJar, warnings, List.of()));
-			named.add(bindings);
-			classpath.add(classes);
-		}
+		Generated mainSet = generateLibraries(rs3, List.of(rs3Jar), mainLibraries, language, libraries.resolve("main"),
+				work.resolve("libraries-main"));
+		Generated devSet = generateLibraries(concat(rs3, mainSet.bindings()),
+				concat(List.of(rs3Jar), mainSet.classes()), devLibraries, language, libraries.resolve("dev"),
+				work.resolve("libraries-dev"));
+		Generated ownMain = generateOwn("main", mainModel, main, rootPackage, language, concat(rs3, mainSet.bindings()),
+				concat(List.of(rs3Jar), mainSet.classes()), output, work);
+		Generated ownDev = generateOwn("dev", devModel, dev, rootPackage, language,
+				concat(concat(ownMain.bindings(), rs3), concat(mainSet.bindings(), devSet.bindings())),
+				concat(concat(List.of(rs3Jar), mainSet.classes()), concat(devSet.classes(), ownMain.classes())), output,
+				work);
 		delete(work);
-		return results;
+		return new LuaResult(concat(mainSet.results(), devSet.results()), ownMain.results().getFirst(),
+				ownDev.results().getFirst());
 	}
 
 	/**
-	 * {@link #generatePluginLua} for the Gradle plugin's worker, called reflectively with plain strings, returning the
-	 * warnings of both source sets.
+	 * {@link #generateLua} for the Gradle plugin's worker, called reflectively with plain strings, returning every
+	 * warning. The libraries are those {@code oneiroLibraries} staged in the folder {@code libraries}
+	 * ({@link VendoredLibraries}), each from its own LuaCATS annotations, with the overrides file the build keeps for
+	 * it.
 	 */
-	public static List<String> generatePluginLuaForBuild(String stubsRoot, String rs3Jar, String output,
-			String language, String rootPackage, String main, String dev) throws IOException {
-		return generatePluginLua(Path.of(stubsRoot), Path.of(rs3Jar), Path.of(output), Language.valueOf(language),
-				rootPackage, Path.of(main), Path.of(dev)).stream()
-				.flatMap(result -> result.warnings().stream())
-				.toList();
+	public static List<String> generateLuaForBuild(String stubsRoot, String rs3Jar, String output, String language,
+			String rootPackage, String libraries, String main, String dev) throws IOException {
+		Path staged = Path.of(libraries);
+		List<Library> mainLibraries = new ArrayList<>();
+		List<Library> devLibraries = new ArrayList<>();
+		for (VendoredLibraries.Library library
+				: VendoredLibraries.read(staged.resolve(VendoredLibraries.FILE)).libraries()) {
+			Path overrides = VendoredLibraries.overridesFile(staged, library.name());
+			// A vendored library's files go to the plugin's root, so Lua loads them by their paths from there
+			(library.development() ? devLibraries : mainLibraries).add(new Library(library.name(),
+					LIBRARIES_PACKAGE + "." + library.name(), VendoredLibraries.typesFolder(staged, library.name()), "",
+					Files.isRegularFile(overrides) ? overrides : null));
+		}
+		return generateLua(Path.of(stubsRoot), Path.of(rs3Jar), Path.of(output), Language.valueOf(language),
+				rootPackage, mainLibraries, devLibraries, Path.of(main), Path.of(dev)).warnings();
+	}
+
+	/** Whether a model declares any type, which needs the RS3 API's to name. */
+	private static boolean declares(ApiModel model) {
+		return !model.classes.isEmpty() || !model.enums.isEmpty();
+	}
+
+	/**
+	 * The bindings of a source set's own Lua, {@code <sourceSet>-bindings.jar} and its sources jar in {@code output}.
+	 *
+	 * @param folder the folder of its LuaCATS files, which the warnings name the files by; null for none
+	 * @param named the bindings its types may name, in the order a name resolves in
+	 * @param classpath their classes
+	 */
+	private static Generated generateOwn(String sourceSet, ApiModel model, @Nullable Path folder, String rootPackage,
+			Language language, List<JavaBindings> named, List<Path> classpath, Path output, Path work)
+			throws IOException {
+		List<String> warnings = new ArrayList<>();
+		if (folder != null) {
+			for (ApiModel.Unparsed unparsed : model.unparsed) {
+				warnings.add(folder.resolve(unparsed.file()) + ":" + unparsed.line() + ": not understood ("
+						+ unparsed.pattern() + "): " + unparsed.text());
+			}
+		}
+		JavaBindings bindings = new JavaBindings(model, Map.of(), Overrides.none(),
+				BindingsTarget.plugin(sourceSet, rootPackage), language, warnings);
+		bindings.foreign.addAll(named);
+		Path sources = Files.createDirectories(work.resolve(sourceSet).resolve("sources"));
+		Path classes = Files.createDirectories(work.resolve(sourceSet).resolve("classes"));
+		List<Path> sourceFiles = write(bindings.sources(), sources);
+		if (!sourceFiles.isEmpty()) {
+			compile(sourceFiles, classes, classpath);
+		}
+		Path classesJar = output.resolve(sourceSet + "-bindings.jar");
+		Path sourcesJar = output.resolve(sourceSet + "-bindings-sources.jar");
+		Jars.write(classes, classesJar, "");
+		Jars.write(sources, sourcesJar, "");
+		return new Generated(List.of(new LibraryResult(sourceSet, classesJar, sourcesJar, warnings, List.of())),
+				List.of(bindings), List.of(classes));
+	}
+
+	private static <T> List<T> concat(List<? extends T> first, List<? extends T> second) {
+		List<T> both = new ArrayList<>(first);
+		both.addAll(second);
+		return both;
 	}
 
 	/**
@@ -261,20 +335,26 @@ public final class BindingsGenerator {
 		Jars.write(sourceRoot, sourcesJar, "");
 		Path clientFacts = output.resolve(ClientFacts.FILE);
 		new ClientFacts(bindings.permissions, bindings.devOnly).write(clientFacts);
-		List<LibraryResult> libraryResults = libraries.isEmpty()
-				? List.of()
-				: generateLibraries(bindings, classesJar, libraries, language, output, work.resolve("libraries"));
+		List<LibraryResult> libraryResults = generateLibraries(List.of(bindings), List.of(classesJar), libraries,
+				language, output, work.resolve("libraries")).results();
 		delete(work);
 		return new Result(classesJar, sourcesJar, clientFacts, warnings, notes, libraryResults);
 	}
 
 	/**
-	 * The libraries' bindings. A type a library names but does not declare resolves to the RS3 bindings' class, or else
-	 * to another library's, so the libraries' sources compile together, against the RS3 jar; each library's classes and
-	 * sources then go into jars of their own.
+	 * The bindings of a set of libraries. A type a library names but does not declare resolves to a class of the
+	 * bindings it may name, the RS3 API's first, or else to another library's of the set, so the set's sources compile
+	 * together, against those bindings' classes; each library's classes and sources then go into jars of their own, in
+	 * {@code output}: {@code <name>-bindings.jar} and {@code <name>-bindings-sources.jar}.
+	 *
+	 * @param named the bindings the libraries may name, in the order a name resolves in
+	 * @param classpath their classes
 	 */
-	private static List<LibraryResult> generateLibraries(JavaBindings rs3, Path rs3Jar, List<Library> libraries,
+	private static Generated generateLibraries(List<JavaBindings> named, List<Path> classpath, List<Library> libraries,
 			Language language, Path output, Path work) throws IOException {
+		if (libraries.isEmpty()) {
+			return new Generated(List.of(), List.of(), List.of());
+		}
 		List<JavaBindings> all = new ArrayList<>();
 		List<List<String>> allWarnings = new ArrayList<>();
 		List<Overrides> allOverrides = new ArrayList<>();
@@ -293,7 +373,7 @@ public final class BindingsGenerator {
 			allOverrides.add(overrides);
 		}
 		for (JavaBindings bindings : all) {
-			bindings.foreign.add(rs3);
+			bindings.foreign.addAll(named);
 			all.stream().filter(other -> other != bindings).forEach(bindings.foreign::add);
 		}
 		Path classes = work.resolve("classes");
@@ -307,7 +387,7 @@ public final class BindingsGenerator {
 			overrideReports(allOverrides.get(index), "these types", allWarnings.get(index), notes);
 			allNotes.add(notes);
 		}
-		compile(sourceFiles, classes, List.of(rs3Jar));
+		compile(sourceFiles, classes, classpath);
 
 		List<LibraryResult> results = new ArrayList<>();
 		for (int index = 0; index < libraries.size(); index++) {
@@ -321,7 +401,7 @@ public final class BindingsGenerator {
 					.toList();
 			results.add(new LibraryResult(library.name(), classesJar, sourcesJar, warnings, allNotes.get(index)));
 		}
-		return results;
+		return new Generated(results, all, List.of(classes));
 	}
 
 	/**

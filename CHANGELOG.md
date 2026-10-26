@@ -16,8 +16,17 @@ All notable changes to Oneiro are listed here. The format follows
   loads Oneiro's modules, and `explainError` shows a place in one as the line of its file. See
   [plugin-model.md](docs/plugin-model.md#the-plugins-own-lua).
 - `checkPlugin` checks that each Lua file under `src/` starts with its path, by which the client's errors name it;
-  finds a `require` in single quotes too; and finds, in any Lua that ships, the members of the client's that need a
-  permission the manifest lacks, as the compiler does, beside those for development only.
+  finds a `require` in single quotes too; and finds, in any Lua that ships, the members of the client's for
+  development only, and outside a vendored library those that need a permission the manifest lacks, as the compiler
+  does.
+- Vendored libraries: `oneiro { libraries { vendored("zyklib") { remote(url, commit); from("src") } } }` copies a Lua
+  library's files into the plugin's root, as the library documents them, with its licence under `licences/<name>/`,
+  and Java and Kotlin call it through classes generated from its own LuaCATS annotations, in
+  `org.adelheid.oneiro.lib.<name>`: `zyklib.objects.getOrElseUpdate(...)` becomes `local zyklib = require("zyklib")`
+  and the call. `local(file(...))` names a checkout instead, `licence(...)` and `overrides(...)` a licence file and an
+  overrides file, and `development(name) { ... }` a library of the dev source set alone. The build fails for a library
+  without a licence, one whose files would ship where the plugin's own go, or that two libraries share, and
+  `checkPlugin` for a library nothing requires. See [plugin-model.md](docs/plugin-model.md#vendored-libraries).
 - `stubs { remote(...) }` fetches from Codeberg, `https://codeberg.org/<owner>/<repository>`, and GitLab,
   `https://gitlab.com/<group>/<project>`, as well as from GitHub. A repository that does not exist, or a commit it
   lacks, is reported as such.

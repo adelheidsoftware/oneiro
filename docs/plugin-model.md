@@ -49,6 +49,12 @@ oneiro {
             url("prices", "https://prices.example.org")
         }
     }
+    libraries {
+        vendored("zyklib") {
+            remote("https://codeberg.org/ZyklopMarco/runescape-api-zyklib", "cf480d04a454aea1866953f3389fdd8dfc6aaed5")
+            from("src")
+        }
+    }
 }
 ```
 
@@ -64,6 +70,10 @@ oneiro {
 | `plugin { dependencies { required(alias, modId) } }` | Another plugin, by its Mod.io ID, exposed as the Lua global `alias`; `required(alias, "folder")` names a plugin on this machine by its folder, and `optional(...)` a dependency the plugin can do without. |
 | `plugin { permissions { optional(chatAccess) } }` | `httpAccess`, `chatAccess` or `trackingAccess`. Prefer `optional`, and check `CurrentPlugin.HasPermission` before using what it unlocks; `required` makes the plugin unusable without it. Code that needs an undeclared permission does not compile, and Oneiro never adds one on its own. |
 | `plugin { urls { url(alias, url) } }` | A base URL the plugin may reach with `httpAccess`, read in code as `Urls.<alias>`. |
+| `libraries { vendored(name) { ... } }` | A Lua library the plugin vendors: copied into it and bound from its annotations, as [Vendored libraries](#vendored-libraries) explains. The name, lowercase letters and digits, names the package of its bindings, `org.adelheid.oneiro.lib.<name>`. |
+| `libraries { development(name) { ... } }` | A library only the dev source set uses, which goes into the development folder alone. |
+| `remote(url, commit)` or `local(dir)` | In a library's block: its code, a repository on GitHub, Codeberg or GitLab at a full commit, or a checkout on this machine. |
+| `from(folder)`, `licence(file)`, `overrides(file)` | In a library's block: the folder of it whose Lua goes to the plugin's root, its root by default; its licence's file, by default the one file at its root named like a licence; and an overrides file for its bindings. |
 | `rootPackage` | The package whose subpackages become folders under `src/`; by default the plugin class's package. |
 | `warningsAsErrors` | Whether a warning, such as a comment Oneiro cannot place or a use moderation reviews closely, fails the build. |
 | `devPlugins` | The client's `dev_plugins` folder; by default the beta client's on Windows, `C:\ProgramData\Jagex\RuneScape-BETA\dev_plugins`. |
@@ -78,15 +88,16 @@ overrides Oneiro applies to them may no longer match.
 | Task | What it does | Output |
 | --- | --- | --- |
 | `oneiroBindings` | Generates the RS3 bindings from the stubs, in a worker process, and compiles them; for a plugin written in Kotlin, a member that takes a hook has a form for each callback the hook takes, so that the callback can be a trailing lambda | `build/oneiro/bindings/rs3-bindings.jar`, and a sources jar for the IDE |
-| `oneiroLuaBindings` | Generates classes from the LuaCATS annotations of the plugin's own Lua, `src/main/lua/` and `src/dev/lua/`, in a worker process, and compiles them; the main set's are on the main source set's classpath, the dev set's on the dev source set's alone | `build/oneiro/lua-bindings/main-bindings.jar` and `dev-bindings.jar`, each with a sources jar |
+| `oneiroLibraries` | Fetches the libraries the plugin vendors and stages them as they ship, with their licences, and checks that they may | `build/oneiro/libraries/` |
+| `oneiroLuaBindings` | Generates classes from the LuaCATS annotations of the libraries and of the plugin's own Lua, `src/main/lua/` and `src/dev/lua/`, in a worker process, and compiles them; the main set's and its libraries' are on the main source set's classpath, the dev set's and its libraries' on the dev source set's alone | `build/oneiro/lua-bindings/`: `main-bindings.jar`, `dev-bindings.jar` and a jar per library under `libraries/`, each with a sources jar |
 | `oneiroSources` | Writes the typed `Resources` class from `src/main/resources/` and the `Urls` class from the manifest's URLs | `build/generated/sources/oneiro/java/main` |
 | `compileJava` | javac, with Oneiro as a javac plugin: once javac has analysed the sources without errors, Oneiro checks them and writes the Lua | `build/oneiro/lua/main/` |
 | `oneiroKotlin` | For a plugin written in Kotlin, after Kotlin's own `compileKotlin`: Oneiro's Kotlin front end checks the sources and writes the Lua, in a worker process | `build/oneiro/lua/main/` |
 | `pluginManifest` | Writes `plugin.json` from the `plugin { }` block, with every rule of the manifest checked | `build/oneiro/manifest/plugin.json` |
-| `assemblePlugin` | The plugin exactly as it ships | `build/oneiro/plugin/`: `main.lua`, `plugin.json`, `src/` with the plugin's own Lua, `resources/` |
+| `assemblePlugin` | The plugin exactly as it ships | `build/oneiro/plugin/`: `main.lua`, `plugin.json`, `src/` with the plugin's own Lua, `resources/`, and each vendored library's Lua with its licence under `licences/` |
 | `checkPlugin` | Checks that folder; part of `check` | `build/oneiro/check-plugin.txt` |
 | `packagePlugin` | Zips that folder, with `main.lua` and `plugin.json` at the top; part of `assemble` | `build/distributions/<id>-<version>.zip` |
-| `assembleDevPlugin` | The shipped folder plus the dev source set's Lua, compiled and its own, under `dev/` | `build/oneiro/dev-plugin/` |
+| `assembleDevPlugin` | The shipped folder plus the dev source set's Lua, compiled and its own, under `dev/`, and its libraries | `build/oneiro/dev-plugin/` |
 | `linkDevPlugin` | Links the plugin into the client's `dev_plugins` folder under its identifier: the dev folder when there is a dev source set, the shipped folder otherwise | A junction on Windows, a symbolic link elsewhere |
 | `testLua` | Runs each `*_test.lua` under `src/test/lua/` against the shipped folder, in a worker process; part of `check` | `build/oneiro/test-lua.txt` |
 | `explainError` | Shows the plugin's errors in text copied from the client's console as the source lines they came from: `./gradlew explainError --input=console.txt` | Printed; it reads the line maps the compile writes to `build/oneiro/line-maps/` |
@@ -327,19 +338,79 @@ since the Lua's annotations say what it is. A class whose Lua would be one of th
 `src/dev/lua/` is the same for the dev source set: its files go under `dev/` in the development folder and never into
 the zip, its classes are on the dev source set's classpath alone, and its annotations may name the main set's types.
 
+## Vendored libraries
+
+A Lua library that plugins copy into themselves, such as
+[Zyklib](https://codeberg.org/ZyklopMarco/runescape-api-zyklib), is vendored: the build names it, and its code ships as
+part of the plugin, unchanged, so moderators read it as the plugin's.
+
+```kotlin
+oneiro {
+    libraries {
+        vendored("zyklib") {
+            remote("https://codeberg.org/ZyklopMarco/runescape-api-zyklib", "cf480d04a454aea1866953f3389fdd8dfc6aaed5")
+            from("src")
+        }
+    }
+}
+```
+
+`oneiroLibraries` fetches the commit into Gradle's cache once, or reads a checkout on this machine named with
+`local(file(...))`, and copies the Lua files of the `from` folder to the plugin's root, in the layout the library
+documents: Zyklib's `src/zyklib.lua` ships as `zyklib.lua`, which Lua loads with `require("zyklib")`. Its licence ships
+under `licences/zyklib/`. A commit is always a full one, since a library's code ships and its types shape the plugin's;
+there is no form that follows a branch.
+
+`oneiroLuaBindings` generates the library's classes from its own LuaCATS annotations, in
+`org.adelheid.oneiro.lib.<name>`, each module a class named as its `require` binds it: Zyklib declares `---@class
+zyklib`, so its table is the class `zyklib`, and the tables it holds are nested in it, as Lua reaches them.
+
+```java
+import org.adelheid.oneiro.lib.zyklib.zyklib;
+
+int starts = zyklib.objects.getOrElseUpdate(counts, "starts", () -> 0);
+```
+
+That line becomes:
+
+```lua
+local zyklib = require("zyklib")
+
+local starts = zyklib.objects.getOrElseUpdate(counts, "starts", function()
+    return 0
+end)
+```
+
+The plugin's own Lua may name a library's types too. Where the annotations leave something out that Java needs, such as
+the names of the several values a function returns, `overrides(file(...))` names a file of the lines Oneiro's own
+overrides take, but for those of the client alone; the build's warnings say where it would help.
+
+The build fails for a library without a licence, since nobody may pass on its code without one; for a library whose
+files would ship where the plugin's own go, as `main.lua`, `src/`, `resources/`, `dev/` or `licences/`, or where
+another library's do; and, in `checkPlugin`, for a library that no Lua of the plugin's requires, which moderators would
+read for nothing. A library declared with `development(name)` goes into the development folder alone, and only the dev
+source set has its classes.
+
+Zyklib's `lifecycle.setupGlobals` wraps a `PluginShutdown` that exists when it runs, but the one Oneiro writes is
+defined at the end of `main.lua`, after `startUp()`, and replaces the wrapper; a plugin built with Oneiro calls
+`zyklib.lifecycle.notifyShutdown()` from its `shutDown()` instead.
+
 ## What `checkPlugin` checks
 
 `checkPlugin` reads the shipped folder as Mod.io would receive it and fails the build on any of these:
 
 - `main.lua` or `plugin.json` is missing.
-- A file is something other than `main.lua`, `plugin.json`, a Lua file under `src/`, or a PNG or Ogg Vorbis file under
-  `resources/`.
+- A file is something other than `main.lua`, `plugin.json`, a Lua file under `src/`, a PNG or Ogg Vorbis file under
+  `resources/`, or a file of a vendored library, its Lua or its licence.
 - A Lua file under `src/` does not start with its path, `-- src/core/levels.lua`.
 - A `require` names a module that is not in the plugin.
-- A file uses a member of the client's that needs a permission the manifest does not declare, such as `HTTPRequest`
-  without `httpAccess`, or that is for development only, such as `ExecuteConsoleCommand`. The compiler holds the Lua
-  it writes to this already; the check holds the plugin's own Lua to it, by the members' names, the same the compiler
-  knows from the bindings. It reads the text as it is, so a name in a comment counts too.
+- No Lua of the plugin's, its own or the Lua Oneiro writes, requires a vendored library.
+- A file uses a member of the client's that is for development only, such as `ExecuteConsoleCommand`, or, outside a
+  vendored library, one that needs a permission the manifest does not declare, such as `HTTPRequest` without
+  `httpAccess`. The compiler holds the Lua it writes to this already; the check holds the Lua it did not write to it,
+  by the members' names, the same the compiler knows from the bindings. It reads the text as it is, so a name in a
+  comment counts too. A library's code may name members of every permission, in parts the plugin never calls, as
+  Zyklib names `HTTPRequest` in its HTTP helpers, so a plugin needs no permission for vendoring it.
 - An image is larger than 1024 by 1024 pixels, or a resource is not really a PNG or an Ogg Vorbis file.
 
 The manifest's own rules are checked when it is written: the identifier, name, version and contact address; known

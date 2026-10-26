@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Properties;
 import org.adelheid.oneiro.plugin.ClientFacts;
+import org.adelheid.oneiro.plugin.VendoredLibraries;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -38,16 +39,17 @@ import org.gradle.jvm.toolchain.JavaToolchainService;
  *
  * <ul>
  *   <li>{@code oneiroBindings}, the RS3 bindings on the compile classpath;
- *   <li>{@code oneiroLuaBindings}, the bindings of the plugin's own Lua, from {@code src/main/lua} and
- *       {@code src/dev/lua}, on the compile classpaths of the main and dev source sets;
+ *   <li>{@code oneiroLibraries}, the Lua libraries the plugin vendors, staged as they ship;
+ *   <li>{@code oneiroLuaBindings}, the bindings of those libraries and of the plugin's own Lua, from
+ *       {@code src/main/lua} and {@code src/dev/lua}, on the compile classpaths of the main and dev source sets;
  *   <li>{@code oneiroSources}, the typed {@code Resources} and {@code Urls} classes;
  *   <li>Oneiro as a javac plugin in {@code compileJava}, which writes the Lua of a plugin written in Java, or
  *       {@code oneiroKotlin}, which writes the Lua of one written in Kotlin, with the Kotlin JVM plugin applied;
  *   <li>{@code pluginManifest}, the {@code plugin.json};
  *   <li>{@code assemblePlugin}, {@code checkPlugin} and {@code packagePlugin}: the folder that ships, with the plugin's
- *       own Lua under {@code src/}, its checks and its zip;
+ *       own Lua under {@code src/} and its libraries in its root, its checks and its zip;
  *   <li>the {@code dev} source set and {@code assembleDevPlugin}, the development folder, with the dev source set's own
- *       Lua under {@code dev/};
+ *       Lua under {@code dev/} and its libraries in its root;
  *   <li>{@code linkDevPlugin}, the link into the client's {@code dev_plugins} folder;
  *   <li>{@code testLua}, the plugin's Lua tests.
  * </ul>
@@ -136,6 +138,26 @@ public final class OneiroPlugin implements Plugin<Project> {
 		});
 		main.getJava().srcDir(sources.flatMap(GenerateSources::getOutputDirectory));
 
+		TaskProvider<VendorLibraries> libraries = tasks.register("oneiroLibraries", VendorLibraries.class, task -> {
+			task.setGroup(GROUP);
+			task.setDescription("Stages the Lua libraries the plugin vendors as they ship, with their licences.");
+			for (OneiroExtension.VendoredLibrary library : extension.getLibraries().declared()) {
+				task.getLibraries().add(library);
+				if (library.getLocal().isPresent()) {
+					// What is read from a checkout on this machine: the Lua of its folder, and its root's files, among
+					// them its licence
+					Directory local = library.getLocal().get();
+					String from = library.getFrom().get();
+					task.getLocalFiles().from((from.isEmpty() ? local : local.dir(from)).getAsFileTree()
+							.matching(pattern -> pattern.include("**/*.lua")));
+					task.getLocalFiles().from(local.getAsFileTree().matching(pattern -> pattern.include("*")));
+				}
+			}
+			task.getCache().set(repositoryCache(project));
+			task.getOutputFolder().set(layout.getBuildDirectory().dir("oneiro/libraries"));
+		});
+		Provider<Directory> stagedLibraries = libraries.flatMap(VendorLibraries::getOutputFolder);
+
 		Directory mainLuaSources = layout.getProjectDirectory().dir("src/main/lua");
 		Directory devLuaSources = layout.getProjectDirectory().dir("src/dev/lua");
 		Provider<Directory> luaBindingsFolder = layout.getBuildDirectory().dir("oneiro/lua-bindings");
@@ -146,6 +168,8 @@ public final class OneiroPlugin implements Plugin<Project> {
 					stubs.execute(task);
 					task.getRs3Jar().set(bindings.flatMap(GenerateBindings::getClassesJar));
 					task.getRootPackageFile().set(sources.flatMap(GenerateSources::getRootPackageFile));
+					task.getLibraries().set(stagedLibraries);
+					task.getLibrariesFolder().set(luaBindingsFolder.map(folder -> folder.dir("libraries")));
 					task.getLuaFiles().from(mainLuaSources.getAsFileTree(), devLuaSources.getAsFileTree());
 					task.getMainLua().set(mainLuaSources);
 					task.getDevLua().set(devLuaSources);
@@ -158,6 +182,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 				});
 		dependencies.add(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME,
 				project.files(luaBindings.flatMap(GenerateLuaBindings::getMainClassesJar)));
+		dependencies.add(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME, libraryJars(project, luaBindings, "main"));
 
 		Provider<Directory> mainLua = layout.getBuildDirectory().dir("oneiro/lua/main");
 		Compilers compilers = new Compilers(project, extension, kotlin, kotlinTool, launcher);
@@ -188,6 +213,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 			sync.setDescription("Assembles the plugin as it ships: main.lua, plugin.json, src/ and resources/.");
 			sync.from(mainLuaBuilt);
 			sync.from(mainLuaSources, spec -> spec.into("src"));
+			sync.from(stagedLibraries.map(folder -> folder.dir("main")));
 			sync.from(manifest.flatMap(WriteManifest::getManifestFile));
 			sync.from(layout.getProjectDirectory().dir("src/main/resources"), spec -> spec.into("resources"));
 			sync.into(pluginFolder);
@@ -200,6 +226,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 			task.getClientFacts().set(bindings.flatMap(GenerateBindings::getClientFacts));
 			task.getPermissions().addAll(extension.getPlugin().getRequiredPermissions());
 			task.getPermissions().addAll(extension.getPlugin().getOptionalPermissions());
+			task.getLibraries().set(stagedLibraries.map(folder -> folder.file(VendoredLibraries.FILE)));
 			task.getReport().set(layout.getBuildDirectory().file("oneiro/check-plugin.txt"));
 		});
 		tasks.named("check", check -> check.dependsOn(checkPlugin));
@@ -220,7 +247,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 		tasks.named("assemble", assemble -> assemble.dependsOn(packagePlugin));
 
 		TaskProvider<Sync> assembleDevPlugin = devSourceSet(project, compilers, java, main, assemblePlugin,
-				luaBindings);
+				luaBindings, stagedLibraries);
 		boolean hasDev = layout.getProjectDirectory().dir("src/dev/java").getAsFile().isDirectory()
 				|| layout.getProjectDirectory().dir("src/dev/kotlin").getAsFile().isDirectory()
 				|| devLuaSources.getAsFile().isDirectory();
@@ -286,7 +313,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 	 */
 	private static Action<StubsTask> stubs(Project project, OneiroExtension extension, Configuration tool,
 			Provider<JavaLauncher> launcher, Provider<Boolean> kotlin) {
-		File cache = new File(project.getGradle().getGradleUserHomeDir(), "caches/oneiro/repositories");
+		File cache = repositoryCache(project);
 		boolean refresh = project.getGradle().getStartParameter().getTaskNames().stream()
 				.anyMatch(name -> name.endsWith("oneiroBindings"));
 		boolean offline = project.getGradle().getStartParameter().isOffline();
@@ -308,6 +335,21 @@ public final class OneiroPlugin implements Plugin<Project> {
 		};
 	}
 
+	/** Where fetched repositories, the stubs and the libraries, are kept, by commit, in Gradle's user home. */
+	private static File repositoryCache(Project project) {
+		return new File(project.getGradle().getGradleUserHomeDir(), "caches/oneiro/repositories");
+	}
+
+	/**
+	 * The classes jars of the libraries a source set compiles against, which {@code oneiroLuaBindings} writes:
+	 * {@code main} for those that ship, {@code dev} for those of the dev source set alone.
+	 */
+	private static FileCollection libraryJars(Project project, TaskProvider<GenerateLuaBindings> luaBindings,
+			String sourceSet) {
+		return project.files(luaBindings.flatMap(GenerateLuaBindings::getLibrariesFolder).map(folder -> folder
+				.dir(sourceSet).getAsFileTree().matching(pattern -> pattern.include("*-bindings.jar"))));
+	}
+
 	/** The line map a source set's compilation writes, which {@code explainError} reads. */
 	static Provider<RegularFile> lineMap(ProjectLayout layout, String sourceSet) {
 		return layout.getBuildDirectory().file("oneiro/line-maps/" + sourceSet + ".txt");
@@ -319,12 +361,15 @@ public final class OneiroPlugin implements Plugin<Project> {
 	 * {@code main.lua} that loads its {@code DevPlugin} class.
 	 */
 	private static TaskProvider<Sync> devSourceSet(Project project, Compilers compilers, JavaPluginExtension java,
-			SourceSet main, TaskProvider<Sync> assemblePlugin, TaskProvider<GenerateLuaBindings> luaBindings) {
+			SourceSet main, TaskProvider<Sync> assemblePlugin, TaskProvider<GenerateLuaBindings> luaBindings,
+			Provider<Directory> stagedLibraries) {
 		ProjectLayout layout = project.getLayout();
 		SourceSet dev = java.getSourceSets().create("dev", set -> set.setCompileClasspath(
 				set.getCompileClasspath().plus(main.getOutput()).plus(main.getCompileClasspath())));
 		project.getDependencies().add(dev.getImplementationConfigurationName(),
 				project.files(luaBindings.flatMap(GenerateLuaBindings::getDevClassesJar)));
+		project.getDependencies().add(dev.getImplementationConfigurationName(),
+				libraryJars(project, luaBindings, "dev"));
 		project.getConfigurations().getByName(dev.getAnnotationProcessorConfigurationName())
 				.extendsFrom(project.getConfigurations().getByName(JavaPlugin.ANNOTATION_PROCESSOR_CONFIGURATION_NAME));
 		Provider<Directory> devLua = layout.getBuildDirectory().dir("oneiro/lua/dev");
@@ -344,6 +389,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 			sync.from(assemblePlugin, spec -> spec.exclude("main.lua"));
 			sync.from(devLuaBuilt);
 			sync.from(layout.getProjectDirectory().dir("src/dev/lua"), spec -> spec.into("dev"));
+			sync.from(stagedLibraries.map(folder -> folder.dir("dev")));
 			sync.from(devMain.flatMap(WriteDevMain::getDevMain));
 			sync.into(layout.getBuildDirectory().dir("oneiro/dev-plugin"));
 		});

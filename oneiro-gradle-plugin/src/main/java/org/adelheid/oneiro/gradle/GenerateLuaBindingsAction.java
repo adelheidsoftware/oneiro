@@ -10,14 +10,17 @@ import org.gradle.workers.WorkAction;
 import org.gradle.workers.WorkParameters;
 
 /**
- * Runs the bindings generator on the plugin's own Lua in the worker process, by name, as {@link GenerateBindingsAction}
- * runs it on the stubs.
+ * Runs the bindings generator on the Lua the plugin uses, its libraries and its own, in the worker process, by name, as
+ * {@link GenerateBindingsAction} runs it on the stubs.
  */
 public abstract class GenerateLuaBindingsAction implements WorkAction<GenerateLuaBindingsAction.Parameters> {
 
 	private static final Logger LOGGER = Logging.getLogger(GenerateLuaBindingsAction.class);
 
-	/** The stubs, the RS3 bindings, the folder the jars go to, the language, the root package and the Lua folders. */
+	/**
+	 * The stubs, the RS3 bindings, the folder the jars go to, the language, the root package, the staged libraries and
+	 * the folders of the plugin's own Lua.
+	 */
 	public interface Parameters extends WorkParameters {
 
 		DirectoryProperty getStubs();
@@ -30,6 +33,8 @@ public abstract class GenerateLuaBindingsAction implements WorkAction<GenerateLu
 
 		Property<String> getRootPackage();
 
+		DirectoryProperty getLibraries();
+
 		DirectoryProperty getMainLua();
 
 		DirectoryProperty getDevLua();
@@ -39,10 +44,10 @@ public abstract class GenerateLuaBindingsAction implements WorkAction<GenerateLu
 	public void execute() {
 		Parameters parameters = getParameters();
 		List<?> warnings = (List<?>) Reflection.call("org.adelheid.oneiro.bindings.BindingsGenerator",
-				"generatePluginLuaForBuild", path(parameters.getStubs()),
+				"generateLuaForBuild", path(parameters.getStubs()),
 				parameters.getRs3Jar().get().getAsFile().getAbsolutePath(), path(parameters.getOutput()),
-				parameters.getLanguage().get(), parameters.getRootPackage().get(), path(parameters.getMainLua()),
-				path(parameters.getDevLua()));
+				parameters.getLanguage().get(), parameters.getRootPackage().get(), path(parameters.getLibraries()),
+				path(parameters.getMainLua()), path(parameters.getDevLua()));
 		for (Object warning : warnings) {
 			LOGGER.warn("Oneiro bindings of the plugin's Lua: {}", warning);
 		}

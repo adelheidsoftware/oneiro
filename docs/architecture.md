@@ -172,8 +172,12 @@ only the RS3 API's have its events, hooks, constant namespaces and `Globals`.
    `ConstantChunks` writes them straight to class files with the JDK's ClassFile API, as a chain of chunk classes
    that each extend the one before, which is also far faster than compiling them from Java. `Jars` packs everything
    into reproducible jars: the libraries' sources compile together, against the RS3 jar, and each library's classes
-   go into a jar of their own. The plugin's own Lua gives two, its main source set's, compiled against the RS3 jar,
-   and its dev source set's, compiled against both.
+   go into a jar of their own. In a plugin's build, the libraries it vendors come first, those of its main source
+   set and then those of its dev source set alone, and its own Lua after them, which gives two jars more: its main
+   source set's, compiled against the RS3 jar and the main set's libraries, and its dev source set's, compiled against
+   everything. The Gradle plugin stages the libraries for this with `oneiroLibraries` (`VendorLibraries`), which
+   copies each library's Lua and licence as they ship and lists them (`VendoredLibraries`, in the plugin model) for
+   the generator and for `checkPlugin`.
 
 The front ends call a class of the bindings as its annotations say. A module's class, `@LuaModule`, and the classes
 nested in it start their path at the local that the file's `require` of the module binds, where a global table's start

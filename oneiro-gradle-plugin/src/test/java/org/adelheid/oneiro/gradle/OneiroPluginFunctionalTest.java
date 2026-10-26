@@ -414,6 +414,145 @@ class OneiroPluginFunctionalTest {
 				+ " rename the class or that file."), output);
 	}
 
+	/**
+	 * A library the plugin vendors from a checkout beside it, {@code tallies}, whose Lua is in its {@code src/} folder,
+	 * and one for the dev source set alone, {@code inspect}, whose Lua is at its root and declares no class, so that
+	 * its class is named after its file, {@code Inspect}.
+	 */
+	private void libraries() throws IOException {
+		write("libs/tallies/LICENSE", "MIT License\n\nCopyright (c) 2026 The tallies authors\n");
+		write("libs/tallies/README.md", "A library for the functional test.\n");
+		write("libs/tallies/src/tallies.lua", """
+				--- Tallies of things.
+				---@class tallies
+				local tallies = {}
+
+				local sum = require("tallies/sum")
+
+				--- The total of some numbers.
+				---@param values integer[]
+				---@return integer total
+				function tallies.total(values)
+				    return sum.of(values)
+				end
+
+				return tallies
+				""");
+		write("libs/tallies/src/tallies/sum.lua", """
+				local sum = {}
+
+				---@param values integer[]
+				---@return integer
+				function sum.of(values)
+				    local total = 0
+				    for _, value in ipairs(values) do
+				        total = total + value
+				    end
+				    return total
+				end
+
+				return sum
+				""");
+		write("libs/inspect/LICENCE.md", "MIT License\n");
+		write("libs/inspect/inspect.lua", """
+				local inspect = {}
+
+				---@param value any
+				---@return string
+				function inspect.describe(value)
+				    return "<" .. tostring(value) .. ">"
+				end
+
+				return inspect
+				""");
+		String build = Files.readString(project.resolve("build.gradle.kts"));
+		write("build.gradle.kts", build + """
+
+				oneiro {
+				    libraries {
+				        vendored("tallies") {
+				            local(file("libs/tallies"))
+				            from("src")
+				        }
+				        development("inspect") {
+				            local(file("libs/inspect"))
+				        }
+				    }
+				}
+				""");
+		write("src/test/lua/counting_test.lua", """
+				local Counting = require("src/counting")
+
+				assert(Counting.total({ 1, 2, 3 }) == 6, "the vendored library's total, called from the plugin's class")
+				""");
+	}
+
+	@Test
+	void vendorsALibrary() throws IOException {
+		plugin();
+		libraries();
+		write("src/main/java/com/example/herbs/Counting.java", """
+				package com.example.herbs;
+
+				import java.util.List;
+				import org.adelheid.oneiro.lib.tallies.tallies;
+
+				/** Totals, with the vendored library. */
+				public final class Counting {
+
+					private Counting() {
+					}
+
+					public static int total(List<Integer> values) {
+						return tallies.total(values);
+					}
+				}
+				""");
+		write("src/dev/java/com/example/herbs/Cheats.java", """
+				package com.example.herbs;
+
+				import static org.adelheid.oneiro.rs3.Globals.log;
+
+				import org.adelheid.oneiro.api.DevPlugin;
+				import org.adelheid.oneiro.lib.inspect.Inspect;
+
+				/** Development helpers: describes a value with the library of the dev source set alone. */
+				public final class Cheats extends DevPlugin {
+
+					@Override
+					protected void startUp() {
+						log(Inspect.describe(Counting.total(java.util.List.of(1, 2))));
+					}
+				}
+				""");
+		BuildResult result = gradle("build", "assembleDevPlugin").build();
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":checkPlugin"));
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":testLua"));
+
+		String counting = Files.readString(project.resolve("build/oneiro/plugin/src/counting.lua"));
+		assertTrue(counting.contains("local tallies = require(\"tallies\")"), counting);
+		assertTrue(counting.contains("return tallies.total(values)"), counting);
+		assertEquals(List.of("main.lua", "plugin.json", "tallies.lua", "licences/", "licences/tallies/",
+				"licences/tallies/LICENSE", "resources/", "resources/icons/", "resources/icons/herb.png", "src/",
+				"src/counting.lua", "src/herb_config.lua", "src/tally.lua", "tallies/", "tallies/sum.lua"),
+				entries(project.resolve("build/distributions/herb-tracker-1.2.0.zip")));
+		Path dev = project.resolve("build/oneiro/dev-plugin");
+		assertTrue(Files.isRegularFile(dev.resolve("inspect.lua")));
+		assertTrue(Files.isRegularFile(dev.resolve("licences/inspect/LICENCE.md")));
+		String cheats = Files.readString(dev.resolve("dev/main.lua"));
+		assertTrue(cheats.contains("local Inspect = require(\"inspect\")"), cheats);
+	}
+
+	@Test
+	void aLibraryWithoutALicenceFails() throws IOException {
+		plugin();
+		libraries();
+		Files.delete(project.resolve("libs/tallies/LICENSE"));
+		String output = gradle("oneiroLibraries").buildAndFail().getOutput();
+		assertTrue(output.contains("tallies has no licence at its root; name its file with licence(\"...\"). A library"
+				+ " without a licence cannot be vendored: nobody may pass on its code without one."), output);
+	}
+
 	/** The same plugin written in Kotlin, built with the Kotlin JVM plugin applied before Oneiro's. */
 	private void kotlinPlugin() throws IOException {
 		plugin();
@@ -530,6 +669,28 @@ class OneiroPluginFunctionalTest {
 		String grades = Files.readString(project.resolve("build/oneiro/plugin/src/core/grades.lua"));
 		assertTrue(grades.contains("local Levels = require(\"src/core/levels\")"), grades);
 		assertTrue(Files.isRegularFile(project.resolve("build/oneiro/plugin/src/core/levels.lua")));
+	}
+
+	@Test
+	void vendorsALibraryFromKotlin() throws IOException {
+		kotlinPlugin();
+		libraries();
+		write("src/main/kotlin/com/example/herbs/Counting.kt", """
+				package com.example.herbs
+
+				import org.adelheid.oneiro.lib.tallies.tallies
+
+				/** Totals, with the vendored library. */
+				object Counting {
+
+					fun total(values: List<Int>): Int = tallies.total(values)
+				}
+				""");
+		BuildResult result = gradle("build").build();
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":checkPlugin"));
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":testLua"));
+		String counting = Files.readString(project.resolve("build/oneiro/plugin/src/counting.lua"));
+		assertTrue(counting.contains("local tallies = require(\"tallies\")"), counting);
 	}
 
 	@Test

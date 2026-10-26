@@ -27,15 +27,19 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * The bindings of a plugin's own Lua, from the fixtures in {@code src/test/plugin-lua}: {@code main}, which ships under
- * {@code src/}, and {@code dev}, which goes under {@code dev/} and names the main set's types. Each module is a class
- * of the plugin's package of its folder, and each source set's classes are in a jar of their own.
+ * The bindings of the Lua a plugin uses: its own, from the fixtures in {@code src/test/plugin-lua}, {@code main}, which
+ * ships under {@code src/}, and {@code dev}, which goes under {@code dev/} and names the main set's types; and the
+ * libraries it vendors, the fixture {@code widgets} for the main source set and {@code gauges} for the dev set alone,
+ * whose types its own Lua names. Each module of its own is a class of the plugin's package of its folder, and each
+ * source set's classes, and each library's, are in a jar of their own.
  */
 class PluginLuaBindingsTest {
 
 	private static final Path STUBS = Path.of("src", "test", "stubs");
 	private static final Path LUA = Path.of("src", "test", "plugin-lua");
+	private static final Path LIBRARIES = Path.of("src", "test", "libraries");
 	private static final String ROOT = "com.example.herbs";
+	private static BindingsGenerator.LuaResult result;
 	private static BindingsGenerator.LibraryResult main;
 	private static BindingsGenerator.LibraryResult dev;
 
@@ -44,16 +48,19 @@ class PluginLuaBindingsTest {
 		Path output = Path.of("build", "plugin-lua-bindings");
 		BindingsGenerator.Result rs3 = BindingsGenerator.generate(STUBS, output.resolve("rs3"),
 				BindingsGenerator.Language.JAVA);
-		List<BindingsGenerator.LibraryResult> results = BindingsGenerator.generatePluginLua(STUBS, rs3.classesJar(),
-				output, BindingsGenerator.Language.JAVA, ROOT, LUA.resolve("main"), LUA.resolve("dev"));
-		main = results.get(0);
-		dev = results.get(1);
+		result = BindingsGenerator.generateLua(STUBS, rs3.classesJar(), output, BindingsGenerator.Language.JAVA, ROOT,
+				List.of(new BindingsGenerator.Library("widgets", "org.adelheid.oneiro.lib.widgets",
+						LIBRARIES.resolve("widgets"), "", null)),
+				List.of(new BindingsGenerator.Library("gauges", "org.adelheid.oneiro.lib.gauges",
+						LIBRARIES.resolve("addon").resolve("library"), "", null)),
+				LUA.resolve("main"), LUA.resolve("dev"));
+		main = result.main();
+		dev = result.dev();
 	}
 
 	@Test
 	void generateWithoutAWarning() {
-		assertEquals(List.of(), main.warnings());
-		assertEquals(List.of(), dev.warnings());
+		assertEquals(List.of(), result.warnings());
 	}
 
 	/** A module is a class of its folder's package, which code there names without an import. */
@@ -86,9 +93,31 @@ class PluginLuaBindingsTest {
 		assertTrue(cheats.contains("import com.example.herbs.core.Tally;\n"), cheats);
 	}
 
-	/** Each source set's jar holds its own classes, the dev set's none of the main set's. */
+	/** The plugin's own Lua names its libraries' types: the main set's, the main libraries'; the dev set's, all. */
 	@Test
-	void eachSourceSetsJarHoldsItsOwnClasses() throws IOException {
+	void typesOfTheLibrariesAreImported() throws IOException {
+		String badge = source(main, "ui/Badge.java");
+		assertTrue(badge.contains("import org.adelheid.oneiro.lib.widgets.widgets;\n"), badge);
+		assertTrue(badge.contains("public static native void follow(widgets.Counter counter);"), badge);
+		String cheats = source(dev, "Cheats.java");
+		assertTrue(cheats.contains("import org.adelheid.oneiro.lib.gauges.gauges;\n"), cheats);
+		assertTrue(cheats.contains("public static native void watch(gauges.Gauge gauge);"), cheats);
+	}
+
+	/**
+	 * Each library's jar is in the folder of its source set, and holds its own classes; each source set's jar holds its
+	 * own Lua's classes, the dev set's none of the main set's.
+	 */
+	@Test
+	void eachJarHoldsItsOwnClasses() throws IOException {
+		BindingsGenerator.LibraryResult widgets = result.libraries().get(0);
+		BindingsGenerator.LibraryResult gauges = result.libraries().get(1);
+		assertEquals(Path.of("build", "plugin-lua-bindings", "libraries", "main", "widgets-bindings.jar"),
+				widgets.classesJar());
+		assertEquals(Path.of("build", "plugin-lua-bindings", "libraries", "dev", "gauges-bindings.jar"),
+				gauges.classesJar());
+		assertTrue(classes(widgets).stream().allMatch(name -> name.startsWith("org/adelheid/oneiro/lib/widgets/")));
+		assertTrue(classes(gauges).stream().allMatch(name -> name.startsWith("org/adelheid/oneiro/lib/gauges/")));
 		assertEquals(List.of("com/example/herbs/Function3.class", "com/example/herbs/LuaOnly.class",
 				"com/example/herbs/core/Levels.class", "com/example/herbs/core/LuaOnly.class",
 				"com/example/herbs/core/Tally.class", "com/example/herbs/ui/Badge.class",
@@ -104,7 +133,8 @@ class PluginLuaBindingsTest {
 		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
 		Path output = Files.createDirectories(Path.of("build", "plugin-lua-usage"));
 		String classpath = Stream.concat(
-						Stream.of(main.classesJar(), dev.classesJar(),
+						Stream.of(main.classesJar(), dev.classesJar(), result.libraries().get(0).classesJar(),
+										result.libraries().get(1).classesJar(),
 										Path.of("build", "plugin-lua-bindings", "rs3", BindingsGenerator.CLASSES_JAR))
 								.map(Path::toString),
 						Stream.of(System.getProperty("java.class.path").split(File.pathSeparator)))
