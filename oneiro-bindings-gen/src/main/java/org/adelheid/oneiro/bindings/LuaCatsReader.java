@@ -96,7 +96,7 @@ final class LuaCatsReader {
 	private record EnumLocal(String name) implements Local {
 	}
 
-	/** The table of a module, {@code local reactive = require "zyklib/reactive"}. */
+	/** The table of a module, {@code local text = require "widgets/text"}. */
 	private record ModuleLocal(String module) implements Local {
 	}
 
@@ -147,7 +147,7 @@ final class LuaCatsReader {
 	 * Reads one file into the model.
 	 *
 	 * @param displayName the file's path as messages show it
-	 * @param modulePath the path {@code require} loads the file by, such as {@code zyklib/reactive/Event}
+	 * @param modulePath the path {@code require} loads the file by, such as {@code widgets/text}
 	 */
 	void read(Path path, String displayName, String modulePath) throws IOException {
 		file = displayName;

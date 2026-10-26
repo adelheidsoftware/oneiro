@@ -43,8 +43,8 @@ final class ApiModel {
 		final List<OperatorDef> operators = new ArrayList<>();
 		/**
 		 * The tables the class's own table holds, by field name, each by the class or enum it is: the modules a module
-		 * requires into its fields, as {@code zyklib.reactive}, and the classes and enums declared in its fields, as
-		 * {@code disposable.DisposableGroup}.
+		 * requires into its fields, as {@code widgets.text}, and the classes and enums declared in its fields, as
+		 * {@code text.COLOURS}.
 		 */
 		final Map<String, String> tables = new LinkedHashMap<>();
 		final List<String> files = new ArrayList<>();

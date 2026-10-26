@@ -66,11 +66,11 @@ public final class BindingsGenerator {
 	/**
 	 * A Lua library to write bindings for.
 	 *
-	 * @param name the library's name, which its jars are named after, such as {@code zyklib}
+	 * @param name the library's name, which its jars are named after, such as {@code widgets}
 	 * @param packageName the package its bindings go in
 	 * @param folder the folder of its LuaCATS files: its own code, or definition files written for it
 	 * @param modulePrefix what comes before a file's path in the path {@code require} loads it by: empty for a library
-	 *     whose folder goes to the plugin's root, as Zyklib's does
+	 *     whose folder goes to the plugin's root
 	 * @param overrides the plugin's overrides file for the library; null when it keeps none
 	 * @param use what the library is to the plugin
 	 */

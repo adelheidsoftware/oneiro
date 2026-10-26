@@ -173,8 +173,8 @@ internal class ApiCalls(private val unit: FileLowering) {
 		?: throw IllegalStateException("a static member of a @LuaType at ${where.text}")
 
 	/**
-	 * A table as an expression: `ui.Text` is the field `Text` of the global `ui`, and a module's `zyklib.reactive` the
-	 * field `reactive` of the local `zyklib`, which the file requires.
+	 * A table as an expression: `ui.Text` is the field `Text` of the global `ui`, and a module's `widgets.text` the
+	 * field `text` of the local `widgets`, which the file requires.
 	 */
 	private fun table(owner: KaClassSymbol, global: String): Expression = with(unit.session) {
 		val segments = global.split(".")

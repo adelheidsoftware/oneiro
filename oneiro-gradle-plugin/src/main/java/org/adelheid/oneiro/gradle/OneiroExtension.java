@@ -42,16 +42,16 @@ import org.jspecify.annotations.Nullable;
  *         contactEmail = "plugins@example.org"
  *         settingsIcon = true
  *         dependencies {
- *             required("prettyui", 6398181) {
- *                 types { local(file("lua-types/prettyui")) }
+ *             required("gauges", 5151) {
+ *                 types { local(file("lua-types/gauges")) }
  *             }
  *         }
  *         permissions { optional(chatAccess) }
  *         urls { url("prices", "https://prices.example.org") }
  *     }
  *     libraries {
- *         vendored("zyklib") {
- *             remote("https://codeberg.org/ZyklopMarco/runescape-api-zyklib", "<commit>")
+ *         vendored("widgets") {
+ *             remote("https://codeberg.org/<owner>/<repository>", "<commit>")
  *             from("src")
  *         }
  *     }
@@ -233,8 +233,8 @@ public abstract class OneiroExtension {
 
 		/**
 		 * Plugins this one needs or uses, each exposed to it as the Lua global of its alias: a published one by its
-		 * Mod.io ID, as a library such as PrettyUI documents, and each with a block for its types and its folder on
-		 * this machine, {@code required("prettyui", 6398181) { types { local(file("lua-types/prettyui")) } }}.
+		 * Mod.io ID, and each with a block for its types and its folder on this machine,
+		 * {@code required("gauges", 5151) { types { local(file("lua-types/gauges")) } }}.
 		 */
 		public final class Dependencies {
 
@@ -384,7 +384,7 @@ public abstract class OneiroExtension {
 			if (!NAME.matcher(name).matches() || SourceVersion.isKeyword(name)) {
 				throw new GradleException("A library's name, " + name + ", names the package of its bindings,"
 						+ " org.adelheid.oneiro.lib.<name>: lowercase letters and digits, starting with a letter, and"
-						+ " no word Java reserves, such as zyklib.");
+						+ " no word Java reserves, such as widgets.");
 			}
 			return name;
 		}

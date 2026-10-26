@@ -666,8 +666,8 @@ internal class BodyLowering(
 
 	/**
 	 * An expression that decides a branch or a loop. An optional dependency's `isLoaded()` is its global itself there,
-	 * which Lua tests for nil as it tests the condition, `if prettyui then`, as it is in its negation and beside
-	 * another condition; elsewhere the check is a boolean, `prettyui ~= nil`.
+	 * which Lua tests for nil as it tests the condition, `if gauges then`, as it is in its negation and beside
+	 * another condition; elsewhere the check is a boolean, `gauges ~= nil`.
 	 */
 	fun condition(condition: KtExpression): Expression {
 		val inner = KtPsiUtil.safeDeparenthesize(condition)

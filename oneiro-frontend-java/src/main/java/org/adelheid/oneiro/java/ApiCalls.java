@@ -223,7 +223,7 @@ final class ApiCalls {
 
 	/**
 	 * A table as an expression: {@code ui.Text} is the field {@code Text} of the global {@code ui}, and a module's
-	 * {@code zyklib.reactive} the field {@code reactive} of the local {@code zyklib}, which the file requires.
+	 * {@code widgets.text} the field {@code text} of the local {@code widgets}, which the file requires.
 	 */
 	Expression table(TypeElement owner, Tree where) {
 		String global = global(owner, where);

@@ -22,7 +22,7 @@ public final class OptionalDependencies {
 	 * Why a reference to an optional dependency's {@code isLoaded()} does not compile: in Lua the check is the global
 	 * itself, so no function stands for it.
 	 *
-	 * @param lambda the lambda that says the same in the plugin's language, {@code () -> prettyui.isLoaded()}
+	 * @param lambda the lambda that says the same in the plugin's language, {@code () -> gauges.isLoaded()}
 	 */
 	public static String reference(String lambda) {
 		return "isLoaded() checks the dependency's global, which is no function of the library's; write the reference"

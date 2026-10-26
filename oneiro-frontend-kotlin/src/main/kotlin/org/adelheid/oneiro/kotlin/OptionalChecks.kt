@@ -32,8 +32,8 @@ import org.jetbrains.kotlin.psi.KtWhileExpression
 /**
  * The rule on an optional dependency ([OptionalDependencies]), as the Java front end holds code to it: code that
  * reaches its global, a static member of its class (`@LuaOptional`) or of a class nested in it, compiles only where a
- * check that it is loaded reaches it, in the same function: inside `if (prettyui.isLoaded())` or a loop on it, in the
- * `else` of the negated check, on the right of `prettyui.isLoaded() &&`, or after `if (!prettyui.isLoaded()) return`
+ * check that it is loaded reaches it, in the same function: inside `if (gauges.isLoaded())` or a loop on it, in the
+ * `else` of the negated check, on the right of `gauges.isLoaded() &&`, or after `if (!gauges.isLoaded()) return`
  * or another exit. The search stops at a lambda, a function or a class, whose code runs later.
  */
 internal class OptionalChecks(private val unit: FileLowering) {
@@ -113,7 +113,7 @@ internal class OptionalChecks(private val unit: FileLowering) {
 
 	/**
 	 * Whether a condition tells that the dependency is loaded: when it holds, or for `holds` false, when it fails, as
-	 * `!prettyui.isLoaded()` does.
+	 * `!gauges.isLoaded()` does.
 	 */
 	private fun checks(condition: KtExpression?, alias: String, holds: Boolean): Boolean {
 		val inner = KtPsiUtil.safeDeparenthesize(condition ?: return false)

@@ -628,8 +628,8 @@ final class BodyLowering {
 
 	/**
 	 * An expression that decides a branch or a loop. An optional dependency's {@code isLoaded()} is its global itself
-	 * there, which Lua tests for nil as it tests the condition, {@code if prettyui then}, as it is in its negation and
-	 * beside another condition; elsewhere the check is a boolean, {@code prettyui ~= nil}.
+	 * there, which Lua tests for nil as it tests the condition, {@code if gauges then}, as it is in its negation and
+	 * beside another condition; elsewhere the check is a boolean, {@code gauges ~= nil}.
 	 */
 	Expression condition(ExpressionTree condition) {
 		ExpressionTree inner = withoutParentheses(condition);

@@ -26,8 +26,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * The rule on an optional dependency ({@link OptionalDependencies}): code that reaches its global, a static member of
  * its class ({@code @LuaOptional}) or of a class nested in it, compiles only where a check that it is loaded reaches
- * it, in the same method: inside {@code if (prettyui.isLoaded())} or a loop on it, in the {@code else} of the negated
- * check, on the right of {@code prettyui.isLoaded() &&}, or after {@code if (!prettyui.isLoaded()) return;} or another
+ * it, in the same method: inside {@code if (gauges.isLoaded())} or a loop on it, in the {@code else} of the negated
+ * check, on the right of {@code gauges.isLoaded() &&}, or after {@code if (!gauges.isLoaded()) return;} or another
  * exit. The search stops at a lambda, a method or a class, whose code runs later.
  */
 final class OptionalChecks {
@@ -93,7 +93,7 @@ final class OptionalChecks {
 
 	/**
 	 * Whether a condition tells that the dependency is loaded: when it holds, or for {@code holds} false, when it
-	 * fails, as {@code !prettyui.isLoaded()} does.
+	 * fails, as {@code !gauges.isLoaded()} does.
 	 */
 	private boolean checks(ExpressionTree condition, String alias, boolean holds) {
 		ExpressionTree inner = BodyLowering.withoutParentheses(condition);

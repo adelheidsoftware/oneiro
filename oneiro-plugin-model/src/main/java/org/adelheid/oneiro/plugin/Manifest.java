@@ -67,7 +67,7 @@ public record Manifest(
 	private static final Set<String> CALLBACKS = Set.of("PluginShutdown", "PluginDependencyUpdate");
 
 	/**
-	 * A plugin this one depends on: a published one by its Mod.io ID, as a library such as PrettyUI documents, and the
+	 * A plugin this one depends on: a published one by its Mod.io ID, and the
 	 * folder of a plugin on this machine that the development folder's manifest names instead, for a library not
 	 * published yet or a local copy of one. At least one is set; a dependency named only by its folder cannot ship.
 	 */

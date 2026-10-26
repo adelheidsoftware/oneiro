@@ -77,7 +77,7 @@ public record LuaLibraries(List<Library> libraries) {
 	}
 
 	/**
-	 * The list in a file: a line {@code <use> <name>}, such as {@code vendored zyklib} or {@code optional prettyui},
+	 * The list in a file: a line {@code <use> <name>}, such as {@code vendored widgets} or {@code optional gauges},
 	 * which ends in {@code development} for one of the dev source set alone, and then a line {@code file <path>} for
 	 * each of its files.
 	 */

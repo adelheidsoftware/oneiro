@@ -119,7 +119,7 @@ final class ClientMessages {
 	/**
 	 * Whether a nil name may be one of the RS3 API's or of a library plugin's, whose types may describe another version
 	 * than the player has. A plugin compiled by Oneiro names nothing global but the API and its library plugins'
-	 * aliases, and the API names its tables and functions with a capital, as libraries such as PrettyUI name their
+	 * aliases, and the API names its tables and functions with a capital, as a library plugin may name its
 	 * tables, where Java and Kotlin name fields and methods in camel case; a name in capitals, such as a constant's, is
 	 * left out. A vendored library ships with the plugin, so its names are always there.
 	 */

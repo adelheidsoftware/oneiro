@@ -20,7 +20,7 @@ import org.jspecify.annotations.Nullable;
  * Writes the Java sources of a set of bindings from a model and its overrides: one class per table, with nested classes
  * for nested tables, so that {@code ui.Text} in Lua is {@code ui.Text} in Java. A global table is a class of the
  * package; a library's module is one too, named as its {@code require} binds it, and the tables its own table holds in
- * fields are nested in it, so that {@code zyklib.reactive.Event} in Lua is {@code zyklib.reactive.Event} in Java. The
+ * fields are nested in it, so that {@code widgets.Counter} in Lua is {@code widgets.Counter} in Java. The
  * plugin's own modules are classes of the plugin's packages, each in the package of its file's folder. Each class and
  * member carries the annotations that tell Oneiro its Lua shape, and the Javadoc of its description. A type the Lua
  * names but does not declare, such as {@code ui.Component}, is the RS3 bindings' class, or another library's.
@@ -558,7 +558,7 @@ final class JavaBindings {
 
 	/**
 	 * The name of a module's top-level class, which is also the local its {@code require} binds: the last name of the
-	 * class it declares for its table, {@code zyklib}, or for a table it declares none for, its file's name as a Java
+	 * class it declares for its table, {@code widgets}, or for a table it declares none for, its file's name as a Java
 	 * class is named, {@code OpeningTable} for {@code opening_table.lua}.
 	 */
 	private static String moduleName(ApiModel.ModuleDef module, ApiModel.ClassDef classDef) {
@@ -592,7 +592,7 @@ final class JavaBindings {
 
 	/**
 	 * The Lua path of a class's table, as its members' Javadoc shows it and its annotation gives it: from its module
-	 * for a module's table, {@code zyklib.reactive.Event}, and otherwise the class's own name.
+	 * for a module's table, {@code widgets.Counter}, and otherwise the class's own name.
 	 */
 	String tablePath(ApiModel.ClassDef classDef) {
 		Node node = byLuaName.get(classDef.name);
