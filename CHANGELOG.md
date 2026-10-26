@@ -73,7 +73,7 @@ All notable changes to Oneiro are listed here. The format follows
   ```kotlin
   oneiro {
       stubs {
-          remote("https://github.com/adelheidsoftware/rs3-api-types", "0424b619b9e4af78eb0b241e9d21869da47fe21b")
+          remote("https://github.com/adelheidsoftware/rs3-api-types", "871c2d2818e84eaf55163a0099ad89b444cb5b40")
       }
   }
   ```

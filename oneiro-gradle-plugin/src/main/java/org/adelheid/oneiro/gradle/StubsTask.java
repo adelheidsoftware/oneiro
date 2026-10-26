@@ -33,7 +33,7 @@ import org.jspecify.annotations.Nullable;
 public abstract class StubsTask extends DefaultTask {
 
 	/** The stubs commit this release of Oneiro was tested against; another builds with a warning. */
-	static final String TESTED_COMMIT = "0424b619b9e4af78eb0b241e9d21869da47fe21b";
+	static final String TESTED_COMMIT = "871c2d2818e84eaf55163a0099ad89b444cb5b40";
 	static final String DEFAULT_REMOTE = "https://github.com/adelheidsoftware/rs3-api-types";
 
 	/** A local checkout of the stubs. */
