@@ -9,10 +9,10 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The name lists in the stubs' {@code csvs/} folder, one file per namespace: {@code NPC.csv} backs {@code id.NPC} and
- * {@code config.NPC}. Each row is {@code id,NAME,} followed, for variables, by the value type and, for
- * {@code VarPlayer}, the base variable and bit mask of a bit range (whose ID is negative). The stubs' {@code consts/}
- * files are generated from these rows, so the rows are read directly.
+ * The name lists in rs3-api-types' {@code generated/constants/} folder, one file per namespace: {@code NPC.csv}
+ * backs {@code id.NPC} and {@code config.NPC}. Each row is {@code id,NAME} followed, for a variable, by its value type
+ * and, for a bit variable (whose ID is negative), its base variable and bit mask. The LuaCATS constants beside them
+ * are generated from these rows, so the rows are read directly.
  */
 final class CsvConstants {
 
@@ -44,11 +44,7 @@ final class CsvConstants {
 			if (line.isBlank()) {
 				continue;
 			}
-			// The rows end with a comma; split(-1) keeps the empty last cell so that it can be dropped
-			List<String> cells = new ArrayList<>(Arrays.asList(line.split(",", -1)));
-			while (!cells.isEmpty() && cells.getLast().isEmpty()) {
-				cells.removeLast();
-			}
+			List<String> cells = Arrays.asList(line.split(","));
 			if (cells.size() < 2) {
 				malformed.add(line);
 				continue;

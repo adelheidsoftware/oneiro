@@ -300,10 +300,12 @@ final class ConstantTables {
 		String file = luaPath.substring(luaPath.indexOf('.') + 1) + ".csv";
 		List<String> doc = new ArrayList<>();
 		if (namespace.rows().isEmpty()) {
-			doc.add("{@code " + luaPath + "}: the stubs list no names for it, so only {@code FromID} is bound.");
+			doc.add("{@code " + luaPath + "}: rs3-api-types lists no names for it, so only {@code FromID} is"
+					+ " bound.");
 		} else {
 			String count = String.format(Locale.ROOT, "%,d", namespace.rows().size());
-			doc.add("{@code " + luaPath + "}: " + count + " names, from the stubs' {@code csvs/" + file + "}.");
+			doc.add("{@code " + luaPath + "}: " + count + " names, from rs3-api-types' {@code generated/constants/"
+					+ file + "}.");
 		}
 		doc.add("<p>Java: {@code " + LuaConstants.PREFIX + "NAME}; Lua: {@code " + luaPath + ".NAME}");
 		JavaText.javadoc(out, indent, doc);

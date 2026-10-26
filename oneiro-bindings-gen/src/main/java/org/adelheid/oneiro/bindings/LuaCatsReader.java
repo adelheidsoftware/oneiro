@@ -483,7 +483,7 @@ final class LuaCatsReader {
 	}
 
 	private void descriptionLine(String text) {
-		// A description after a class's fields starts the next block (types.lua stacks bare classes back to back)
+		// A description after a class's fields starts the next block, where a file stacks bare classes back to back
 		closeClass();
 		description.add(text);
 	}
