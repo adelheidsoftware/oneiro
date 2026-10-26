@@ -1,0 +1,4 @@
+# The namespaces of the client's id, config and var tables
+id Inv NPC Obj Seq VarPlayer
+config Inv NPC Obj
+var VarPlayer

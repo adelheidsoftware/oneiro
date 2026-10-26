@@ -206,8 +206,61 @@ class LuaCatsReaderTest {
 				local Vector = {}
 				return Vector
 				"""));
-		assertEquals(List.of("@operator is not supported yet", "unknown tag @frobnicate"),
+		assertEquals(List.of("unknown tag @frobnicate"),
 				tags.unparsed.stream().map(ApiModel.Unparsed::pattern).toList());
+		assertEquals(List.of(new ApiModel.OperatorDef("add", TypeRef.Named.of("Vector"), TypeRef.Named.of("Vector"))),
+				Objects.requireNonNull(tags.classes.get("Vector")).operators);
+	}
+
+	/**
+	 * The forms rs3-api-types writes: a tuple; a field the docs mark writable; an enum table's FromID; and an enum
+	 * whose values the docs do not give, as a class whose fields are of its own type.
+	 */
+	@Test
+	void readsTheFormsOfTheRs3Stubs() throws IOException {
+		ApiModel model = sources(Map.of("stubs.lua", """
+				---@meta
+				---@class Pair
+				---@field range [integer, integer] (Read-only) The near and far ends.
+				---@field text string (Writeable) The text, which callbacks may change.
+				local Pair = {}
+
+				---@enum GameKey
+				GameKey = {
+				    P = 25,
+				}
+
+				---@param value integer
+				---@return string
+				---@diagnostic disable-next-line: inject-field
+				function GameKey.FromID(value) end
+
+				---@enum Plain
+				Plain = {
+				    ONE = 1,
+				}
+
+				---Contains all permissions a plugin may request.
+				---@class PluginPermissions
+				---@field httpAccess PluginPermissions Allows HTTP.
+				---@field chatAccess PluginPermissions Allows chat.
+				PluginPermissions = {}
+				"""));
+		assertEquals(List.of(), model.unparsed);
+		ApiModel.ClassDef pair = classNamed(model, "Pair");
+		assertEquals(new TypeRef.Table(List.of(new TypeRef.Entry("[1]", null, TypeRef.Named.of("integer")),
+				new TypeRef.Entry("[2]", null, TypeRef.Named.of("integer")))), pair.fields.get(0).type());
+		assertTrue(pair.fields.get(0).readOnly());
+		assertTrue(pair.fields.get(1).writable());
+		assertEquals("The text, which callbacks may change.", pair.fields.get(1).description());
+		assertTrue(Objects.requireNonNull(model.enums.get("GameKey")).fromId());
+		assertFalse(Objects.requireNonNull(model.enums.get("Plain")).fromId());
+		// The values are the client's own, which the placeholders, their names as strings, stand for
+		assertFalse(model.classes.containsKey("PluginPermissions"));
+		ApiModel.EnumDef permissions = Objects.requireNonNull(model.enums.get("PluginPermissions"));
+		assertTrue(permissions.placeholderValued());
+		assertEquals(List.of("httpAccess", "chatAccess"),
+				permissions.values().stream().map(ApiModel.EnumValue::name).toList());
 	}
 
 	@Test

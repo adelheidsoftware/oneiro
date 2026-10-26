@@ -1,7 +1,7 @@
 ---@meta
 
 ---Builds a string from a format with {} placeholders.
----@param format String The format.
+---@param format string The format.
 ---@param ... any
----@return String # The formatted text.
+---@return string # The formatted text.
 function formatStr(format, ...) end

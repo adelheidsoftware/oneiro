@@ -35,7 +35,7 @@ import org.jspecify.annotations.Nullable;
  * <pre>{@code
  * oneiro {
  *     stubs {
- *         local(file("../runescape-api-stubs"))
+ *         local(file("../rs3-api-types"))
  *     }
  *     plugin {
  *         name = "Herb Tracker"
@@ -136,7 +136,7 @@ public abstract class OneiroExtension {
 
 		public abstract Property<String> getCommit();
 
-		/** A checkout of runescape-api-stubs on this machine. */
+		/** A checkout of rs3-api-types on this machine. */
 		public void local(File directory) {
 			getLocal().set(directory);
 		}

@@ -2,3 +2,9 @@
 
 returns zyklib.array.find FindResult value index           # its ---@return tags describe both values but name neither
 returns zyklib.array.findLast FindLastResult value index   # likewise
+
+# Its types name three types that rs3-api-types does not have: VarPlayer for a variable's config, and InterfaceId and
+# ComponentId for an interface's and a component's IDs
+param zyklib.game_events.derived.forPlayerVariable var VarType     # its description: "The player variable to be observed"
+param zyklib.game_events.derived.interface interface integer       # its description: "The id of the interface in question"
+param zyklib.game_events.derived.component component integer       # GetComponent's ID, as its body passes it

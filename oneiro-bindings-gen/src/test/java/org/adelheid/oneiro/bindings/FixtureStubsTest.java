@@ -29,7 +29,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 /**
- * Generates the bindings from the small stubs fixture in {@code src/test/stubs}, which mimics runescape-api-stubs, and
+ * Generates the bindings from the small stubs fixture in {@code src/test/stubs}, which mimics rs3-api-types, and
  * checks their shape: a file that uses every kind of member compiles against them, the jars are reproducible, and the
  * annotations that tell Oneiro the Lua shape are where they belong.
  */
@@ -122,13 +122,14 @@ class FixtureStubsTest {
 		String caughtUp = """
 				nullable Player.GetTrackingID
 				read-only PluginResource
-				type PluginResource.path String
+				type PluginResource.path string
 				skip Player.Retired
-				element-table CoordGrid GridPart level x z
-				element-table HTTPRequest RequestPart data notAField
-				field PluginResource.loaded Bool
-				field CoordGrid.plane Int
+				field PluginResource.loaded boolean
+				field CoordGrid.plane integer
 				nullable Player.GetEntity
+				type Chat.AddMessage nil
+				param HTTPRequest.new baseURL PluginURL
+				param HTTPRequest.new path string
 				""";
 		Overrides overrides;
 		try (InputStream bundled = Objects.requireNonNull(Overrides.class.getResourceAsStream("overrides.txt"))) {
@@ -145,9 +146,12 @@ class FixtureStubsTest {
 				"read-only PluginResource is no longer needed: the stubs now say the same.",
 				"type PluginResource.path is no longer needed: the stubs now say the same.",
 				"skip Player.Retired is no longer needed: the stubs no longer have it.",
-				"element-table CoordGrid is no longer needed: the stubs now say the same.",
-				"field PluginResource.loaded is no longer needed: the stubs now say the same.")), notes::toString);
-		assertTrue(notes.stream().noneMatch(note -> note.contains("Player.GetEntity") || note.contains("HTTPRequest")
+				"field PluginResource.loaded is no longer needed: the stubs now say the same.",
+				"type Chat.AddMessage is no longer needed: the stubs now say the same.")), notes::toString);
+		// A parameter the stubs let a call leave out is another than one it must give
+		assertEquals(1, notes.stream().filter(note -> note.startsWith("param HTTPRequest.new")).count(),
+				notes::toString);
+		assertTrue(notes.stream().noneMatch(note -> note.contains("Player.GetEntity")
 				|| note.contains("CoordGrid.plane")), notes::toString);
 		// A field the stubs lack is bound
 		assertTrue(source(run, "CoordGrid.java").contains("public int plane;"));
@@ -155,10 +159,6 @@ class FixtureStubsTest {
 		assertTrue(warnings.stream().noneMatch(warning -> warning.contains("Player.Retired")
 				|| warning.contains("PluginResource") || warning.contains("Player.GetTrackingID")
 				|| warning.contains("CoordGrid.plane")), warnings::toString);
-		// Stubs that name only some of the elements changed in a way the line cannot follow, which needs a look
-		String partial = "element-table HTTPRequest is left as the stubs give it, which name some of its elements as"
-				+ " fields (data) but not all";
-		assertTrue(warnings.stream().anyMatch(warning -> warning.contains(partial)), warnings::toString);
 	}
 
 	/**
@@ -205,7 +205,7 @@ class FixtureStubsTest {
 				.contains("@LuaEvent(value = \"EntityDraw\", returns = boolean.class)"));
 		String chat = source("ChatMessageEventPayload.java");
 		assertTrue(chat.contains("@LuaPermission(\"chatAccess\")"));
-		assertTrue(chat.contains("\tpublic String chatMessage;"), "the overrides make chatMessage writable");
+		assertTrue(chat.contains("\tpublic String chatMessage;"), "the docs' mark makes chatMessage writable");
 		assertTrue(chat.contains("\tpublic final String senderNameSimple;"), "payload fields are read-only");
 		assertTrue(source("SettingsLayerReadyEventPayload.java").contains("@LuaManifestFlag(\"hasSettingsIcon\")"));
 		assertTrue(chat.contains("@LuaReview(\"chat\")"), "moderation reviews subscribing to ChatMessage");
@@ -214,7 +214,8 @@ class FixtureStubsTest {
 				+ " overrideText;"));
 		assertTrue(source("Globals.java")
 				.contains("\t@LuaDevOnly\n\tpublic static native void ExecuteConsoleCommand("));
-		assertTrue(!source("Globals.java").contains("require"), "Oneiro writes require itself");
+		// Oneiro writes require itself, and the stubs declare none
+		assertTrue(!source("Globals.java").contains("require"), "no require");
 		assertTrue(source("CurrentPlugin.java").contains("@LuaGlobal(\"Plugin\")\npublic final class CurrentPlugin {"));
 		assertTrue(source("ModifierKey.java").contains("public static final int SHIFT = 1;"));
 		assertTrue(source("GameState.java").contains("public enum GameState {"));

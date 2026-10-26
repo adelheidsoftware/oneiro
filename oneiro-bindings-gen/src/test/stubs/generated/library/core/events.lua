@@ -8,6 +8,12 @@ EntityType = {
     PLAYER = 2,
 }
 
+---The name of one of the values, as `EntityType.FromID(EntityType.LOCATION)` is `"LOCATION"`.
+---@param value integer
+---@return string
+---@diagnostic disable-next-line: inject-field
+function EntityType.FromID(value) end
+
 ---The client's states.
 ---@enum GameState
 GameState = {
@@ -16,6 +22,12 @@ GameState = {
     GAME = 30,
 }
 
+---The name of one of the values, as `GameState.FromID(GameState.LOGINSCREEN)` is `"LOGINSCREEN"`.
+---@param value integer
+---@return string
+---@diagnostic disable-next-line: inject-field
+function GameState.FromID(value) end
+
 ---Subscribe a callback under a name; unsubscribe it by the name.
 ---@class EventSubscription<T, RetT>
 ---@field Subscribe fun(name: string, callback: fun(event: T): RetT)
@@ -23,17 +35,17 @@ GameState = {
 
 ---Fifty times a second.
 ---@class LogicEventPayload
----@field logicTick Int (Read-only) Logic ticks since the client started.
+---@field logicTick integer (Read-only) Logic ticks since the client started.
 
 ---An inventory changed.
 ---@class InventoryUpdatedEventPayload
 ---@field inv InvType (Read-only) The inventory.
----@field slotsUpdated Int[] (Read-only) The slots that changed, from 1.
+---@field slotsUpdated integer[] (Read-only) The slots that changed, from 1.
 
 ---A chat message arrived.
 ---@class ChatMessageEventPayload
----@field chatMessage String The text, which callbacks may change.
----@field senderNameSimple String The sender's name.
+---@field chatMessage string (Writeable) The text, which callbacks may change.
+---@field senderNameSimple string The sender's name.
 
 ---An entity is about to be drawn.
 ---@class EntityDrawEventPayload

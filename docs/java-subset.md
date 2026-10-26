@@ -359,7 +359,7 @@ it, and documented everywhere else.
 ## The RS3 API
 
 The RS3 API is called through Java bindings that `oneiroBindings` generates on the developer's machine from
-runescape-api-stubs, in the package `org.adelheid.oneiro.rs3`. They mirror the Lua tables: one class per global table,
+rs3-api-types, in the package `org.adelheid.oneiro.rs3`. They mirror the Lua tables: one class per global table,
 with nested classes for nested tables (`ui.Text`, `config.NPC`), and the Lua names, PascalCase methods included. Three
 names change, because Java cannot use them: the `var` table is `vars`; the global functions (`log`, `formatStr`,
 `ExecuteConsoleCommand`) are static methods of `Globals`; and the `Plugin` table is `CurrentPlugin`, because the
@@ -373,7 +373,7 @@ plugin's Java needs no annotations of its own.
 | `text.SetPos(10, 20)`, `npc.isValid` | `text:SetPos(10, 20)`, `npc.isValid` | Methods and fields of the objects the client hands out. Read-only fields are `final`. |
 | `new ui.Text(parent)`, `new CoordGrid(x, y, z)` | `ui.Text.new(parent)`, `CoordGrid.new(x, y, z)` | A Lua `new` is a Java constructor. |
 | `new NPCListFilterSettings()` and its fields set right after | `{ coordGrid = tile, range = 5 }` | A table the plugin builds; the assignments that follow the constructor are folded into it. |
-| `config.NPC.RS3_HANS`, `vars.VarPlayer.RS3_QUEST_POINTS.value` | `config.NPC.HANS`, `var.VarPlayer.QUEST_POINTS.value` | Config and var names come from the stubs' csvs. Every name of `id`, `config` and `vars` starts with `RS3_` in Java, so that Java can spell all of them, and the Lua drops it. |
+| `config.NPC.RS3_HANS`, `vars.VarPlayer.RS3_QUEST_POINTS.value` | `config.NPC.HANS`, `var.VarPlayer.QUEST_POINTS.value` | Config and var names come from the stubs' constants. Every name of `id`, `config` and `vars` starts with `RS3_` in Java, so that Java can spell all of them, and the Lua drops it. |
 | `id.Obj.RS3_COINS`, `case id.Obj.RS3_COINS ->` | `id.Obj.COINS` | `id` names are `int` constants, so they work as `case` labels. |
 | `id.Seq.RS3_1ST4H_GUARD_GOBLIN_EAT` | `id.Seq["1ST4H_GUARD_GOBLIN_EAT"]` | A name that starts with a digit is not a Lua name either, so Lua indexes the table with it. |
 | `GameState.GAME`, `ModifierKey.SHIFT` | `GameState.GAME`, `ModifierKey.SHIFT` | An enum the API uses as a type is a Java enum; bit flags are `int` constants. So is an enum whose values nobody has documented, since a Java enum lowers to the table's own field whatever its value. Values the client gives other than the stubs' come from the overrides' `values` lines (checked in the client, 2026-10-23). |
@@ -388,7 +388,7 @@ plugin's Java needs no annotations of its own.
 | `Event.X.Subscribe(name, payload -> ...)` | `Event.X.Subscribe(name, function(payload) ... end)` | `EntityDraw` takes a `Predicate`, whose result the client acts on; every other event a `Consumer`. |
 | `@Nullable` results, `Integer` and other boxes | Values that may be `nil` | Check before use, as the Lua must. |
 | `World.GetGroundHeight(level, x, z)` | `local height, available = World.GetGroundHeight(level, x, z)` | A function with several return values; see [Several return values](#several-return-values). |
-| `Resources.icons.herb`, `Urls.prices` | `Plugin.resources.icons.herb`, `Plugin.urls.prices` | Typed classes the build generates from `src/main/resources/` and the manifest's URLs, so a missing file or an undeclared alias does not compile. |
+| `Resources.icons.herb`, `Urls.prices` | `Plugin.resources.icons.herb`, `Plugin.urls.prices` | Typed classes the build generates from `src/main/resources/` and the manifest's URLs, so a missing file or an undeclared alias does not compile. A URL is the client's `PluginURL` object, which `new HTTPRequest` takes, not a string. |
 | `(ui.ComponentCollection) component` | `component` | Casts are not checked. |
 | `(Integer) var.value`, `(String) param.defaultValue` | `var.value`, `param.defaultValue` | A value whose type varies, such as a var's, a param's or an enum's output, is `Object`; cast it to what its `valueType` says. |
 | Using a member that needs a permission the build does not declare | *Never*: "Chat.AddMessage needs the chatAccess permission, which the manifest does not declare; add it to the build, oneiro { plugin { permissions { optional(chatAccess) } } }, and check CurrentPlugin.HasPermission(PluginPermissions.chatAccess) before using it." | Oneiro never adds a permission to the manifest on its own. |

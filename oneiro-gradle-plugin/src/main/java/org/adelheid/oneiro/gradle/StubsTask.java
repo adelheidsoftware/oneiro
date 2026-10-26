@@ -33,8 +33,8 @@ import org.jspecify.annotations.Nullable;
 public abstract class StubsTask extends DefaultTask {
 
 	/** The stubs commit this release of Oneiro was tested against; another builds with a warning. */
-	static final String TESTED_COMMIT = "8733037f8b0ae59b0da063ab1fecc60849b0cc98";
-	static final String DEFAULT_REMOTE = "https://github.com/FriendlyDevelopment/runescape-api-stubs";
+	static final String TESTED_COMMIT = "45044c99dd347a46629aaa883e3e19f21386ad67";
+	static final String DEFAULT_REMOTE = "https://github.com/adelheidsoftware/rs3-api-types";
 
 	/** A local checkout of the stubs. */
 	@Optional
@@ -100,12 +100,12 @@ public abstract class StubsTask extends DefaultTask {
 		}
 		if (remote == null) {
 			throw new GradleException("""
-					Oneiro generates the RS3 bindings from runescape-api-stubs, and fetches nothing the build does not \
-					name. Name where the stubs come from:
+					Oneiro generates the RS3 bindings from the stubs of rs3-api-types, and fetches nothing the build \
+					does not name. Name where the stubs come from:
 
 					    oneiro {
 					        stubs {
-					            local(file("../runescape-api-stubs"))
+					            local(file("../rs3-api-types"))
 					            // or, fetched from GitHub at the commit this Oneiro was tested against:
 					            // remote("%s", "%s")
 					        }
@@ -113,7 +113,7 @@ public abstract class StubsTask extends DefaultTask {
 		}
 		String commit = getCommit().get();
 		if (announce) {
-			getLogger().lifecycle("Oneiro uses runescape-api-stubs from {} at commit {}.", remote, commit);
+			getLogger().lifecycle("Oneiro uses the stubs of {} at commit {}.", remote, commit);
 			warnIfUntested(commit, remote);
 		}
 		try {

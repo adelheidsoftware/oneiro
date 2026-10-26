@@ -1,20 +1,20 @@
-plugin/Lookups.java:20: warning: PlayerList.All finds other players, which Jagex's moderators review closely: information about other players must never be exported, nor used to scout, target or track opponents in PvP. Once the plugin meets this, @SuppressWarnings("oneiro:other-players") on the method or class silences this warning.
+plugin/Lookups.java:21: warning: PlayerList.All finds other players, which Jagex's moderators review closely: information about other players must never be exported, nor used to scout, target or track opponents in PvP. Once the plugin meets this, @SuppressWarnings("oneiro:other-players") on the method or class silences this warning.
 		return PlayerList.All().size();
 		       ^
 
-plugin/Lookups.java:29: warning: Player.GetTrackingID reads the character's tracking ID, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses trackingAccess for. Once the plugin meets this, @SuppressWarnings("oneiro:tracking") on the method or class silences this warning.
+plugin/Lookups.java:30: warning: Player.GetTrackingID reads the character's tracking ID, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses trackingAccess for. Once the plugin meets this, @SuppressWarnings("oneiro:tracking") on the method or class silences this warning.
 		return Player.GetTrackingID();
 		       ^
 
-plugin/Lookups.java:33: warning: new HTTPRequest connects to a server outside the game, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses httpAccess for, what it sends where, and which data protection case applies; information about other players must never be sent. Once the plugin meets this, @SuppressWarnings("oneiro:http") on the method or class silences this warning.
-		new HTTPRequest("https://example.org", "/ping").Get(request -> log(request.responseCode));
+plugin/Lookups.java:34: warning: new HTTPRequest connects to a server outside the game, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses httpAccess for, what it sends where, and which data protection case applies; information about other players must never be sent. Once the plugin meets this, @SuppressWarnings("oneiro:http") on the method or class silences this warning.
+		new HTTPRequest(base, "/ping").Get(request -> log(request.responseCode));
 		^
 
-plugin/Lookups.java:39: warning: Chat.AddMessage uses the chat, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about them, which a plugin must never export. Once the plugin meets this, @SuppressWarnings("oneiro:chat") on the method or class silences this warning.
-		new HTTPRequest("https://example.org").Get(request -> Chat.AddMessage(request.data));
-		                                                      ^
+plugin/Lookups.java:40: warning: Chat.AddMessage uses the chat, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about them, which a plugin must never export. Once the plugin meets this, @SuppressWarnings("oneiro:chat") on the method or class silences this warning.
+		new HTTPRequest(base).Get(request -> Chat.AddMessage(request.data));
+		                                     ^
 
-plugin/Lookups.java:43: warning: Subscribing to ChatMessage uses the chat, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about them, which a plugin must never export. Once the plugin meets this, @SuppressWarnings("oneiro:chat") on the method or class silences this warning.
+plugin/Lookups.java:44: warning: Subscribing to ChatMessage uses the chat, which Jagex's moderators review closely: the Mod.io description must say what the plugin uses chatAccess for, and other players' messages are information about them, which a plugin must never export. Once the plugin meets this, @SuppressWarnings("oneiro:chat") on the method or class silences this warning.
 		Event.ChatMessage.Subscribe("watcher.echo", message -> log(message.chatMessage));
 		^
 

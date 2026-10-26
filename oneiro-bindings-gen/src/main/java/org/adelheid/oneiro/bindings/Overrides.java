@@ -40,7 +40,7 @@ final class Overrides {
 			"type", "field", "function", "param", "superclass", "operator", "returns", "skip", "note");
 	/** The facts the RS3 API's file may state: those, and the facts of the client alone. */
 	private static final Set<String> RS3_FACTS = union(LIBRARY_FACTS, Set.of("copied", "not-copied", "hook",
-			"permission", "manifest-flag", "review", "dev-only", "element-table", "no-from-id"));
+			"permission", "manifest-flag", "review", "dev-only"));
 
 	private final List<Entry> entries;
 	private final String source;

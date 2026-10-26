@@ -151,12 +151,13 @@ public final class TypedSources {
 			members.append("\n\t/** {@code ").append(url).append("}: {@code ").append(lua("Plugin.urls", alias))
 					.append("} */\n");
 			appendName(members, "\t", alias);
-			members.append("\tpublic static final String ").append(javaName(alias)).append(" = lua();\n");
+			members.append("\tpublic static final PluginURL ").append(javaName(alias)).append(" = lua();\n");
 		});
 		return header(rootPackage, "the manifest's urls")
 				+ "import javax.annotation.processing.Generated;\n"
 				+ "import org.adelheid.oneiro.api.LuaGlobal;\n"
-				+ "import org.adelheid.oneiro.api.LuaName;\n\n"
+				+ "import org.adelheid.oneiro.api.LuaName;\n"
+				+ "import org.adelheid.oneiro.rs3.PluginURL;\n\n"
 				+ "/**\n * The base URLs the manifest declares, by their aliases; HTTP requests reach only these.\n"
 				+ " *\n * <p>Lua: {@code Plugin.urls}\n */\n"
 				+ GENERATED

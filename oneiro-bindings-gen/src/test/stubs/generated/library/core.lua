@@ -5,15 +5,10 @@
 function print(...) end
 
 ---Writes the arguments to the console after the plugin's name.
----@param format String
+---@param format any
 ---@param ... any
 function log(format, ...) end
 
 ---Runs a console command.
----@param command String
+---@param command string
 function ExecuteConsoleCommand(command) end
-
----Loads a file of the plugin.
----@param path string
----@return any
-function require(path) end

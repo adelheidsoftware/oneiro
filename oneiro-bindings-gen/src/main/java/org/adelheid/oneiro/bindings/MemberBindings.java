@@ -188,11 +188,11 @@ final class MemberBindings {
 
 	/**
 	 * Whether a field is read-only: the docs say so, or the overrides do for the field or its whole class, or it is an
-	 * event payload's, whose few writable fields the overrides name.
+	 * event payload's, whose few writable fields the docs mark, or the overrides name.
 	 */
 	private boolean isReadOnly(ApiModel.ClassDef owner, ApiModel.FieldDef field) {
 		String target = owner.name + "." + field.name();
-		if (overrides.has("writable", target)) {
+		if (field.writable() || overrides.has("writable", target)) {
 			return false;
 		}
 		// Both overrides are asked even when the docs say so already, so that one the stubs catch up with is noticed

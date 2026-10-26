@@ -208,8 +208,8 @@ numbers, and `config.Obj` the configs, which carry the name, the options and the
 
 - **The IDs are RS3's.** Some numbers match Old School's, most do not; never copy one across.
 - **The names are those of the game's cache**, which are not always those the game shows: a grimy guam is
-  `UNIDENTIFIED_GUAM`. The stubs Oneiro generates the bindings from list every name with its number in their `csvs/`
-  folder, which is the quickest place to search.
+  `UNIDENTIFIED_GUAM`. rs3-api-types, the stubs Oneiro generates the bindings from, lists every name with its number
+  in its `generated/constants/` folder, which is the quickest place to search.
 - **Every name has an `RS3_` prefix in Java and Kotlin**, so that names starting with a digit are names in both:
   `config.Obj.RS3_COINS` in the source is `config.Obj.COINS` in the Lua.
 - A few names cannot be names in either language at all, such as one with a hyphen. The bindings leave them out with

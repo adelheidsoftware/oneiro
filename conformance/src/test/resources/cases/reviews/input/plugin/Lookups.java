@@ -8,6 +8,7 @@ import org.adelheid.oneiro.rs3.HTTPRequest;
 import org.adelheid.oneiro.rs3.Player;
 import org.adelheid.oneiro.rs3.PlayerEntity;
 import org.adelheid.oneiro.rs3.PlayerList;
+import org.adelheid.oneiro.rs3.PluginURL;
 import org.jspecify.annotations.Nullable;
 
 /** Finds players, reads the tracking ID, fetches a page and echoes the chat: each a use moderation reviews closely. */
@@ -29,14 +30,14 @@ public final class Lookups {
 		return Player.GetTrackingID();
 	}
 
-	static void ping() {
-		new HTTPRequest("https://example.org", "/ping").Get(request -> log(request.responseCode));
+	static void ping(PluginURL base) {
+		new HTTPRequest(base, "/ping").Get(request -> log(request.responseCode));
 	}
 
 	/** The Mod.io description says what the plugin fetches, so the request's warning is silenced; the chat's is not. */
 	@SuppressWarnings("oneiro:http")
-	static void fetch() {
-		new HTTPRequest("https://example.org").Get(request -> Chat.AddMessage(request.data));
+	static void fetch(PluginURL base) {
+		new HTTPRequest(base).Get(request -> Chat.AddMessage(request.data));
 	}
 
 	static void echo() {

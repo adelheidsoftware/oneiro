@@ -111,6 +111,9 @@ final class TypeParser {
 		if (c == '{') {
 			return table();
 		}
+		if (c == '[') {
+			return tuple();
+		}
 		if (c == '(') {
 			pos++;
 			depth++;
@@ -251,6 +254,25 @@ final class TypeParser {
 			}
 		}
 		expect('}');
+		depth--;
+		return new TypeRef.Table(entries);
+	}
+
+	/**
+	 * A LuaCATS tuple, {@code [integer, ObjType]}: a table whose keys are its positions, as the older form
+	 * {@code {[1]: integer, [2]: ObjType}} writes it.
+	 */
+	private TypeRef tuple() {
+		pos++;
+		depth++;
+		List<TypeRef.Entry> entries = new ArrayList<>();
+		while (!peekSymbol(']')) {
+			entries.add(new TypeRef.Entry("[" + (entries.size() + 1) + "]", null, union()));
+			if (peekSymbol(',')) {
+				pos++;
+			}
+		}
+		expect(']');
 		depth--;
 		return new TypeRef.Table(entries);
 	}

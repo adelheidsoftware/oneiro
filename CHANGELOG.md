@@ -63,6 +63,28 @@ All notable changes to Oneiro are listed here. The format follows
 
 ### Changed
 
+- **The RS3 API's types come from Oneiro's own stubs**, [rs3-api-types](https://github.com/adelheidsoftware/rs3-api-types),
+  which are generated from the documentation and corrected where the beta client differs. Point the `stubs { }` block
+  at them:
+
+  ```kotlin
+  oneiro {
+      stubs {
+          remote("https://github.com/adelheidsoftware/rs3-api-types", "45044c99dd347a46629aaa883e3e19f21386ad67")
+      }
+  }
+  ```
+
+  or `local(file(...))` at a checkout of them. The RS3 bindings change with them:
+  - a base URL, `Urls.<alias>`, is the client's `PluginURL` object, not a `String`; `new HTTPRequest` takes it as before;
+  - `game.options.ClientOption` is now `ClientOption`, `ComboEntry` and `ListEntry` are `ui.ComboEntry` and
+    `ui.ListEntry`, and `vars.VarClanSettings` is `vars.VarClanSetting`, the client's name;
+  - `PluginResourceLoadResult`'s constants are the client's: `SUCCESS`, `ERROR_FILESYSTEM`, `ERROR_DECODE`,
+    `ERROR_EXCEEDS_LIMITS` and `ERROR_CONSTRUCTION`;
+  - `ui.GroupBox.headerText` is a `ui.TextData`, as in the client;
+  - an optional parameter no longer takes `null`: call the shorter form of the method, which leaves it out;
+  - the fields of the filter settings (`NPCListFilterSettings` and the others) and of the shape drawing settings are
+    `Integer`, `Boolean` and the like, and `null` until set, as each key may be left out.
 - **No more hand-written declarations of Lua.** Your own classes can no longer describe existing Lua with the
   bindings' annotations (`@LuaModule`, `@LuaGlobal`, ...), Java `native` methods or Kotlin `external` functions. Put
   that Lua in `src/main/lua/` with LuaCATS annotations instead, and Oneiro generates the classes.

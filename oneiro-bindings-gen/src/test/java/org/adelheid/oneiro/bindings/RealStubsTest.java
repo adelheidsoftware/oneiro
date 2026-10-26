@@ -13,18 +13,21 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Generates the bindings from the real runescape-api-stubs, when they are checked out next to Oneiro, in
- * {@code ../runescape-api-stubs}, and checks that they generate without a warning: every stub line is understood and
- * every override still matches. The bindings must also compile.
+ * Generates the bindings from the real stubs of rs3-api-types, when it is checked out next to Oneiro, in
+ * {@code ../rs3-api-types}, and checks that they generate without a warning: every stub line is understood and every
+ * override still matches. The bindings must also compile.
  */
 class RealStubsTest {
+
+	/** The folder of the stubs' definitions in a checkout of rs3-api-types. */
+	private static final String LIBRARY = "generated/library";
 
 	@Test
 	void realStubsGenerateBindingsThatCompile() throws IOException {
 		String location = System.getProperty("oneiro.stubs", "");
 		Path stubs = Path.of(location);
-		Assumptions.assumeTrue(!location.isEmpty() && Files.isRegularFile(stubs.resolve("types.lua")),
-				"runescape-api-stubs is not checked out next to Oneiro.");
+		Assumptions.assumeTrue(!location.isEmpty() && Files.isDirectory(stubs.resolve(LIBRARY)),
+				"rs3-api-types is not checked out next to Oneiro.");
 
 		for (BindingsGenerator.Language language : BindingsGenerator.Language.values()) {
 			BindingsGenerator.Result result = BindingsGenerator.generate(stubs,
@@ -49,9 +52,9 @@ class RealStubsTest {
 		Path stubs = Path.of(System.getProperty("oneiro.stubs", ""));
 		Path zyklib = Path.of(System.getProperty("oneiro.zyklib", "")).resolve("src");
 		Path blueprintHelper = Path.of(System.getProperty("oneiro.blueprintHelper", "")).resolve("src");
-		Assumptions.assumeTrue(Files.isRegularFile(stubs.resolve("types.lua")) && Files.isDirectory(zyklib)
+		Assumptions.assumeTrue(Files.isDirectory(stubs.resolve(LIBRARY)) && Files.isDirectory(zyklib)
 				&& Files.isDirectory(blueprintHelper),
-				"runescape-api-stubs, Zyklib and Blueprint-Helper are not all checked out next to Oneiro.");
+				"rs3-api-types, Zyklib and Blueprint-Helper are not all checked out next to Oneiro.");
 
 		BindingsGenerator.Result result = BindingsGenerator.generate(stubs, Path.of("build", "real-library-bindings"),
 				Overrides.bundled(), BindingsGenerator.Language.JAVA, List.of(

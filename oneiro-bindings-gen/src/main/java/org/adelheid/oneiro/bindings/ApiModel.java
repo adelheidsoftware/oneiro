@@ -40,6 +40,7 @@ final class ApiModel {
 		Binding binding = Binding.NONE;
 		final List<FieldDef> fields = new ArrayList<>();
 		final List<FunctionDef> functions = new ArrayList<>();
+		final List<OperatorDef> operators = new ArrayList<>();
 		/**
 		 * The tables the class's own table holds, by field name, each by the class or enum it is: the modules a module
 		 * requires into its fields, as {@code zyklib.reactive}, and the classes and enums declared in its fields, as
@@ -55,17 +56,26 @@ final class ApiModel {
 
 	/**
 	 * A {@code ---@field}, or a field that code assigns; {@code readOnly} comes from the "(Read-only)" the docs put at
-	 * the start of the description.
+	 * the start of the description, and {@code writable} from their "(Writeable)", which a field of a type whose fields
+	 * are read-only, as an event payload's, can be.
 	 */
-	record FieldDef(String name, TypeRef type, String description, boolean readOnly, boolean deprecated) {
+	record FieldDef(String name, TypeRef type, String description, boolean readOnly, boolean writable,
+			boolean deprecated) {
 
 		FieldDef withName(String newName) {
-			return new FieldDef(newName, type, description, readOnly, deprecated);
+			return new FieldDef(newName, type, description, readOnly, writable, deprecated);
 		}
 
 		FieldDef withType(TypeRef newType) {
-			return new FieldDef(name, newType, description, readOnly, deprecated);
+			return new FieldDef(name, newType, description, readOnly, writable, deprecated);
 		}
+	}
+
+	/**
+	 * A {@code ---@operator}: one of Lua's operators on a class's objects, by LuaCATS's name for it, {@code add}, with
+	 * the other operand's type, null for a unary operator, and the result's.
+	 */
+	record OperatorDef(String kind, @Nullable TypeRef operand, TypeRef result) {
 	}
 
 	/** A {@code ---@param}. An optional parameter has a nullable type or a name ending in {@code ?}. */
@@ -160,16 +170,22 @@ final class ApiModel {
 
 	/**
 	 * A {@code ---@enum}. With {@code keys}, from {@code ---@enum (key)}, a value of the enum's type is one of its
-	 * keys, {@code "HEAD"}, rather than what a key holds.
+	 * keys, {@code "HEAD"}, rather than what a key holds. With {@code fromId}, its table has a {@code FromID} function,
+	 * which turns a value into its name, as the client gives most of its enum tables.
 	 */
-	record EnumDef(String name, String description, List<EnumValue> values, String file, boolean keys) {
+	record EnumDef(String name, String description, List<EnumValue> values, String file, boolean keys,
+			boolean fromId) {
 
 		EnumDef {
 			values = List.copyOf(values);
 		}
 
 		EnumDef withValues(List<EnumValue> newValues) {
-			return new EnumDef(name, description, newValues, file, keys);
+			return new EnumDef(name, description, newValues, file, keys, fromId);
+		}
+
+		EnumDef withFromId() {
+			return new EnumDef(name, description, values, file, keys, true);
 		}
 
 		/** Whether the values are numbers rather than strings. */

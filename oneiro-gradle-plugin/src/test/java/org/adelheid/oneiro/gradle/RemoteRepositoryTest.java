@@ -15,15 +15,14 @@ class RemoteRepositoryTest {
 
 	@Test
 	void aGitHubRepository() {
-		RemoteRepository repository =
-				RemoteRepository.parse("https://github.com/FriendlyDevelopment/runescape-api-stubs");
-		assertEquals(new RemoteRepository(RemoteRepository.Host.GITHUB, "FriendlyDevelopment/runescape-api-stubs"),
+		RemoteRepository repository = RemoteRepository.parse("https://github.com/adelheidsoftware/rs3-api-types");
+		assertEquals(new RemoteRepository(RemoteRepository.Host.GITHUB, "adelheidsoftware/rs3-api-types"),
 				repository);
-		assertEquals("https://github.com/FriendlyDevelopment/runescape-api-stubs.git/info/refs?service=git-upload-pack",
+		assertEquals("https://github.com/adelheidsoftware/rs3-api-types.git/info/refs?service=git-upload-pack",
 				repository.refs().toString());
-		assertEquals("https://codeload.github.com/FriendlyDevelopment/runescape-api-stubs/zip/" + commit(),
+		assertEquals("https://codeload.github.com/adelheidsoftware/rs3-api-types/zip/" + commit(),
 				repository.archive(commit()).toString());
-		assertEquals(Path.of("cache", "github.com", "FriendlyDevelopment", "runescape-api-stubs"),
+		assertEquals(Path.of("cache", "github.com", "adelheidsoftware", "rs3-api-types"),
 				repository.folder(Path.of("cache")));
 	}
 

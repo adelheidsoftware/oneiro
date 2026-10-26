@@ -3,16 +3,15 @@ package org.adelheid.oneiro.bindings;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * A checkout of runescape-api-stubs, read: the declarations of {@code generated/**}{@code /*.lua} and
- * {@code types.lua}, and the name lists of {@code csvs/}. The stubs' {@code consts/} folder is generated from the csvs,
- * so it is not read.
+ * A checkout of rs3-api-types, read: the declarations of {@code generated/library/**}{@code /*.lua}, and the name lists
+ * of {@code generated/constants/}, a CSV a namespace. The constants' definition files beside the CSVs, which name the
+ * same IDs for LuaLS, are not read.
  *
  * @param namespaces the csv name lists by file name, such as {@code Obj}
  */
@@ -31,17 +30,16 @@ record Stubs(ApiModel model, Map<String, CsvConstants.Namespace> namespaces) {
 	}
 
 	private static Stubs read(Path root, boolean withNames) throws IOException {
-		if (!Files.isRegularFile(root.resolve("types.lua")) || !Files.isDirectory(root.resolve("generated"))) {
-			throw new IOException(root + " is not a checkout of runescape-api-stubs: it has no types.lua and"
-					+ " generated/ folder.");
+		Path library = root.resolve("generated/library");
+		if (!Files.isDirectory(library)) {
+			throw new IOException(root + " is not a checkout of rs3-api-types: it has no generated/library/ folder.");
 		}
 		ApiModel model = new ApiModel();
 		LuaCatsReader reader = new LuaCatsReader(model);
 		List<Path> files;
-		try (Stream<Path> walk = Files.walk(root.resolve("generated"))) {
-			files = new ArrayList<>(walk.filter(path -> path.toString().endsWith(".lua")).sorted().toList());
+		try (Stream<Path> walk = Files.walk(library)) {
+			files = walk.filter(path -> path.toString().endsWith(".lua")).sorted().toList();
 		}
-		files.add(root.resolve("types.lua"));
 		for (Path file : files) {
 			String path = root.relativize(file).toString().replace('\\', '/');
 			reader.read(file, path, path.substring(0, path.length() - ".lua".length()));
@@ -49,7 +47,7 @@ record Stubs(ApiModel model, Map<String, CsvConstants.Namespace> namespaces) {
 		reader.finish();
 
 		Map<String, CsvConstants.Namespace> namespaces = new LinkedHashMap<>();
-		Path csvs = root.resolve("csvs");
+		Path csvs = root.resolve("generated/constants");
 		if (withNames && Files.isDirectory(csvs)) {
 			try (Stream<Path> list = Files.list(csvs)) {
 				for (Path csv : list.filter(path -> path.toString().endsWith(".csv")).sorted().toList()) {

@@ -1,14 +1,14 @@
 ---@meta
 
 ---@class HTTPRequest
----@field data String The response, once it arrived.
----@field successful Bool Whether it succeeded.
----@field responseCode Int The HTTP status.
+---@field data string (Read-only) The response, once it arrived.
+---@field successful boolean (Read-only) Whether it succeeded.
+---@field responseCode integer (Read-only) The HTTP status.
 HTTPRequest = {}
 
 ---A request to the base URL and an optional path.
 ---@param baseURL PluginURL A URL of the manifest.
----@param path String? A path after it.
+---@param path? string A path after it.
 ---@return HTTPRequest
 function HTTPRequest.new(baseURL, path) end
 

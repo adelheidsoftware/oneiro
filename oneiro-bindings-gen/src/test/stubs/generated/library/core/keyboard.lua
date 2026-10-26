@@ -8,13 +8,19 @@ ModifierKey = {
     ALT = 4,
 }
 
+---The name of one of the values, as `ModifierKey.FromID(ModifierKey.SHIFT)` is `"SHIFT"`.
+---@param value integer
+---@return string
+---@diagnostic disable-next-line: inject-field
+function ModifierKey.FromID(value) end
+
 ---@class Keyboard
 Keyboard = {}
 
 ---Whether the keyboard can be read on this device.
----@return Bool # True on desktops.
+---@return boolean # True on desktops.
 function Keyboard.IsAvailable() end
 
 ---Whether a shift key is down.
----@return Bool # True while one is held.
+---@return boolean # True while one is held.
 function Keyboard.IsShiftDown() end

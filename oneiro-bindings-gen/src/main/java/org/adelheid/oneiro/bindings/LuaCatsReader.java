@@ -52,6 +52,12 @@ final class LuaCatsReader {
 			+ "([\\w.]+)(?:<([^>]*)>)?(?:\\s*:\\s*([\\w.]+))?\\s*(.*)$");
 	private static final Pattern NAME_THEN_REST = Pattern.compile("^---@(field|param|alias|vararg)\\s+(\\S+)\\s*(.*)$");
 	private static final Pattern ENUM_TAG = Pattern.compile("^---@enum\\s+(?:\\((\\w+)\\)\\s*)?([\\w.]+).*$");
+	/** {@code ---@operator add(Vector3): Vector3}: the operator, its other operand's type, if any, and the result's. */
+	private static final Pattern OPERATOR_TAG =
+			Pattern.compile("^---@operator\\s+(\\w+)(?:\\s*\\(([^)]*)\\))?\\s*:\\s*(.+)$");
+	/** The marks the docs put at the start of a field's description, which the field's binding follows. */
+	private static final String READ_ONLY = "(Read-only)";
+	private static final String WRITABLE = "(Writeable)";
 	private static final Pattern VISIBLE_FIELD = Pattern.compile("^(\\S+)\\s+(\\S.*)$");
 	private static final Pattern GENERIC_NAME = Pattern.compile("\\G\\s*([A-Za-z_]\\w*)(?:\\s*:\\s*[\\w.]+)?\\s*(,?)");
 	private static final Pattern RETURN_NAME = Pattern.compile("^([A-Za-z_]\\w*)(?:\\s+(.*))?$");
@@ -59,6 +65,9 @@ final class LuaCatsReader {
 	/** Tags that shape no API, which the reader passes over. */
 	private static final Set<String> IGNORED_TAGS = Set.of("async", "nodiscard", "see", "source", "version",
 			"diagnostic", "cast", "as", "module", "public");
+
+	/** The function of an enum table that turns a value into its name. */
+	private static final String FROM_ID = "FromID";
 
 	/** A function whose owner is a global table, attached once every file is read. */
 	private record PendingFunction(String rawOwner, ApiModel.FunctionDef function, boolean reported) {
@@ -181,13 +190,18 @@ final class LuaCatsReader {
 			String owner = globalTables.getOrDefault(pending.rawOwner(), pending.rawOwner());
 			ApiModel.FunctionDef function = pending.function().withOwner(owner);
 			ApiModel.ClassDef classDef = model.classes.get(owner);
+			ApiModel.EnumDef enumDef = model.enums.get(owner);
 			if (classDef != null) {
 				classDef.functions.add(function);
+			} else if (enumDef != null && function.name().equals(FROM_ID)) {
+				// An enum table's FromID, which names a value
+				model.enums.put(owner, enumDef.withFromId());
 			} else if (pending.reported()) {
 				model.unparsed.add(new ApiModel.Unparsed("function on unknown table " + pending.rawOwner(),
 						function.file(), 0, "function " + pending.rawOwner() + "." + function.name()));
 			}
 		}
+		valueClassesAsEnums();
 		// In rounds, as a module can return one that returns a third's table
 		List<PendingExport> waiting = new ArrayList<>(reexports);
 		boolean progress = true;
@@ -283,7 +297,7 @@ final class LuaCatsReader {
 				}
 				case "deprecated" -> deprecated = true;
 				case "private", "protected", "package" -> hidden = true;
-				case "operator" -> unparsed("@operator is not supported yet", lineNumber, line);
+				case "operator" -> operatorTag(line, lineNumber);
 				default -> {
 					if (!IGNORED_TAGS.contains(tagName)) {
 						unparsed("unknown tag @" + tagName, lineNumber, line);
@@ -341,15 +355,32 @@ final class LuaCatsReader {
 		}
 		TypeParser.Result result = TypeParser.parsePrefix(rest, 0);
 		String fieldDescription = stripHash(rest.substring(result.end()));
-		boolean readOnly = fieldDescription.startsWith("(Read-only)");
-		if (readOnly) {
-			fieldDescription = fieldDescription.substring("(Read-only)".length()).strip();
+		boolean readOnly = fieldDescription.startsWith(READ_ONLY);
+		// Writeable alone: "(Writeable: Using Swap())" is a value changed through a method, not by assigning it
+		boolean writable = fieldDescription.startsWith(WRITABLE);
+		if (readOnly || writable) {
+			fieldDescription = fieldDescription.substring((readOnly ? READ_ONLY : WRITABLE).length()).strip();
 		}
 		// ---@field npcData? NPCData: the mark on the name makes the field nullable
 		TypeRef fieldType = name.endsWith("?") && !result.type().isNullable()
 				? new TypeRef.Optional(result.type())
 				: result.type();
-		target.fields.add(new ApiModel.FieldDef(stripOptionalMark(name), fieldType, fieldDescription, readOnly, false));
+		target.fields.add(new ApiModel.FieldDef(stripOptionalMark(name), fieldType, fieldDescription, readOnly,
+				writable, false));
+	}
+
+	/** {@code ---@operator add(Vector3): Vector3}, or for a unary operator {@code ---@operator unm: Vector3}. */
+	private void operatorTag(String line, int lineNumber) {
+		Matcher matcher = OPERATOR_TAG.matcher(line);
+		ApiModel.ClassDef target = openClass;
+		if (target == null || !matcher.matches()) {
+			unparsed("@operator outside a class block, or of another form", lineNumber, line);
+			return;
+		}
+		String operand = matcher.group(2);
+		TypeRef other = operand == null ? null : TypeParser.parse(operand);
+		target.operators.add(
+				new ApiModel.OperatorDef(matcher.group(1), other, TypeParser.parsePrefix(matcher.group(3), 0).type()));
 	}
 
 	private void paramTag(String line) {
@@ -691,7 +722,7 @@ final class LuaCatsReader {
 			default -> {
 				TypeRef declaredType = type;
 				TypeRef fieldType = declaredType != null ? declaredType : literalType(value);
-				owner.fields.add(new ApiModel.FieldDef(name, fieldType, String.join("\n", description), false,
+				owner.fields.add(new ApiModel.FieldDef(name, fieldType, String.join("\n", description), false, false,
 						deprecated));
 			}
 		}
@@ -738,8 +769,33 @@ final class LuaCatsReader {
 		if (tableName != null && !name.equals(tableName)) {
 			unparsed("@enum name differs from its table", line, name + " vs " + tableName);
 		}
-		model.enums.put(name, new ApiModel.EnumDef(name, openEnumDescription, values, file, openEnumKeys));
+		model.enums.put(name, new ApiModel.EnumDef(name, openEnumDescription, values, file, openEnumKeys, false));
 		return name;
+	}
+
+	/**
+	 * Each class that is an enum whose values the definitions do not give, as an enum of placeholder values, each its
+	 * own name as a string, which {@link ApiModel.EnumDef#placeholderValued} tells apart. Such a class has a global
+	 * table, fields each of the class's own type, and no function but {@code FromID}: {@code PluginPermissions}, whose
+	 * values are the client's own objects.
+	 */
+	private void valueClassesAsEnums() {
+		for (ApiModel.ClassDef classDef : List.copyOf(model.classes.values())) {
+			boolean ownTypeFields = !classDef.fields.isEmpty() && classDef.fields.stream()
+					.allMatch(field -> field.type() instanceof TypeRef.Named named && named.args().isEmpty()
+							&& named.name().equals(classDef.name));
+			boolean fromIdAlone = classDef.functions.stream().allMatch(function -> function.name().equals(FROM_ID));
+			if (classDef.binding != ApiModel.Binding.GLOBAL || !ownTypeFields || !fromIdAlone) {
+				continue;
+			}
+			List<ApiModel.EnumValue> values = classDef.fields.stream()
+					.map(field -> new ApiModel.EnumValue(field.name(), "\"" + field.name() + "\"", field.description()))
+					.toList();
+			String definedIn = classDef.files.isEmpty() ? "" : classDef.files.getFirst();
+			model.enums.put(classDef.name, new ApiModel.EnumDef(classDef.name, classDef.description, values, definedIn,
+					false, !classDef.functions.isEmpty()));
+			model.classes.remove(classDef.name);
+		}
 	}
 
 	/** {@code Player = {}}: a global table, of the open class, or of a class named by the table. */

@@ -19,11 +19,12 @@ Maven Central rejects unsigned artifacts.
 
 ## Steps
 
-1. Make sure `main` builds: `./gradlew clean build`, with StyLua configured and runescape-api-stubs checked out next to
+1. Make sure `main` builds: `./gradlew clean build`, with StyLua configured and rs3-api-types checked out next to
    Oneiro (see [CONTRIBUTING.md](CONTRIBUTING.md)), so that every check runs.
-2. If the stubs have moved on, check the bindings against the latest commit, update the overrides where the client's
-   behaviour needs it, and set `StubsTask.TESTED_COMMIT` to that commit. It is the commit a plugin build without a
-   `stubs { }` block is told to use.
+2. If rs3-api-types has moved on, check the bindings against its latest commit, and set `StubsTask.TESTED_COMMIT`, the
+   samples' commented `remote(...)` lines and the README's example to that commit. `TESTED_COMMIT` is the commit a
+   plugin build without a `stubs { }` block is told to use. What the client does differently from the docs belongs in
+   rs3-api-types' corrections; how Java and Kotlin bind it belongs in Oneiro's `overrides.txt`.
 3. In `gradle.properties`, set `version` to the release version, such as `0.1.0`.
 4. In [CHANGELOG.md](CHANGELOG.md), rename `Unreleased` to the version and the date, and update the links at the end.
 5. Commit, then tag the commit `v0.1.0`.

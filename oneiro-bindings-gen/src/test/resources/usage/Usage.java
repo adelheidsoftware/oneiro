@@ -17,6 +17,7 @@ import org.adelheid.oneiro.rs3.NPCListFilterSettings;
 import org.adelheid.oneiro.rs3.PersistentDB;
 import org.adelheid.oneiro.rs3.Player;
 import org.adelheid.oneiro.rs3.PluginPermissions;
+import org.adelheid.oneiro.rs3.PluginURL;
 import org.adelheid.oneiro.rs3.SkillType;
 import org.adelheid.oneiro.rs3.Vector2;
 import org.adelheid.oneiro.rs3.World;
@@ -31,7 +32,7 @@ final class Usage {
 	private Usage() {
 	}
 
-	static void all(ui.ComponentCollection parent) {
+	static void all(ui.ComponentCollection parent, PluginURL base) {
 		boolean available = Player.IsAvailable();
 		Long tracking = Player.GetTrackingID();
 		int attack = Player.GetLevelGameplay(SkillType.ATTACK);
@@ -84,7 +85,7 @@ final class Usage {
 		});
 		Event.Logic.Unsubscribe("usage.logic");
 		if (CurrentPlugin.HasPermission(PluginPermissions.httpAccess)) {
-			new HTTPRequest("https://example.org").Get(request -> log(request.data));
+			new HTTPRequest(base).Get(request -> log(request.data));
 		}
 		Vector2 one = new Vector2(1.0);
 		double length = new Vector2(3.0, 4.0).Length();

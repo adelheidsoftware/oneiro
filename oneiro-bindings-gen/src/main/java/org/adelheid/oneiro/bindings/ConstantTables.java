@@ -24,13 +24,11 @@ import org.adelheid.oneiro.bindings.JavaBindings.Node;
 final class ConstantTables {
 
 	private final JavaBindings bindings;
-	private final Overrides overrides;
 	private final List<String> warnings;
 	private final TypeMapping typeMapping;
 
 	ConstantTables(JavaBindings bindings) {
 		this.bindings = bindings;
-		this.overrides = bindings.overrides;
 		this.warnings = bindings.warnings;
 		this.typeMapping = bindings.typeMapping();
 	}
@@ -41,7 +39,6 @@ final class ConstantTables {
 	 */
 	void writeEnum(StringBuilder out, Node node, ApiModel.EnumDef enumDef, String indent) {
 		String table = bindings.enumPath(node, enumDef);
-		boolean rs3 = bindings.target.isRs3();
 		// A Java enum lowers to the table's own field, whatever its value, so an enum whose values are unknown is one.
 		// A (key) enum's values are its keys, which plugins write as strings, so its table holds plain constants.
 		boolean asJavaEnum = !enumDef.keys()
@@ -62,8 +59,8 @@ final class ConstantTables {
 		String inner = indent + "\t";
 		Set<String> javaNames = new HashSet<>();
 		if (asJavaEnum) {
-			// The client gives all but a few enum tables FromID, which turns a value into its name
-			if (rs3 && !overrides.has("no-from-id", enumDef.name())) {
+			// A table with FromID, which turns a value into its name, as the client gives most of its enum tables
+			if (enumDef.fromId()) {
 				out.append(indent).append("@LuaFromId\n");
 			}
 			out.append(indent).append("public enum ").append(node.javaName).append(" {\n");

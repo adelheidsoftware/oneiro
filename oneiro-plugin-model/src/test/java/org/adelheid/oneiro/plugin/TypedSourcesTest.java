@@ -98,7 +98,7 @@ class TypedSourcesTest {
 		String source = TypedSources.urls("com.example.herbs", Map.of("prices", "https://prices.example.org"));
 		assertTrue(source != null && source.contains("""
 					/** {@code https://prices.example.org}: {@code Plugin.urls.prices} */
-					public static final String prices = lua();
+					public static final PluginURL prices = lua();
 				"""), source);
 		assertNull(TypedSources.urls("com.example.herbs", Map.of()));
 	}

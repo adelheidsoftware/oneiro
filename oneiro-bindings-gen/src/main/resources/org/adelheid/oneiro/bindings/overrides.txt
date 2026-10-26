@@ -1,5 +1,7 @@
-# Facts about the RS3 Client Plugin API that runescape-api-stubs does not state, for Oneiro's bindings generator.
-# Each line is "<fact> <target> [<argument> ...]", then "#" and how the fact was checked:
+# Facts about the RS3 Client Plugin API for Oneiro's bindings generator: how Oneiro binds the API in Java and Kotlin,
+# which rs3-api-types' stubs describe. What the API is, as the docs and the client have it, is the stubs' (with their
+# corrections.txt): only what Java and Kotlin need besides is here. Each line is "<fact> <target> [<argument> ...]",
+# then "#" and how the fact was checked:
 #
 #   docs       the official documentation at developer.runescape.com/rs/ says so
 #   stubs      the stubs' own descriptions say so, though their types do not
@@ -7,218 +9,68 @@
 #   unchecked  inferred; to be checked in the client before anyone relies on it
 #
 # Targets are Lua names as the stubs declare them: a class (ui.Text, NPCEntity), a member (Player.GetEntity,
-# NPCEntity.coordGrid), an event field (Event.ChatMessage) or a global function (require). The facts:
+# NPCEntity.coordGrid), an event field (Event.ChatMessage) or a global function (log). The facts; a library's
+# overrides file takes those from singleton to note, and the rest are the client's alone:
 #
 #   singleton <class>            a global table that is one object: its colon functions are static, with @LuaColon
 #   instance <class>             a global table whose colon functions are methods of the objects its new makes
 #   constructible <class>        the plugin builds tables of this type: a public constructor making {}
 #   not-constructible <class>    the plugin never builds tables of this type
-#   nullable <member>            the function or field can be nil, though the stubs' type says otherwise
+#   nullable <member>            the function or field can be nil, though the stubs' type says otherwise; Java's
+#                                Object, which binds LuaCATS's any, is never null without it
 #   not-nullable <member>        the function or field is never nil, though the stubs' type says it can be
 #   read-only <class|field>      the field, or every field of the class, is read-only: final in Java
 #   writable <field>             the field can be assigned, though the defaults would make it final
-#   copied <class>               a field of this type, on an object the client hands out, gives a copy: an edit in
-#                                place is lost, so Java rejects it
-#   not-copied <field>           the field gives the client's own value, though its type is copied
 #   java-name <class|member> <n> the Java name for a Lua name; the Lua keeps its own
-#   rename <member> <name>       the client's name for a member the stubs misspell; Java and Lua both use it, and the
-#                                other lines name the member by it
-#   values <enum> <NAME=value...>  the values the client gives an enum's names, where the stubs give others
-#   type <member> <type...>      the LuaCATS type of a field, or of what a function returns, where the stubs' is wrong
-#   field <field> <type...>      a field the docs give and the stubs lack, with its LuaCATS type; for a class the
-#                                stubs lack, its lines declare it, for a type line to use
-#   function <Owner.Name> <fun>  a function the docs give and the stubs lack, or whose form they get wrong, as a
-#                                fun(...) type; Owner:Name for a colon call; a further line adds another form
-#   param <function> <name> <type...>  the LuaCATS type of a function's parameter, where the stubs' is wrong
-#   superclass <class> <class>   the class the docs say it extends, where the stubs give none
+#   rename <member> <name>       the name of a member the stubs misspell; Java and Lua both use it, and the other lines
+#                                name the member by it
+#   values <enum> <NAME=value...>  the values of an enum's names, where the stubs give others
+#   type <member> <type...>      the LuaCATS type of a field, or of what a function returns, where the stubs' is wrong;
+#                                nil for a function that returns nothing
+#   field <field> <type...>      a field the stubs lack, with its LuaCATS type; for a class the stubs lack, its lines
+#                                declare it, for a type line to use
+#   function <Owner.Name> <fun>  a function the stubs lack, or whose form they get wrong, as a fun(...) type;
+#                                Owner:Name for a colon call; a further line adds another form
+#   param <function> <name> <type...>  the LuaCATS type of a function's parameter, where the stubs' is wrong; a type
+#                                that takes nil makes it one a call may leave out, and another one a call must give
+#   superclass <class> <class>   the class it extends, where the stubs give none
+#   operator <Class.name> <op> <fun>  one of Lua's operators on the class's objects, which the stubs do not declare
+#                                with ---@operator, as a method: a.plus(b) is a + b
+#   returns <function> <Record> <name...>   the record and component names of a function's several return values
+#   skip <class|member>          not bound at all; a skipped new leaves a class of objects the client hands out
+#   note <class|member> <text>   a sentence for the Javadoc, shown "In the client:"
+#   copied <class>               a field of this type, on an object the client hands out, gives a copy: an edit in
+#                                place is lost, so the compilers reject it
+#   not-copied <field>           the field gives the client's own value, though its type is copied
 #   hook <table.NAME> <Callback> <name:Type...>  the callback a hook takes, after the component it fired on: a
 #                                functional interface; table.JAVA=LUA adds a second Java constant for one hook
-#   operator <Class.name> <op> <fun>  one of Lua's operators on the class's objects, as a method: a.plus(b) is a + b
-#   returns <function> <Record> <name...>   the record and component names of a function's several return values
 #   permission <class|member> <p>  using it needs the manifest permission
 #   manifest-flag <event> <flag> subscribing to the event needs the manifest flag
 #   review <member|event> <area> moderation reviews calling the function, assigning the field or subscribing to
-#                                the event closely: the compiler warns there, naming what it looks at in the area
+#                                the event closely: the compilers warn there, naming what it looks at in the area
 #   dev-only <member>            allowed only in a plugin's dev source set
-#   skip <class|member>          not bound at all; a skipped new leaves a class of objects the client hands out
-#   note <class|member> <text>   a sentence for the Javadoc: what the client does that the docs do not say, shown
-#                                "In the client:", until the docs say it
-#   element-table <class> <Type> <name...>  the stubs describe one element of the table as the table itself
 #
 # The generator warns about any line that names something the stubs do not have. A line the stubs have caught up with
 # (they now say the same everywhere it applies, or no longer have the member a skip leaves out) changes nothing and is
-# only noted in Oneiro's own tests as no longer needed, so a fix upstream needs no change here.
+# only noted in Oneiro's own tests as no longer needed, so a fix in the stubs needs no change here.
 
-# ---- Names
+# ---- Java names, where Lua's would not do
 
 java-name Plugin CurrentPlugin                     # Oneiro's api names the plugin base class Plugin; the Lua table keeps its name
 java-name KeyTypedEventPayload.char character      # char is a Java keyword
-skip require                                       # Oneiro writes each require itself, from the classes a file uses
+java-name ui.Line.width thickness                  # client 2026-10-23: on a line, width is the thickness (10 after line.width = 10, while size.width stays 200), not Component.width
+
+# ---- What Oneiro binds otherwise: the plugin's own tables, records for several return values, a field the client rejects every value of, and options a plugin never replaces
+
 skip Plugin.urls                                   # the typed Urls class of each plugin, from its manifest, replaces the table
 skip Plugin.resources                              # the typed Resources class of each plugin, from its files, replaces the table
-rename Inv.valid isValid                           # docs: game/inventory.html names the field isValid; client 2026-10-22: valid reads nil, isValid is true for the backpack and the open bank, false for the closed bank and an unknown ID
-rename AchievementType.achievements requirements   # docs: game/config/achievementtype.html's prose and example; client 2026-10-23: requirements is the table, achievements reads nil
-rename LocType.IsActive isActive                   # client 2026-10-23: IsActive reads nil, isActive true, as NPCType's
-rename ui.RadioGroup.SetEntries SetOptions         # docs: ui/interactive_components/radio_group.html's headings and examples; client 2026-10-23: SetEntries reads nil
-rename ui.RadioGroup.HasEntry HasOption            # docs: the same page; client 2026-10-23: HasEntry reads nil
-rename NPCType.attackOpPriority attackOpHasPriority   # docs: game/config/npctype.html names it attackOpPriority; client 2026-10-25: attackOpPriority reads nil, attackOpHasPriority true for Hans
-
-# ---- Members the stubs lack
-
-field NPCType.paramCount Int                       # client 2026-10-25: in NPCType's metatable (the API probe's metatable audit), and reads 0 for Hans; docs: game/config/npctype.html leaves it out
-field LocType.paramCount Int                       # client 2026-10-25: in LocType's metatable, and reads 0 for a loc by Lumbridge Castle
-field ObjType.paramCount Int                       # client 2026-10-25: in ObjType's metatable, and reads 3 for coins
-field ObjType.isValid Bool                         # client 2026-10-25: in ObjType's metatable, and reads true for coins; docs: game/config/objtype.html leaves it out
-field CoordGrid.valid Bool                         # client 2026-10-25: in CoordGrid's metatable, and reads true for the player's tile; docs: game/coordgrid.html leaves it out
-read-only CoordGrid.valid                          # client 2026-10-25: whether the coordinate is valid, which assigning it could not change
-field CoordFine.valid Bool                         # client 2026-10-25: in CoordFine's metatable, and reads true for the player's tile
-read-only CoordFine.valid                          # client 2026-10-25: as CoordGrid.valid
-field ShapeEntity.drawDistance Float               # client 2026-10-25: reads 10240.0 on a new entity, and 100.0, the near distance, after SetDrawDistance(100, 200); the docs' drawDistances pair reads nil
-read-only ShapeEntity.drawDistance                 # docs: game/list/shapelist.html, SetDrawDistance() sets the draw distances
-field MiniMenuEntryAddedEventPayload.miniMenu MiniMenu   # client 2026-10-25: in the payload's metatable, and reads the menu the entry joins; docs: core/events.html lists only entry
-field LocEntity.aabb AABB                          # client 2026-10-25: in LocEntity's metatable (the API probe's metatable audit), and reads an AABB; docs: game/entity/locentity.html leaves it out, while NPCEntity's and PlayerEntity's pages have it
-field LocListFilterSettings.parentConfig LocType   # docs: game/list/loclist.html, a Filter test, as NPCListFilterSettings has; client 2026-10-23: a filter on parentConfigID runs
-field LocListFilterSettings.parentConfigID Int     # docs: game/list/loclist.html, a Filter test
-function LocList.ByParentConfig fun(locType: LocType): LocEntity[]    # docs: game/list/loclist.html; client 2026-10-23: a function
-function LocList.ByParentConfigID fun(locTypeID: Int): LocEntity[]    # docs: game/list/loclist.html; client 2026-10-23: a function
-function World.IsMembers fun(): Bool               # docs: game/world.html; client 2026-10-23: true on a members' world
-function World.GetPing fun(): Int                  # docs: game/world.html, -1 without a connection to a world; client 2026-10-23: -1 soon after logging in
-function World.GetRebootTimer fun(): Int           # docs: game/world.html, logic ticks until the reboot, 0 when none is scheduled; client 2026-10-23: 0
-field Vector3.r Float                              # docs: math/vector.html, the aliases r/g/b of x/y/z; client 2026-10-23: r, g, b read x, y, z
-field Vector3.g Float                              # docs: math/vector.html
-field Vector3.b Float                              # docs: math/vector.html
-field Vector4.r Float                              # docs: math/vector.html, the aliases r/g/b/a of x/y/z/w
-field Vector4.g Float                              # docs: math/vector.html
-field Vector4.b Float                              # docs: math/vector.html
-field Vector4.a Float                              # docs: math/vector.html
-field Vector4.rgb Vector3                          # docs: math/vector.html, the alias rgb of xyz; client 2026-10-23: a and rgb read w and xyz
-read-only Vector4.rgb                              # docs: math/vector.html, xyz is read-only
-field AchievementTests.skills AchievementTestSkill[]?               # docs: game/config/achievementtype.html, the keyed table of prereqs and achievements
-field AchievementTests.quests AchievementTestQuest[]?               # docs: game/config/achievementtype.html
-field AchievementTests.achievements AchievementTestAchievement[]?   # docs: game/config/achievementtype.html
-field AchievementTests.varTotals AchievementTestVarTotal[]?         # docs: game/config/achievementtype.html
-field AchievementTests.varTestBits AchievementTestVarTestBit[]?     # docs: game/config/achievementtype.html
-read-only AchievementTests                         # docs: game/config/achievementtype.html, "All properties are read-only."
-field AchievementDescription.type AchievementDescriptionType        # docs: game/config/achievementtype.html, one entry of descriptions
-field AchievementDescription.text String           # docs: game/config/achievementtype.html; client 2026-10-23: { text = "Slay a combination of ...", type = 0 }
-read-only AchievementDescription                   # docs: game/config/achievementtype.html, "All properties are read-only."
-
-# ---- Enum values: the stubs write each name as a string where the docs give numbers, or none
-
-values PersistentDBType BOOL=0 INT=1 FLOAT=2 STRING=3 STRUCTURED_DATA=4     # docs: core/persistentdb.html; client 2026-10-23: the same
-values HeightOffsetType NONE=0 GROUND_DECOR=1 LOCATION=2                    # docs: game/world.html; client 2026-10-23: the same
-values ShapeEntityAlignType NONE=0 OBJECT=1 MODEL=2                         # docs: game/list/shapelist.html; client 2026-10-23: the same
-values MapElementTextSize SMALL=0 MEDIUM=1 LARGE=2                          # docs: game/config/mapelementtype.html; client 2026-10-23: the same
-values MapElementHorizontalAlign LEFT=0 CENTRE=1 RIGHT=2                    # docs: game/config/mapelementtype.html
-values MapElementVerticalAlign TOP=0 CENTRE=1 BOTTOM=2                      # docs: game/config/mapelementtype.html
-values ObjStackType SOMETIMES=0 ALWAYS=1 NEVER=2                            # docs: game/config/objtype.html; client 2026-10-23: the same
-values AchievementHiddenType NEVER=0 IF_LOCKED=1 UNTIL_COMPLETE=2           # docs: game/config/achievementtype.html; client 2026-10-23: the same
-values ui.SwipeDirectionBit LEFT=2 RIGHT=1 UP=4 DOWN=8                      # client 2026-10-23; the docs give no values
-values ui.PinchAxisBit HORIZONTAL=1 VERTICAL=2                              # client 2026-10-23; the docs give no values
-values ui.RadialProgressOverlayFlag AUTOMATIC=1 REVERSE=2 FLIP_HORIZONTAL=4 FLIP_VERTICAL=8   # client 2026-10-23; the docs give no values
-values ui.PlayerOpType NONE=-1 FRIEND=0 GROUP_MEMBER=1 GROUP_BANNED=2 CLAN_MEMBER=3 CLAN_GUEST=4 FRIEND_CHAT=5   # client 2026-10-23; the docs give no values
-values ui.SelectionChangeEvent DESELECTED=0 SELECTED=1 ERROR_MAX_SELECTED=2 ERROR_NOT_SELECTABLE=3   # client 2026-10-23; ONSELECTIONCHANGED passes 1 and 0
-values ui.InputFieldActionResult NONE=-1 ERROR=1 CONTENT_CHANGE=0 SUBMIT=2 SUBMIT_ON_ESCAPE=3 SUBMIT_ON_FOCUS_LOSS=4   # client 2026-10-23; ONCONTENTCHANGED passes 0 while typing
-values ui.CutscenePlaybackEndReason FINISHED=0 CANCELLED=1 INTERRUPTED=2 INTERFACE_CLOSED=3   # client 2026-10-23; the docs give no values
-
-# ---- Colours: 32-bit RGBA, which the client reads back unsigned, above an int's range
-
-type ShapeData.rgba Long[]                         # docs: game/shapes.html, "32-bit Integer Default: 0xFFFFFFFF"; client 2026-10-23: a colour of 0xFF8800FF reads back as 4287103231, and a negative one as its 32 bits
-type ShapeListDrawSettings.shapeRGBA Long[]        # docs: game/shapes.html; client 2026-10-23: as ShapeInstance.colour
-type ShapeListDrawSettings.colour Long             # docs: game/shapes.html; client 2026-10-23: as ShapeInstance.colour
-type ShapeListDrawLineSettings.colour Long         # docs: game/shapes.html; client 2026-10-23: as ShapeInstance.colour
-type ShapeInstance.colour Long                     # docs: game/shapes.html; client 2026-10-23: 0xFF8800FF reads back 4287103231
-type ShapeEntity.colour Long                       # docs: game/shapes.html; client 2026-10-23: as ShapeInstance.colour
-type ui.Component.rgba Long                        # docs: ui/component.html, a hex RGBA code; client 2026-10-23: colours read back unsigned
-type ui.TextData.rgba Long                         # client 2026-10-23: as ui.Component.rgba
-type ui.TextData.shadowRGBA Long                   # client 2026-10-23: as ui.Component.rgba
-type ui.SpriteData.rgba Long                       # client 2026-10-23: as ui.Component.rgba
-type ui.SpriteData.shadowRGBA Long                 # client 2026-10-23: as ui.Component.rgba
-type ui.Sprite.shadowRGBA Long                     # client 2026-10-23: as ui.Component.rgba
-type ui.ComboField.mouseoverForegroundRGBA Long    # client 2026-10-23: as ui.Component.rgba
-type ui.ComboField.mouseoverBackgroundRGBA Long    # client 2026-10-23: as ui.Component.rgba
-type ui.ComboField.selectedForegroundRGBA Long     # client 2026-10-23: as ui.Component.rgba
-type ui.ComboField.selectedBackgroundRGBA Long     # client 2026-10-23: as ui.Component.rgba
-type ui.ComboField.disabledForegroundRGBA Long     # client 2026-10-23: as ui.Component.rgba
-type ui.ComboField.caretRGBA Long                  # client 2026-10-23: as ui.Component.rgba
-type ui.ComboField.errorCaretRGBA Long             # client 2026-10-23: as ui.Component.rgba
-type ui.ComboField.selectionHighlightRGBA Long     # client 2026-10-23: as ui.Component.rgba
-type ui.InputField.caretRGBA Long                  # client 2026-10-23: as ui.Component.rgba
-type ui.InputField.errorCaretRGBA Long             # client 2026-10-23: as ui.Component.rgba
-type ui.InputField.selectionHighlightRGBA Long     # client 2026-10-23: as ui.Component.rgba
-type ui.InputField.emptyTextRGBA Long              # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddLine colourRGBA Long            # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddOutline colourRGBA Long         # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddRectangle colourRGBA Long       # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddGradientH startColourRGBA Long  # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddGradientH endColourRGBA Long    # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddGradientV startColourRGBA Long  # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddGradientV endColourRGBA Long    # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddTriangle colourRGBA Long        # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddSprite colourRGBA Long          # client 2026-10-23: as ui.Component.rgba
-param ui.Canvas.AddText colourRGBA Long            # client 2026-10-23: as ui.Component.rgba
-
-# ---- Shapes the stubs get wrong
-
-
-type _global.utils.CalcTextWidth fun(fontID: Int, text: string): Int    # stubs: the declaration lacks the ':' before Int
-type ui.Sprite.sprite Int|RuntimeSprite|PluginImageResource      # docs: ui/decorative_components/sprite.html types it Int and RuntimeSprite, and its example assigns Plugin.resources.my_sprite; client 2026-10-22: Session Clock's icon shows from a plugin image
-type ui.SpriteData.sprite Int|RuntimeSprite|PluginImageResource  # docs: ui/common_types.html types it Int and RuntimeSprite; core/plugin.html, resources stand in for built-in ones
-type Inventory.Find Inv                            # docs: game/inventory.html, one Inv, not the stubs' Inv[]; client 2026-10-22: never nil; one the client does not have, such as the closed bank, has slotCount 0
-type PersistentDB.Set Bool                         # docs: core/persistentdb.html, the signature reads "-> Bool"; its Returns table repeats Get's
-type ObjType.cost Long                             # docs: game/config/objtype.html, "The 64-bit numeric value of this object."
-type MapElementType.textRGBA Long                  # client 2026-10-23: reads 4294923577, which an int cannot hold
-type MapElementType.textMouseOverRGBA Long         # client 2026-10-23: textRGBA reads above an int's range, so this colour can too
-type MapElementType.textBGFillRGBA Long            # client 2026-10-23: the same
-type MapElementType.textBGOutlineRGBA Long         # client 2026-10-23: the same
-type game.options.minMaxRange Int                  # client 2026-10-23: reads one number (0 for Brightness), not the docs' pair
-type Vector.Normalise Vector                       # docs: math/vector.html, its examples use the result; client 2026-10-23: returns the normalised vector, and normalises in place too
-type Vector2.Normalise Vector2                     # client 2026-10-23: the same
-type Vector3.Normalise Vector3                     # client 2026-10-23: the same
-type Vector4.Normalise Vector4                     # client 2026-10-23: the same
-type AchievementType.prereqs AchievementTests      # docs: game/config/achievementtype.html, { "skills" : [ AchievementTestSkill, ... ], ... }; client 2026-10-23: keys achievements, quests, skills, varTestBits, varTotals
-type AchievementType.requirements AchievementTests # docs: game/config/achievementtype.html
-type AchievementType.descriptions AchievementDescription[]          # docs: game/config/achievementtype.html, [ { "type" : AchievementDescriptionType, "text" : ... } ]
-type DBRowType.GetColumnValues table<Int, any>     # docs: game/config/dbrowtype.html, "This array may be empty, or contain nil values."
-type DBTableType.GetColumnDefaultValues table<Int, any>             # docs: game/config/dbtabletype.html, the same
-type NPCType.opNames table<Int, String>            # docs: game/config/npctype.html, "Use pairs() to iterate this list, which will provide both the op index and name"; client 2026-10-23: Hans has ops 1, 3 and 6, and 19 of 20 NPCs nearby had a gap
-type LocType.opNames table<Int, String>            # docs: game/config/loctype.html, the same
-type ObjType.groundOpNames table<Int, String>      # docs: game/config/objtype.html, the same
-type ObjType.interfaceOpNames table<Int, String>   # docs: game/config/objtype.html, the same
-type ui.TextData.AlignTo nil                       # docs: ui/common_types.html, no return value; client 2026-10-23: both forms return nil
-type ui.TextData.SetConfig nil                     # docs: ui/common_types.html, no return value; client 2026-10-23: returns nil
-type ui.SpriteData.SetConfig nil                   # docs: ui/common_types.html, no return value; client 2026-10-23: returns nil
-param log format any                               # docs: core/index.html, the examples log a number and a table first; client 2026-10-23: log(42) logs 42
-superclass ui.PagedLayerHeader ui.Component        # docs: ui/layout_components/paged_layer.html, its example calls header:SetSize; client 2026-10-23: a header has SetSize
-function ui.Interface:GetComponent fun(staticID: Uint): ui.Component?   # docs: ui/interface.html's parameter table and example; client 2026-10-23: (staticID) works, (interfaceID, staticID) raises "no matching function call"
-function ui.Interface:GetComponent fun(staticID: Uint, categoryID: Uint, dynamicID: Uint): ui.Component?   # docs: the same table
-function ui.ModelGroup:AddCamera fun(camera: ui.ModelCamera): Int   # client 2026-10-25: AddCamera() raises "no matching function call takes this number of arguments", where the docs give it with and without a camera
-param ui.NPCCustomisation.SetModelSlot scale Float # client 2026-10-23: SetModelSlot(0, 1) raises "expected number" for scale, which the docs call optional
-param ui.NPCCustomisation.SetModelSlot translation Vector3          # client 2026-10-23: the same, for the parameters after scale
-param ui.NPCCustomisation.SetModelSlot rotationYawPitchRoll Vector3 # client 2026-10-23: the same
-java-name ui.Line.width thickness                  # client 2026-10-23: on a line, width is the thickness (10 after line.width = 10, while size.width stays 200), not Component.width
-skip ShapeEntity.drawDistances                     # client 2026-10-23: reads nil, even after SetDrawDistance(100, 200)
-skip ui.ModelCamera.new                            # client 2026-10-24: ui.ModelCamera is nil, so ui.ModelCamera.new() raises "attempt to index a nil value (field 'ModelCamera')"; ModelGroup:GetCamera and activeCamera still name the type
-skip ui.Text.lineSpacing                           # client 2026-10-25: reads nil on a text, and is not in its metatable
-skip ui.Text.shadowColour                          # client 2026-10-25: the same
-skip ui.Text.shadowRGBA                            # client 2026-10-25: the same
-skip ui.Sprite.AlignTo                             # client 2026-10-25: reads nil on a sprite, and is not in its metatable; ui.Text and ui.TextData have it
 skip ui.Model.rotation                             # client 2026-10-24: assigning a Vector3.new raises "expected userdata, received sol.jag::math::Vector3T", and writing a field of the value read back raises "not recognized as a container"
-instance ui.CutsceneLayer                          # docs: ui/layout_components/cutscene_layer.html, existing cutscene layers can be accessed as regular layers
+read-only game.options                             # client 2026-10-26: assigning an option back raises no error, so the stubs leave the fields writable; a plugin changes an option through its object, option:Set or option.setting, and never replaces it
 returns World.GetGroundHeight GroundHeight height available            # stubs: two @return lines; docs: -1 and false on failure
 returns FontType.GetStringHeightAndLineCount HeightAndLineCount height lineCount   # stubs: two @return lines
-element-table game.options ClientOption AmbientOcclusion AnimationQuality AnisotropicFiltering AntialiasingMode AntialiasingQuality Bloom CanopyCutout CustomPlayerModelCount DOF DrawDistance EntityHighlights GameRenderScale GroundBlending GroundDecor LightingQuality ParticleQuality Reflections ShadowQuality Shadows SmoothClipFade Texturing MaxBackgroundFps MaxForegroundFps VolumetricLighting VSync VolumeBackgroundEffects VolumeLoginMusic VolumeMainEffects VolumeMainMusic VolumeMaster VolumeSpeech RemoveRoof CursorScale CutsceneSubtitles Language InterfaceScale Brightness ConsoleKey CustomCursors DeviceCapOverrides Diagnostics RichPresence HapticFeedback   # docs: core/clientoptions.html lists the options; the stubs give the fields of one
 
-# ---- Values the docs say can be nil
+# ---- Values the docs say can be nil, which the stubs type any, as LuaCATS's any allows nil
 
-nullable LocAnimationEventPayload.animation        # docs: core/events.html, "Will be nil if an existing animation is being stopped by this event."
-nullable ObjStackEntity.GetEntry                   # docs: game/entity/objstackentity.html, "Returns nil if no entry is found at the given index."
-nullable LocType.mapElement                        # docs: game/config/loctype.html, "Returns nil if none is set."
-nullable LocType.defaultAnimation                  # docs: game/config/loctype.html, "Returns nil if none is set."
-nullable NPCType.bas                               # docs: game/config/npctype.html, "Returns nil if none is set."
-nullable NPCType.mapElement                        # docs: game/config/npctype.html, "Returns nil if none is set."
-nullable VarType.baseVar                           # docs: game/config/vartype.html, "Otherwise returns nil."
-nullable VarType.varBitMask                        # docs: game/config/vartype.html, "Otherwise returns nil."
 nullable VarType.value                             # docs: game/config/vartype.html, a value of the ValueType UNSUPPORTED is nil
 nullable ParamType.defaultValue                    # docs: game/config/paramtype.html and vartype.html, a value of the ValueType UNSUPPORTED is nil
 nullable NPCType.GetParamValue                     # docs: game/config/paramtype.html, it returns the param's defaultValue when the config lacks it
@@ -229,124 +81,36 @@ nullable SeqType.GetParamValue                     # docs: game/config/paramtype
 nullable StructType.GetParamValue                  # docs: game/config/paramtype.html
 nullable MapElementType.GetParamValue              # docs: game/config/paramtype.html
 nullable EnumType.GetOutputValue                   # docs: game/config/enumtype.html, "Returns nil if the input value is not found in the data structure."
-nullable ui.SpriteData.runtimeSprite               # docs: ui/common_types.html, "or nil if it doesn't exist"
-nullable ui.Sprite.runtimeSprite                   # docs: ui/decorative_components/sprite.html, the same; client 2026-10-23: nil on a sprite shown by ID
-nullable LocType.multiVar                          # client 2026-10-23: nil on a loc that is not a MultiLoc (WINCHLADDER1)
-nullable NPCType.multiVar                          # client 2026-10-23: nil on an NPC that is not a MultiNPC (HANS)
-nullable SeqType.replaceHeldLeft                   # client 2026-10-23: nil on an animation that replaces nothing
-nullable SeqType.replaceHeldRight                  # client 2026-10-23: the same
-nullable ui.ComponentDragConfig.draggedComponent   # client 2026-10-23: nil while nothing is dragged
-nullable EntityDrawEventPayload.npcEntity          # docs: core/events.html, "Returns one of the listed entities, use entityType to select the correct one."; client 2026-10-23: the other two are nil
-nullable EntityDrawEventPayload.playerEntity       # docs: core/events.html; client 2026-10-23: the same
-nullable EntityDrawEventPayload.objStackEntity     # docs: core/events.html; client 2026-10-23: the same
-nullable MiniMenuEntry.overrideText                # client 2026-10-23: nil until a plugin sets it
-nullable ui.StyleSheet.parent                      # client 2026-10-23: nil when parentID is -1 (DEFAULT)
 
-# ---- Read-only objects: what the client hands out describes the game, which a plugin reads
+# ---- UI hooks: the callback each takes, after the component it fired on, which LuaCATS cannot type by the hook
 
-read-only NPCEntity                                # docs: game/entity/npcentity.html, "All properties are read-only."
-read-only PlayerEntity                             # docs: game/entity/playerentity.html, "All properties are read-only."
-read-only LocEntity                                # docs: game/entity/locentity.html, "All properties are read-only."
-read-only ObjStackEntity                           # docs: game/entity/objstackentity.html, "All properties are read-only."
-read-only ObjEntry                                 # docs: game/entity/objstackentity.html, "All properties are read-only."
-read-only Inv                                      # client 2026-10-22: assigning slotCount raises "cannot write to a readonly property"
-read-only InvSlot                                  # client 2026-10-22: assigning count raises the same
-read-only HTTPRequest                              # docs: the fields report a request's state
-read-only AchievementType                          # docs: game/config/achievementtype.html, "All properties are read-only."
-read-only BaseAnimSetType                          # docs: game/config/baseanimsettype.html, "All properties are read-only."
-read-only CursorType                               # docs: game/config/cursortype.html, "All properties are read-only."
-read-only DBRowType                                # docs: game/config/dbrowtype.html, "All properties are read-only."
-read-only DBTableType                              # docs: game/config/dbtabletype.html, "All properties are read-only."
-read-only EnumType                                 # docs: game/config/enumtype.html, "All properties are read-only."
-read-only FontType                                 # docs: game/config/fonttype.html, "All properties are read-only."
-read-only HeadbarType                              # docs: game/config/headbartype.html, "All properties are read-only."
-read-only HitmarkType                              # docs: game/config/hitmarktype.html, "All properties are read-only."
-read-only InvType                                  # docs: game/config/invtype.html, "All properties are read-only."
-read-only LocType                                  # docs: game/config/loctype.html, "All properties are read-only."
-read-only MapElementType                           # docs: game/config/mapelementtype.html, "All properties are read-only."
-read-only NPCType                                  # docs: game/config/npctype.html, "All properties are read-only."
-read-only ObjType                                  # docs: game/config/objtype.html, "All properties are read-only."
-read-only ParamType                                # docs: game/config/paramtype.html, "All properties are read-only."
-read-only QuestTypeConfig                          # docs: game/config/questtype.html, "All properties are read-only."
-read-only SeqType                                  # docs: game/config/seqtype.html, "All properties are read-only."
-read-only SpotAnimType                             # docs: game/config/spotanimtype.html, "All properties are read-only."
-read-only StructType                               # docs: game/config/structtype.html, "All properties are read-only."
-read-only VarType                                  # docs: game/config/vartype.html, "All properties are read-only."
-read-only AchievementTestSkill                     # docs: game/config/achievementtype.html, "All properties are read-only."
-read-only AchievementTestQuest                     # docs: game/config/achievementtype.html
-read-only AchievementTestAchievement               # docs: game/config/achievementtype.html
-read-only AchievementTestVarTotal                  # docs: game/config/achievementtype.html
-read-only AchievementTestVarTestBit                # docs: game/config/achievementtype.html
-read-only MasterQuestVarPlayer                     # docs: game/config/questtype.html, "All properties are read-only."
-read-only QuestPreReqSkill                         # docs: game/config/questtype.html
-not-constructible InvType                          # docs: game/config/invtype.html, "This usertype has no constructor, and you cannot create your own."
-not-constructible ParamType                        # docs: game/config/paramtype.html, the same
-
-# ---- Read-only fields: the docs' Writeable column, which the stubs do not carry
-
-read-only CoordGrid.mapSquareX                     # docs: game/coordgrid.html, not writable; level, x and z are
-read-only CoordGrid.mapSquareZ                     # docs: game/coordgrid.html
-read-only CoordGrid.localX                         # docs: game/coordgrid.html
-read-only CoordGrid.localZ                         # docs: game/coordgrid.html
-read-only CoordFine.mapSquareX                     # docs: game/coordfine.html, not writable; level, x, y, z and position are
-read-only CoordFine.mapSquareZ                     # docs: game/coordfine.html
-read-only CoordFine.localX                         # docs: game/coordfine.html
-read-only CoordFine.localZ                         # docs: game/coordfine.html
-read-only MiniMenu                                 # docs: game/minimenu.html, no property is writable
-read-only MiniMenuEntry                            # docs: game/minimenu.html, only overrideText is writable
-writable MiniMenuEntry.overrideText                # docs: game/minimenu.html
-read-only NPCData                                  # docs: game/minimenu.html, no property is writable
-read-only LocData                                  # docs: game/minimenu.html
-read-only ObjData                                  # docs: game/minimenu.html
-read-only PlayerData                               # docs: game/minimenu.html
-read-only GroundData                               # docs: game/minimenu.html
-read-only MapElementData                           # docs: game/minimenu.html
-read-only ComponentData                            # docs: game/minimenu.html
-read-only GrandExchangeOffer                       # docs: game/grandexchange.html, "read-only access to properties relevant to the Grand Exchange"; client 2026-10-23: assigning price raises "cannot write to a readonly property"
-read-only ui.Slider.valueLabel                     # client 2026-10-23: assigning raises "cannot write to a readonly property"
-read-only ui.Canvas.numElements                    # client 2026-10-23: the same
-read-only ShapeInstance.isValid                    # docs: game/list/shapelist.html, not writable
-read-only ShapeInstance.name                       # docs: game/list/shapelist.html
-read-only ShapeInstance.hasData                    # docs: game/list/shapelist.html
-read-only ShapeEntity.isValid                      # docs: game/list/shapelist.html, not writable
-read-only ShapeEntity.name                         # docs: game/list/shapelist.html
-read-only ShapeEntity.hasData                      # docs: game/list/shapelist.html
-read-only AABB.radiusMinimum                       # docs: math/aabb.html, not writable
-read-only AABB.radiusMinimumSq                     # docs: math/aabb.html
-read-only AABB.radiusMaximum                       # docs: math/aabb.html
-read-only AABB.radiusMaximumSq                     # docs: math/aabb.html
-read-only Rect.centreX                             # docs: math/rect.html, not writable
-read-only Rect.centreY                             # docs: math/rect.html
-
-# ---- UI hooks: the callback each takes, after the component it fired on
-
-hook ui.Hook.ONBUTTONPRESSED ButtonPressed current:Int previous:Int  # client 2026-10-23: a button, a toggle button and a check pass 0 and 1, then 1 and 0
-hook ui.Hook.ONCONTENTCHANGED ContentChanged reason:Int newContents:String  # client 2026-10-23: an input field passes 0 (InputFieldActionResult.CONTENT_CHANGE) and its text
-hook ui.Hook.ONSELECTIONCHANGED SelectionChanged entryID:Int status:Int  # client 2026-10-23: a list, combo, radio group and carousel pass the entry and 1 or 0 (SelectionChangeEvent); a slider passes its value and 1
-hook ui.Hook.ONSELECTIONCHANGED_PROGRESS=ONSELECTIONCHANGED Progress value:Float progress:Float  # client 2026-10-23: a radial progress overlay passes 3.0 and 0.3; docs, "progressPc is received as a 0..1 number"
-hook ui.Hook.ONCUTSCENEFINISHED CutsceneFinished reason:Int  # docs: ui/component.html, reason : ui.CutscenePlaybackEndReason
-hook ui.Hook.ONCLICK Pointer x:Int y:Int           # client 2026-10-23: x and y within the component
-hook ui.Hook.ONCLICKREPEAT Pointer x:Int y:Int     # client 2026-10-23: x and y within the component
-hook ui.Hook.ONRELEASE Pointer x:Int y:Int         # client 2026-10-23: x and y within the component
-hook ui.Hook.ONHOLD Pointer x:Int y:Int            # client 2026-10-23: x and y within the component
-hook ui.Hook.ONMOUSEOVER Pointer x:Int y:Int       # client 2026-10-23: x and y within the component
-hook ui.Hook.ONMOUSEREPEAT Pointer x:Int y:Int     # client 2026-10-23: x and y within the component
-hook ui.Hook.ONMOUSELEAVE Pointer x:Int y:Int      # client 2026-10-23: x and y within the component
-hook ui.Hook.ONDRAG Pointer x:Int y:Int            # docs: ui/component.html, dragStartX and dragStartY
-hook ui.Hook.ONDRAGCOMPLETE DragComplete destination:ui.Component? x:Int y:Int  # docs: ui/component.html, dragDestination, dragEndX and dragEndY; nil over no component, as ui.ComponentDragConfig.draggedComponent is nil while idle
-hook ui.Hook.ONSCROLLWHEEL ScrollWheel delta:Int   # docs: ui/component.html, scrollWheelYDelta
-hook ui.Hook.ONKEY Key keyCode:Int keyChar:Int     # client 2026-10-23: 86 and 0 for a V
-hook ui.Hook.ONSWIPEVERTICAL Pointer x:Int y:Int   # docs: ui/component.html, swipeCurrentX and swipeCurrentY
-hook ui.Hook.ONSWIPEHORIZONTAL Pointer x:Int y:Int # docs: ui/component.html, swipeCurrentX and swipeCurrentY
+hook ui.Hook.ONBUTTONPRESSED ButtonPressed current:integer previous:integer  # client 2026-10-23: a button, a toggle button and a check pass 0 and 1, then 1 and 0
+hook ui.Hook.ONCONTENTCHANGED ContentChanged reason:integer newContents:string  # client 2026-10-23: an input field passes 0 (InputFieldActionResult.CONTENT_CHANGE) and its text
+hook ui.Hook.ONSELECTIONCHANGED SelectionChanged entryID:integer status:integer  # client 2026-10-23: a list, combo, radio group and carousel pass the entry and 1 or 0 (SelectionChangeEvent); a slider passes its value and 1
+hook ui.Hook.ONSELECTIONCHANGED_PROGRESS=ONSELECTIONCHANGED Progress value:number progress:number  # client 2026-10-23: a radial progress overlay passes 3.0 and 0.3; docs, "progressPc is received as a 0..1 number"
+hook ui.Hook.ONCUTSCENEFINISHED CutsceneFinished reason:integer  # docs: ui/component.html, reason : ui.CutscenePlaybackEndReason
+hook ui.Hook.ONCLICK Pointer x:integer y:integer           # client 2026-10-23: x and y within the component
+hook ui.Hook.ONCLICKREPEAT Pointer x:integer y:integer     # client 2026-10-23: x and y within the component
+hook ui.Hook.ONRELEASE Pointer x:integer y:integer         # client 2026-10-23: x and y within the component
+hook ui.Hook.ONHOLD Pointer x:integer y:integer            # client 2026-10-23: x and y within the component
+hook ui.Hook.ONMOUSEOVER Pointer x:integer y:integer       # client 2026-10-23: x and y within the component
+hook ui.Hook.ONMOUSEREPEAT Pointer x:integer y:integer     # client 2026-10-23: x and y within the component
+hook ui.Hook.ONMOUSELEAVE Pointer x:integer y:integer      # client 2026-10-23: x and y within the component
+hook ui.Hook.ONDRAG Pointer x:integer y:integer            # docs: ui/component.html, dragStartX and dragStartY
+hook ui.Hook.ONDRAGCOMPLETE DragComplete destination:ui.Component? x:integer y:integer  # docs: ui/component.html, dragDestination, dragEndX and dragEndY; nil over no component, as ui.ComponentDragConfig.draggedComponent is nil while idle
+hook ui.Hook.ONSCROLLWHEEL ScrollWheel delta:integer   # docs: ui/component.html, scrollWheelYDelta
+hook ui.Hook.ONKEY Key keyCode:integer keyChar:integer     # client 2026-10-23: 86 and 0 for a V
+hook ui.Hook.ONSWIPEVERTICAL Pointer x:integer y:integer   # docs: ui/component.html, swipeCurrentX and swipeCurrentY
+hook ui.Hook.ONSWIPEHORIZONTAL Pointer x:integer y:integer # docs: ui/component.html, swipeCurrentX and swipeCurrentY
 hook ui.Hook.ONSWIPECOMPLETE Notify                # docs: ui/component.html, no parameters
-hook ui.Hook.ONPINCHHORIZONTAL Pinch direction:Int # docs: ui/component.html, -1 inwards and 1 outwards
-hook ui.Hook.ONPINCHVERTICAL Pinch direction:Int   # docs: ui/component.html, -1 inwards and 1 outwards
+hook ui.Hook.ONPINCHHORIZONTAL Pinch direction:integer # docs: ui/component.html, -1 inwards and 1 outwards
+hook ui.Hook.ONPINCHVERTICAL Pinch direction:integer   # docs: ui/component.html, -1 inwards and 1 outwards
 hook ui.Hook.ONPINCHCOMPLETE Notify                # docs: ui/component.html, no parameters
-hook ui.Hook.ONGAMEPADBUTTON Gamepad id:Int value:Int  # docs: ui/component.html, buttonID and buttonValue
-hook ui.Hook.ONGAMEPADBUTTONHELD GamepadHeld id:Int  # docs: ui/component.html, buttonID
-hook ui.Hook.ONGAMEPADAXIS Gamepad id:Int value:Int  # docs: ui/component.html, axisID and axisValue
-hook ui.Hook.ONGAMEPADTRIGGER Gamepad id:Int value:Int  # docs: ui/component.html, triggerID and triggerValue
-hook ui.Hook.ONOP Op opID:Int opBaseName:String    # docs: ui/component.html
+hook ui.Hook.ONGAMEPADBUTTON Gamepad id:integer value:integer  # docs: ui/component.html, buttonID and buttonValue
+hook ui.Hook.ONGAMEPADBUTTONHELD GamepadHeld id:integer  # docs: ui/component.html, buttonID
+hook ui.Hook.ONGAMEPADAXIS Gamepad id:integer value:integer  # docs: ui/component.html, axisID and axisValue
+hook ui.Hook.ONGAMEPADTRIGGER Gamepad id:integer value:integer  # docs: ui/component.html, triggerID and triggerValue
+hook ui.Hook.ONOP Op opID:integer opBaseName:string    # docs: ui/component.html
 hook ui.Hook.ONOPT Target target:ui.Component?     # docs: ui/component.html; nil is not ruled out
 hook ui.Hook.ONTARGETENTER Notify                  # docs: ui/component.html, no parameters
 hook ui.Hook.ONTARGETLEAVE Notify                  # docs: ui/component.html, no parameters
@@ -373,38 +137,13 @@ hook ui.Hook.ONSUBCHANGE Notify                    # docs: ui/component.html, no
 hook ui.Hook.ONCAMFINISHED Notify                  # docs: ui/component.html, no parameters
 hook ui.Hook.ONRESIZE Notify                       # docs: ui/component.html, no parameters
 
-# ---- Lua operators on the client's vectors, which the stubs do not declare; -a and 2 * a raise in the client
-
-operator Vector3.plus + fun(other: Vector3): Vector3  # client 2026-10-23: adds the elements
-operator Vector3.minus - fun(other: Vector3): Vector3  # client 2026-10-23: subtracts the elements
-operator Vector3.times * fun(other: Vector3): Vector3  # client 2026-10-23: multiplies element by element
-operator Vector3.times * fun(scale: Float): Vector3  # client 2026-10-23: a * 2 scales; 2 * a raises, so only this order
-operator Vector3.div / fun(other: Vector3): Vector3  # client 2026-10-23: divides element by element
-operator Vector3.div / fun(scale: Float): Vector3  # client 2026-10-23: a / 2
-operator Vector2.plus + fun(other: Vector2): Vector2  # client 2026-10-23: adds the elements
-operator Vector2.minus - fun(other: Vector2): Vector2  # client 2026-10-23: subtracts the elements
-operator Vector2.times * fun(other: Vector2): Vector2  # client 2026-10-23: multiplies element by element
-operator Vector2.times * fun(scale: Float): Vector2  # client 2026-10-23: a * 2
-operator Vector2.div / fun(other: Vector2): Vector2  # client 2026-10-23: divides element by element
-operator Vector2.div / fun(scale: Float): Vector2  # client 2026-10-23: a / 2
-operator Vector4.plus + fun(other: Vector4): Vector4  # client 2026-10-23: adds the elements
-operator Vector4.minus - fun(other: Vector4): Vector4  # client 2026-10-23: subtracts the elements
-operator Vector4.times * fun(other: Vector4): Vector4  # client 2026-10-23: multiplies element by element
-operator Vector4.times * fun(scale: Float): Vector4  # client 2026-10-23: a * 2
-operator Vector4.div / fun(other: Vector4): Vector4  # client 2026-10-23: divides element by element
-operator Vector4.div / fun(scale: Float): Vector4  # client 2026-10-23: a / 2
-
-# ---- Values the client hands out as copies
+# ---- Values the client hands out as copies, whose edits in place the compilers reject
 
 copied Vector3                                     # client 2026-10-23: ShapeInstance.translation, rotation and scale give copies; instance.translation.y = 500 leaves it 0
 copied Vector4                                     # client 2026-10-23: ui.Component.colour gives a copy; assigning a whole colour works
 copied CoordGrid                                   # client 2026-10-23: ShapeEntity.coordGrid gives a copy
 copied ui.Margin                                   # client 2026-10-23: ui.Sprite.visualMargins and ui.GroupBox.contentMargin give copies; assigning a whole margin works
 not-copied CoordFine.position                      # client 2026-10-23: fine.position.y = 77 changes the CoordFine's y
-
-# ---- Event payloads are read-only, except where the docs mark a field writable
-
-writable ChatMessageEventPayload.chatMessage       # docs: core/events.html, editing it changes what later plugins see
 
 # ---- Permissions and manifest flags
 
@@ -437,20 +176,6 @@ review PlayerList.Filter other-players             # docs: the same page
 
 dev-only ExecuteConsoleCommand                     # docs: submission guidelines; it runs development cheats
 
-# ---- Enum tables without FromID
-# The client gives 51 of its 58 enum tables FromID, which turns a value into its name (GameState.FromID(1) is
-# "GAME"), and seven none. Oneiro writes a Java enum's name() and text through FromID; for these four it cannot. The
-# other three, ui.CutscenePlaybackEndReason, ui.Hook and ui.SelectionChangeEvent, are no Java enums in the bindings.
-no-from-id PersistentDBType
-no-from-id PluginPermissions
-no-from-id ShapeEntityAlignType
-no-from-id ui.AspectRatioMode
+# ---- For the Javadoc: what Oneiro leaves out, and why
 
-# ---- Client behaviour the docs leave out, for the Javadoc
-
-note ui.ModelCamera There is no table ui.ModelCamera, so a camera cannot be made, and a model group's AddCamera takes one; a new model group has none, and its GetCamera and activeCamera give nil.   # client 2026-10-25: ui.ModelCamera is nil; AddCamera() raises; on a new group GetCamera(0) and activeCamera are nil, activeCameraID -1. Entity Probe found the type bound, as jag::game::ModelGroup::CameraInfo
-note ui.ModelGroup A model group can get no camera: AddCamera() without one raises, and ui.ModelCamera cannot be made. The client also has UpdateCamera, which the docs do not describe.   # client 2026-10-25: the API probe's models cases and metatable audit
 note ui.Model A model's rotation is left out, as every value assigned to it is rejected, and SetTransform's rotation does not turn a lone model either; an NPC customisation's model slot does.   # client 2026-10-24: Rich Death's rotation lab
-note ui.Model.SetTransform Its rotation had no visible effect on a lone model, shown by object, model or associated object, at once or over a duration; an NPC customisation's model slot turns one.   # client 2026-10-24: Rich Death's rotation lab turned six lone models on the yaw or the pitch; none turned, and none raised an error
-note ui.NPCCustomisation.SetModelSlot Its rotation turns the model in the slot, the one way found to turn a lone ui.Model; with a yaw and a pitch, the pitch seemed to be applied first.   # client 2026-10-24: Rich Death's party hat on Hans's model turned with the yaw and tilted with the pitch
-note ui.Component.SetPos In one check, the self percentages moved a component the opposite way to this description: SetPos(x, y, 0, 0, -0.5, -0.5) put the top-left corner of a 400 by 400 model right of and below (x, y) by half its size.   # client 2026-10-24: Rich Death, one run with a screenshot, on the plugin layer

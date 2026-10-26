@@ -33,7 +33,7 @@ version = "1.2.0"
 
 oneiro {
     stubs {
-        local(file("../runescape-api-stubs"))
+        local(file("../rs3-api-types"))
     }
     plugin {
         name = "Herb Tracker"
@@ -63,7 +63,7 @@ oneiro {
 | Setting | Meaning |
 | --- | --- |
 | `version` (the project's) | The manifest's version: digits and dots, as Mod.io requires. |
-| `stubs { local(dir) }` | Generate the bindings from a checkout of runescape-api-stubs on this machine. |
+| `stubs { local(dir) }` | Generate the bindings from a checkout of rs3-api-types on this machine. |
 | `stubs { remote(url, commit) }` | Fetch the stubs from a repository on GitHub, Codeberg or GitLab at a full commit, over HTTPS, into Gradle's cache; the same bindings on every machine. The address is the repository's own page: `https://github.com/<owner>/<repository>`, `https://codeberg.org/<owner>/<repository>` or `https://gitlab.com/<group>/<project>`. |
 | `stubs { remote(url) }` | The latest commit of the repository's default branch, looked up at most once a day and on every explicit `oneiroBindings` run; an `--offline` build uses the commit it last looked up. |
 | `plugin { id = "..." }` | The identifier: the dev link's name, the zip's name and the prefix of event subscriptions. Lowercase words joined by hyphens; by default the project's name. |

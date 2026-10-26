@@ -5,19 +5,19 @@ ui = {}
 
 ---A user interface component.
 ---@class ui.Component
----@field hidden Bool Whether it is hidden.
----@field visible Bool (Read-only) Whether it shows.
+---@field hidden boolean Whether it is hidden.
+---@field visible boolean (Read-only) Whether it shows.
 ui.Component = {}
 
 ---Moves it.
----@param x Int The x.
----@param y Int The y.
+---@param x integer The x.
+---@param y integer The y.
 function ui.Component:SetPos(x, y) end
 
 ---Subscribes a listener for a hook, optionally under an ID.
----@overload fun(self: Component, hook: ui.Hook, id: String, callback: fun(...):Bool?)
+---@overload fun(self: Component, hook: ui.Hook, id: string, callback: fun(...):boolean?)
 ---@param hook ui.Hook The hook to listen for.
----@param callback fun(...):Bool? The callback, with parameters varying by hook.
+---@param callback fun(...):boolean? The callback, with parameters varying by hook.
 function ui.Component:Subscribe(hook, callback) end
 
 ---Removes the listener for the hook.
@@ -39,7 +39,7 @@ ui.ComponentCollection = {}
 
 ---Text on the screen.
 ---@class ui.Text : ui.Component
----@field content String The text.
+---@field content string The text.
 ui.Text = {}
 
 ---A text component under the parent.
@@ -52,7 +52,7 @@ function ui.Text.new(parent) end
 ui.Interfaces = {}
 
 ---A component of an interface.
----@param interfaceID Int The interface.
----@param componentID Int The component.
+---@param interfaceID integer The interface.
+---@param componentID integer The component.
 ---@return ui.Component? # The component, or nil.
 function ui.Interfaces:GetComponent(interfaceID, componentID) end

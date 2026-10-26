@@ -74,7 +74,7 @@ record BindingsTarget(Kind kind, String packageName, String library, boolean opt
 	/** Where the bindings come from, as their files' first line says. */
 	String origin() {
 		return switch (kind) {
-			case RS3 -> "runescape-api-stubs";
+			case RS3 -> "rs3-api-types";
 			case LIBRARY, DEPENDENCY -> "the LuaCATS types of " + library;
 			case PLUGIN -> "the plugin's Lua";
 		};

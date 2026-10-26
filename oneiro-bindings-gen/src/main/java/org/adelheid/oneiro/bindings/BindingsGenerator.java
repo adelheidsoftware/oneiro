@@ -27,8 +27,8 @@ import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Generates the RS3 bindings from a checkout of runescape-api-stubs, and the bindings of the Lua libraries a plugin
- * uses and of its own Lua from their LuaCATS types: reads the types, applies the overrides, writes the Java sources
+ * Generates the RS3 bindings from a checkout of rs3-api-types, and the bindings of the Lua libraries a plugin uses
+ * and of its own Lua from their LuaCATS types: reads the types, applies the overrides, writes the Java sources
  * and, for the RS3 API, the constant chunks, compiles the sources, and packs two jars for each, the classes that
  * plugins compile against and the sources that IDEs show as documentation. It runs on the developer's machine, so
  * nothing derived from the stubs or a library is ever published.

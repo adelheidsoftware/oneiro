@@ -24,7 +24,7 @@ How Oneiro is put together, for people who work on it. What Oneiro accepts and t
 ## From source to Lua
 
 ```text
-runescape-api-stubs ──► oneiroBindings ──► RS3 bindings (Java classes on the compile classpath)
+rs3-api-types ────────► oneiroBindings ──► RS3 bindings (Java classes on the compile classpath)
                                                 │
 plugin's Java ──► javac ────────────────────────┼──► Oneiro javac plugin ──┐
                   (compileJava)                 │    (oneiro-frontend-java) ├──► Lua tree ──► printer ──► .lua files
@@ -33,7 +33,7 @@ plugin's Kotlin ──► kotlinc ───────────────�
 ```
 
 1. **Bindings.** `oneiroBindings` runs the bindings generator in a worker process. It parses the LuaCATS files and
-   name lists of runescape-api-stubs, applies the hand-kept `overrides.txt`, and writes one Java class per Lua
+   constants of rs3-api-types, applies the hand-kept `overrides.txt`, and writes one Java class per Lua
    table. The classes carry annotations that tell the compiler how Lua calls each member (`@LuaColon`, `@LuaDot`,
    `@LuaReturnValues` and the others in `oneiro-api`). The bindings are generated on each developer's machine;
    nothing derived from the stubs is published.
@@ -151,10 +151,11 @@ only the RS3 API's have its events, hooks, constant namespaces and `Globals`.
    each statement and what the statement declares, with `TypeParser` for the types they give. It reads annotated
    code as well as definition files, so that it can read a library as LuaLS does. `CsvConstants` reads the name lists
    behind `id`, `config` and `var`.
-2. `Overrides` reads `overrides.txt`, which states what the stubs do not: which tables are singletons, which values
-   can be `nil`, which fields are read-only or hand out copies, which members need a permission or draw moderation's
-   closer review, and the Java names for Lua names Java cannot use; its notes add what the client does that the
-   docs do not say to a member's Javadoc. The file's own header describes its format. A library's overrides file, if
+2. `Overrides` reads `overrides.txt`, which states how Java and Kotlin bind what the stubs describe: which values
+   the stubs type `any` can be `nil`, which types the client hands out as copies, the callback each UI hook takes,
+   which members need a permission or draw moderation's closer review, and the Java names for Lua names Java cannot
+   use; its notes add to a member's Javadoc what the client does there. What the API itself is, as the docs and the
+   client have it, is rs3-api-types', which corrects the docs where the client differs. The file's own header describes its format. A library's overrides file, if
    the plugin keeps one, takes the same lines, but for those of the client alone. `ModelCorrections` applies the
    corrections to the model.
 3. `JavaBindings` writes the sources, with `MemberBindings` for fields and methods, `TypeMapping` for types,
@@ -209,7 +210,7 @@ update, each difference it finds ends as an overrides line.
   source of the front ends or of `oneiro-lowering` other than `ClientApi` spells one of the client's names in a
   string.
 - **Unit tests** cover the printer and the line map, the bundled Lua, the bindings generator (on a small stubs
-  fixture, and on a checkout of runescape-api-stubs when there is one), the manifest, the package checks and the
+  fixture, and on a checkout of rs3-api-types when there is one), the manifest, the package checks and the
   typed sources.
 - **The Gradle plugin's functional test** publishes the modules to a repository inside the build and builds a plugin
   against them with Gradle TestKit, as a plugin author would.

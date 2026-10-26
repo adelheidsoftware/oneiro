@@ -153,7 +153,13 @@ final class ModelCorrections {
 				}
 				for (int index = 0; index < owner.functions.size(); index++) {
 					ApiModel.FunctionDef function = owner.functions.get(index);
-					if (function.name().equals(member)) {
+					if (function.name().equals(member) && type instanceof TypeRef.Named named
+							&& named.name().equals("nil")) {
+						// nil: the function returns nothing, which stubs that give it no return value say already
+						overrides.applied(entry, function.returns().isEmpty());
+						owner.functions.set(index, function.withReturns(List.of()));
+						applied = true;
+					} else if (function.name().equals(member)) {
 						List<ApiModel.ReturnDef> returns = new ArrayList<>(function.returns());
 						if (returns.isEmpty()) {
 							// A function the stubs give no return value, as Normalise, which returns the vector
@@ -221,7 +227,7 @@ final class ModelCorrections {
 			}
 			if (!present) {
 				overrides.applied(entry, false);
-				owner.fields.add(new ApiModel.FieldDef(name, type, "", false, false));
+				owner.fields.add(new ApiModel.FieldDef(name, type, "", false, false, false));
 			}
 		}
 	}
@@ -308,9 +314,9 @@ final class ModelCorrections {
 					for (int position = 0; position < params.size(); position++) {
 						ApiModel.ParamDef param = params.get(position);
 						if (function.name().equals(functionName) && param.name().equals(name)) {
-							overrides.applied(entry, param.type().equals(type));
-							params.set(position, new ApiModel.ParamDef(name, type, param.description(),
-									param.optionalName()));
+							// The line's type alone says whether a call may leave the parameter out: by taking nil
+							overrides.applied(entry, param.type().equals(type) && !param.optionalName());
+							params.set(position, new ApiModel.ParamDef(name, type, param.description(), false));
 							functions.set(index, function.withParams(params));
 							applied = true;
 						}

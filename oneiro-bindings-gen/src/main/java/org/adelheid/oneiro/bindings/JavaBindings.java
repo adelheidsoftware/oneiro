@@ -147,9 +147,6 @@ final class JavaBindings {
 		@Nullable TypeRef fromId;
 		/** For a namespace of the {@code id}, {@code config} or {@code var} tables: what a name looks up. */
 		@Nullable TypeRef byName;
-		/** For a table of named objects, such as {@code game.options}: the names, and the node of their type. */
-		@Nullable List<String> elementNames;
-		@Nullable Node elementType;
 		/** For a library's module, as a top-level class: the path {@code require} loads it by. */
 		@Nullable String module;
 
@@ -207,6 +204,9 @@ final class JavaBindings {
 	private final Set<String> placed = new HashSet<>();
 	final Map<String, EventInfo> events = new LinkedHashMap<>();
 	private final List<ConstantNamespace> constants = new ArrayList<>();
+	/** The operators the compilers lower, by LuaCATS's name: Lua's operator, and the method's name, Kotlin's. */
+	private static final Map<String, String[]> LOWERED_OPERATORS = Map.of("add", new String[] {"+", "plus"},
+			"sub", new String[] {"-", "minus"}, "mul", new String[] {"*", "times"}, "div", new String[] {"/", "div"});
 	final Set<String> writtenRecords = new HashSet<>();
 	/** The callback interfaces of more values than java.util.function's take, {@code Function3}, that members name. */
 	final Set<String> callbacks = new TreeSet<>();
@@ -465,9 +465,6 @@ final class JavaBindings {
 			}
 			node.payloadOf = event;
 		}
-		for (Overrides.Entry entry : overrides.all("element-table")) {
-			elementTable(entry);
-		}
 		for (String global : List.of("id", "config", "var")) {
 			Node node = tops.get(javaTopName(global));
 			if (node != null) {
@@ -621,50 +618,6 @@ final class JavaBindings {
 				: "the table {@code " + path + "} of the module " + module;
 	}
 
-	/**
-	 * {@code element-table game.options ClientOption <names...>}: the stubs describe one element of the table as the
-	 * table itself. The table becomes a class of named objects, and the stubs' class becomes their type.
-	 */
-	private void elementTable(Overrides.Entry entry) {
-		Node node = byLuaName.get(entry.target());
-		ApiModel.ClassDef classDef = node == null ? null : node.classDef;
-		if (node == null || classDef == null || entry.arguments().size() < 2) {
-			warnings.add(overrides.source() + ":" + entry.line() + ": element-table " + entry.target()
-					+ " needs a class of the stubs, a type name and the element names.");
-			return;
-		}
-		// Stubs that have all the elements as the table's fields describe the table themselves, so the class is left as
-		// they give it. Stubs that have only some of them changed in a way this line cannot follow.
-		List<String> elementNames = entry.arguments().subList(1, entry.arguments().size());
-		Set<String> fieldNames = new HashSet<>();
-		classDef.fields.forEach(field -> fieldNames.add(field.name()));
-		List<String> named = elementNames.stream().filter(fieldNames::contains).toList();
-		if (!named.isEmpty()) {
-			if (named.size() == elementNames.size()) {
-				overrides.applied(entry, true);
-			} else {
-				warnings.add(overrides.source() + ":" + entry.line() + ": element-table " + entry.target()
-						+ " is left as the stubs give it, which name some of its elements as fields ("
-						+ String.join(", ", named) + ") but not all; check the line against the stubs.");
-			}
-			return;
-		}
-		overrides.applied(entry, false);
-		ApiModel.ClassDef element = new ApiModel.ClassDef(classDef.name);
-		element.description = classDef.description;
-		element.binding = ApiModel.Binding.LOCAL;
-		element.fields.addAll(classDef.fields);
-		element.functions.addAll(classDef.functions);
-		String typeName = entry.arguments().getFirst();
-		Node elementNode = new Node(typeName, typeName, node);
-		elementNode.classDef = element;
-		node.children.put(typeName, elementNode);
-		node.classDef = null;
-		node.elementNames = elementNames;
-		node.elementType = elementNode;
-		byLuaName.put(classDef.name, elementNode);
-	}
-
 	/** Every class but the generic EventSubscription, which has templates of its own, and the integer ID types. */
 	private boolean isGenerated(ApiModel.ClassDef classDef) {
 		return !classDef.name.equals("EventSubscription") && !"integer".equals(classDef.superclass)
@@ -699,7 +652,8 @@ final class JavaBindings {
 	}
 
 	/**
-	 * The namespaces of {@code id}, {@code config} and {@code var}: each field of their class, typed
+	 * The namespaces of {@code id}, {@code config} and {@code var}: each field of their class, typed by a class of its
+	 * own, {@code id.NPC} with {@code ---@field [string] integer} and {@code ---@field FromID fun(...)}, or by a table,
 	 * {@code { [string]: X, FromID: fun(...) }}, becomes a nested class with {@code FromID} that extends the chunk
 	 * classes of its csv's names.
 	 */
@@ -710,16 +664,26 @@ final class JavaBindings {
 		}
 		holder.holder = true;
 		for (ApiModel.FieldDef field : classDef.fields) {
-			if (!(field.type() instanceof TypeRef.Table table)) {
-				continue;
-			}
 			TypeRef element = null;
 			TypeRef fromId = null;
-			for (TypeRef.Entry entry : table.entries()) {
-				if (entry.keyType() != null) {
-					element = entry.value();
-				} else if (entry.name().equals("FromID")) {
-					fromId = entry.value();
+			ApiModel.ClassDef namespaceClass = field.type() instanceof TypeRef.Named named
+					? model.classes.get(named.name())
+					: null;
+			if (field.type() instanceof TypeRef.Table table) {
+				for (TypeRef.Entry entry : table.entries()) {
+					if (entry.keyType() != null) {
+						element = entry.value();
+					} else if (entry.name().equals("FromID")) {
+						fromId = entry.value();
+					}
+				}
+			} else if (namespaceClass != null) {
+				for (ApiModel.FieldDef member : namespaceClass.fields) {
+					if (member.name().equals("[string]")) {
+						element = member.type();
+					} else if (member.name().equals("FromID")) {
+						fromId = member.type();
+					}
 				}
 			}
 			if (element == null) {
@@ -832,8 +796,6 @@ final class JavaBindings {
 			constantTables.writeEnum(out, node, enumDef, indent);
 		} else if (node.constants != null) {
 			constantTables.writeConstantNamespace(out, node, indent);
-		} else if (node.elementNames != null) {
-			writeElementTable(out, node, indent);
 		} else if (classDef != null && !node.holder
 				&& !(payload != null && classDef.fields.isEmpty() && classDef.functions.isEmpty())) {
 			writeClass(out, node, classDef, indent);
@@ -859,29 +821,6 @@ final class JavaBindings {
 				.append(node.javaName).append(" {\n\n");
 		privateConstructor(out, node, indent + "\t");
 		writeChildren(out, node, indent + "\t");
-		out.append(indent).append("}\n");
-	}
-
-	private void writeElementTable(StringBuilder out, Node node, String indent) {
-		Node elementType = node.elementType;
-		List<String> names = node.elementNames;
-		if (elementType == null || names == null) {
-			return;
-		}
-		JavaText.javadoc(out, indent, List.of("The Lua table {@code " + node.luaName() + "}: one {@code "
-				+ elementType.javaName + "} object per name."));
-		out.append(indent).append("@LuaGlobal(\"").append(node.luaName()).append("\")\n");
-		out.append(indent).append("public ").append(node.parent == null ? "" : "static ").append("final class ")
-				.append(node.javaName).append(" {\n\n");
-		String inner = indent + "\t";
-		privateConstructor(out, node, inner);
-		for (String name : names) {
-			out.append("\n");
-			JavaText.javadoc(out, inner, List.of("<p>Lua: {@code " + node.luaName() + "." + name + "}"));
-			out.append(inner).append("public static final ").append(elementType.reference()).append(" ")
-					.append(JavaText.javaIdentifier(name)).append(" = LuaOnly.value();\n");
-		}
-		writeChildren(out, node, inner);
 		out.append(indent).append("}\n");
 	}
 
@@ -1033,10 +972,26 @@ final class JavaBindings {
 	}
 
 	/**
-	 * {@code operator <Class.name> <op> <fun(...) type>}: one of Lua's operators on the class's objects, which the
-	 * stubs do not declare, as a method marked {@code @LuaOperator}: {@code a.plus(b)} is {@code a + b} in Lua.
+	 * Lua's operators on the class's objects, as methods marked {@code @LuaOperator}: {@code a.plus(b)} is
+	 * {@code a + b} in Lua. They come from the definitions' {@code ---@operator} lines, named as Kotlin names the
+	 * operator functions, and from {@code operator <Class.name> <op> <fun(...) type>} lines for the definitions that
+	 * do not declare them. The compilers lower {@code +}, {@code -}, {@code *} and {@code /}, so another operator is
+	 * left out with a warning.
 	 */
 	private void operators(StringBuilder out, ApiModel.ClassDef owner, String indent, Set<String> signatures) {
+		for (ApiModel.OperatorDef operator : owner.operators) {
+			String[] lowered = LOWERED_OPERATORS.get(operator.kind());
+			TypeRef operand = operator.operand();
+			if (lowered == null || operand == null) {
+				warnings.add(owner.name + ": the operator " + operator.kind()
+						+ " is left out, as the compilers lower only +, -, * and /.");
+				continue;
+			}
+			// The operand is the other object, or a number that scales this one
+			boolean scalar = operand instanceof TypeRef.Named named && named.name().equals("number");
+			writeOperator(out, owner, indent, signatures, lowered[0], lowered[1],
+					new TypeRef.Param(scalar ? "scale" : "other", operand), operator.result());
+		}
 		for (Overrides.Entry entry : overrides.all("operator")) {
 			int dot = entry.target().lastIndexOf('.');
 			if (dot < 0 || !entry.target().substring(0, dot).equals(owner.name)) {
@@ -1051,25 +1006,28 @@ final class JavaBindings {
 				continue;
 			}
 			overrides.applied(entry, false);
-			String operator = entry.arguments().getFirst();
-			String javaName = entry.target().substring(dot + 1);
-			TypeRef.Param param = function.params().getFirst();
-			JType paramType = typeMapping.javaType(param.type());
-			if (!signatures.add(javaName + "(" + paramType.erased() + ")")) {
-				continue;
-			}
-			String receiver = memberBindings.receiver(owner, false);
-			String escaped = JavaText.escape(operator);
-			out.append("\n");
-			JavaText.javadoc(out, indent, List.of(
-					"Lua's {@code " + escaped + "} on this object and the other.",
-					"",
-					"<p>Lua: {@code " + receiver + " " + escaped + " " + param.name() + "}"));
-			out.append(indent).append("@LuaOperator(").append(JavaText.javaString(operator)).append(")\n");
-			out.append(indent).append("public native ")
-					.append(typeMapping.javaType(function.returns().getFirst()).text()).append(" ").append(javaName)
-					.append("(").append(paramType.text()).append(" ").append(param.name()).append(");\n");
+			writeOperator(out, owner, indent, signatures, entry.arguments().getFirst(),
+					entry.target().substring(dot + 1), function.params().getFirst(), function.returns().getFirst());
 		}
+	}
+
+	/** One operator's method, unless the class declares one of its name and parameter type already. */
+	private void writeOperator(StringBuilder out, ApiModel.ClassDef owner, String indent, Set<String> signatures,
+			String operator, String javaName, TypeRef.Param param, TypeRef result) {
+		JType paramType = typeMapping.javaType(param.type());
+		if (!signatures.add(javaName + "(" + paramType.erased() + ")")) {
+			return;
+		}
+		String receiver = memberBindings.receiver(owner, false);
+		String escaped = JavaText.escape(operator);
+		out.append("\n");
+		JavaText.javadoc(out, indent, List.of(
+				"Lua's {@code " + escaped + "} on this object and the other.",
+				"",
+				"<p>Lua: {@code " + receiver + " " + escaped + " " + param.name() + "}"));
+		out.append(indent).append("@LuaOperator(").append(JavaText.javaString(operator)).append(")\n");
+		out.append(indent).append("public native ").append(typeMapping.javaType(result).text()).append(" ")
+				.append(javaName).append("(").append(paramType.text()).append(" ").append(param.name()).append(");\n");
 	}
 
 	/**
@@ -1234,7 +1192,8 @@ final class JavaBindings {
 	}
 
 	private boolean isConstructible(ApiModel.ClassDef classDef) {
-		if (overrides.has("not-constructible", classDef.name)) {
+		// A local table, local InvType = {}, describes objects the client makes
+		if (overrides.has("not-constructible", classDef.name) || classDef.binding == ApiModel.Binding.LOCAL) {
 			return false;
 		}
 		return overrides.has("constructible", classDef.name)

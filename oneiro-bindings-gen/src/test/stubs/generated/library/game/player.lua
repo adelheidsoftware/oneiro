@@ -8,11 +8,17 @@ SkillType = {
     INVENTION = 26,
 }
 
+---The name of one of the values, as `SkillType.FromID(SkillType.ATTACK)` is `"ATTACK"`.
+---@param value integer
+---@return string
+---@diagnostic disable-next-line: inject-field
+function SkillType.FromID(value) end
+
 ---@class Player
 Player = {}
 
 ---Whether a character is logged in.
----@return Bool # True when Player data can be read.
+---@return boolean # True when Player data can be read.
 function Player.IsAvailable() end
 
 ---A value unique to the character.
@@ -21,7 +27,7 @@ function Player.GetTrackingID() end
 
 ---A skill's level with boosts.
 ---@param skill SkillType The skill.
----@return Int # The level.
+---@return integer # The level.
 function Player.GetLevelGameplay(skill) end
 
 ---The character's entity.
