@@ -133,8 +133,8 @@ final class CollectionMethods {
 						BinaryOperator.NOT_EQUAL, new Expression.Nil());
 			}
 			case "size" -> {
-				unit.use(Helper.COUNT);
-				yield Helper.COUNT.invoke(map);
+				unit.use(Helper.TABLE_LENGTH);
+				yield Helper.TABLE_LENGTH.invoke(map);
 			}
 			case "isEmpty" -> binary(call(name("next"), map), BinaryOperator.EQUAL, new Expression.Nil());
 			case "put", "remove", "putIfAbsent", "forEach" ->
@@ -163,8 +163,8 @@ final class CollectionMethods {
 						BinaryOperator.NOT_EQUAL, new Expression.Nil());
 			}
 			case "size" -> {
-				unit.use(Helper.COUNT);
-				yield Helper.COUNT.invoke(set);
+				unit.use(Helper.TABLE_LENGTH);
+				yield Helper.TABLE_LENGTH.invoke(set);
 			}
 			case "isEmpty" -> binary(call(name("next"), set), BinaryOperator.EQUAL, new Expression.Nil());
 			case "stream" -> throw new Rejection(call, LibraryCalls.STREAM_IN_STATEMENT);

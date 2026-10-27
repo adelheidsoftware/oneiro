@@ -329,10 +329,10 @@ it, and documented everywhere else.
 | `map.put(k, v)`, `map.get(k)` | `map[k] = v`, `map[k]` | `put` used as a value is *Never*. |
 | `map.getOrDefault(k, d)` | `map[k] or d` | On a map of `Boolean` values, where `or` would replace a stored `false`: `map[k] ~= false` for a default of `true`, `map[k] == true` for `false`, otherwise the helper `valueOr(map[k], d)`. |
 | `map.containsKey(k)`, `map.remove(k)` | `map[k] ~= nil`, `map[k] = nil` | |
-| `map.size()`, `map.isEmpty()` | `count(map)`, `next(map) == nil` | |
+| `map.size()`, `map.isEmpty()` | `tableLength(map)`, `next(map) == nil` | |
 | `new HashSet<>()`, `set.add(x)`, `set.contains(x)`, `set.remove(x)` | `{}`, `set[x] = true`, `set[x] ~= nil`, `set[x] = nil` | `add` used as a value is *Never*. |
 | `Set.of(a, b)` | `{ [a] = true, [b] = true }` | `Set.of("x")` becomes `{ x = true }`. |
-| `set.size()` | `count(set)` | |
+| `set.size()` | `tableLength(set)` | |
 | Map keys or set elements of a record or of a class that overrides `equals` | *Never*: "Lua compares table keys by identity, so value-equal keys would not match; key the map by a string or number." | |
 | `new LinkedHashMap<>()`, `new LinkedHashSet<>()`, `new TreeMap<>()`, `new TreeSet<>(cmp)` | `orderedTable()`, `sortedTable()`, `sortedTable(function(a, b) return ... end)` | Two commented helpers. The table holds its entries itself, so `m[k]`, `next` and every other map and set form work as on any table; its metatable's `__pairs` walks the keys in the order they were first added, or sorted, and passes over removed ones. A key removed and added again goes to the end, as in Java. `firstKey()`, `lastKey()`, `first()` and `last()` are the helpers `firstKey(t)` and `lastKey(t)`, nil where Java throws; `TreeMap`'s searches, such as `floorKey` and `headMap`, are not supported. An access-ordered `LinkedHashMap` is *Never*: "An access-ordered LinkedHashMap moves a key on every get, which Lua cannot see a table read do; keep the order yourself, in a List of keys." |
 | `new ArrayList<>(list)`, `new ArrayList<>(set)`, `new ArrayList<>(map.values())` | `table.move(list, 1, #list, 1, {})`, `keysOf(set)`, `valuesOf(map)` | |
@@ -490,7 +490,7 @@ Each helper is a `local function` with a one-line comment, emitted once per modu
 | `filled(n, value)`, `grid(value, size, ...)` | `new int[n]` and other primitive arrays; arrays of more than one dimension. |
 | `listContains(list, x)`, `listIndexOf(list, x)` | `List.contains`, `List.indexOf`. |
 | `stringIndexOf(s, t)`, `endsWith(s, p)`, `trim(s)`, `split(text, separator, limit)`, `characters(text)` | `String.indexOf`, `endsWith`, `trim`, `split` with a plain separator, `toCharArray`. |
-| `count(t)` | `size()` of a map or set. |
+| `tableLength(t)` | `size()` of a map or set. |
 | `valueOr(value, default)` | `getOrDefault` and `orElse` on a value that can be `false`. |
 | `computeIfAbsent`, `compute`, `computeIfPresent`, `merge` | The map methods of those names, where they give a value. |
 | `builderSet(builder, text)` | A `StringBuilder`'s edits that need its whole text. |

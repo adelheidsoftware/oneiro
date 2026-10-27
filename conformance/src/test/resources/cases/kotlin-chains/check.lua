@@ -69,3 +69,7 @@ assert(#logged == 1 and logged[1] == "worth it: rune bar", "filter, then forEach
 assert(Drops.firstWorth(drops, 1000.0) == "rune bar", "firstOrNull")
 assert(Drops.firstWorth(drops, 99999.0) == "nothing", "firstOrNull, or a return")
 assert(Drops.mostOf(drops, "coins") == 500 and Drops.mostOf(drops, "logs") == 0, "maxOfOrNull, or 0, assigned")
+
+Drops.logItems(drops, 1000.0)
+assert(logged[#logged] == "rune bar", "filter and map, joined as an argument")
+assert(Drops.looks == #drops, "a chain joined as an argument looks at each element once")

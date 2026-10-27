@@ -136,4 +136,18 @@ object Drops {
 		most = drops.filter { it.item == item }.maxOfOrNull { it.count } ?: 0
 		return most
 	}
+
+	/** How many drops worthMore has looked at. */
+	var looks = 0
+
+	/** Whether the drop is worth more than the price, counted in looks. */
+	fun worthMore(drop: Drop, price: Double): Boolean {
+		looks++
+		return drop.price > price
+	}
+
+	/** Logs the items worth more than the price on one line, looking at each drop once. */
+	fun logItems(drops: List<Drop>, price: Double) {
+		log(drops.filter { worthMore(it, price) }.map { it.item }.joinToString(","))
+	}
 }

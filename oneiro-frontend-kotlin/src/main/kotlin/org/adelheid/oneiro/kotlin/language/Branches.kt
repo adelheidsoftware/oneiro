@@ -156,12 +156,15 @@ internal class Branches(private val body: BodyLowering) {
 		return name?.takeIf { selector !is KtCallExpression || selector.valueArguments.isEmpty() } ?: "selected"
 	}
 
-	/** A branch's block with the comments above its `when` entry ahead of those of its first statement. */
+	/**
+	 * A branch's block with the comments above its `when` entry ahead of those of its first statement, or, in a branch
+	 * with no code, as its content.
+	 */
 	private fun withComments(comments: List<Comment>, block: Block): Block {
-		val first = block.entries().firstOrNull() ?: return block
 		if (comments.isEmpty()) {
 			return block
 		}
+		val first = block.entries().firstOrNull() ?: return Block(listOf(), comments + block.closingComments())
 		val trivia = Trivia(first.trivia().blankLineBefore(), comments + first.trivia().leading(),
 			first.trivia().trailing())
 		return Block(listOf(Block.Entry(first.statement(), trivia, first.origin())) + block.entries().drop(1),

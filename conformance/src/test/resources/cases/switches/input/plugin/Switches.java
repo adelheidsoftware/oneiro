@@ -117,4 +117,19 @@ public final class Switches {
 		}
 		return sum;
 	}
+
+	// Empty cases that say why they are empty
+	public static int bonus(int level) {
+		int bonus = 0;
+		switch (level) {
+			// Level 1 has no bonus yet
+			case 1 -> {
+			}
+			case 2 -> bonus = 5;
+			// Any other level keeps none
+			default -> {
+			}
+		}
+		return bonus;
+	}
 }

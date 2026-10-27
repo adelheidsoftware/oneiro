@@ -87,13 +87,13 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		}
 		val view = (receiver as? Receiver.Written)?.expression?.let(::mapView)
 		if (view != null && name == "size") {
-			return helper(Helper.COUNT, body.expression(view.map))
+			return helper(Helper.TABLE_LENGTH, body.expression(view.map))
 		}
 		return when {
 			text && name == "length" -> length(body.expression(receiver))
 			receiver == null || kind == null -> null
 			name == "size" && kind == Kind.SEQUENCE -> length(body.expression(receiver))
-			name == "size" -> helper(Helper.COUNT, body.expression(receiver))
+			name == "size" -> helper(Helper.TABLE_LENGTH, body.expression(receiver))
 			name == "lastIndex" && kind == Kind.SEQUENCE ->
 				IndexArithmetic.minusOne(length(body.expression(receiver)))
 			// Kotlin's keys keep the map's order, which a set of them in a helper orderedTable() keeps too
@@ -577,10 +577,12 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		return table
 	}
 
-	/** The members of a list or an array. */
+	/** The members of a list or an array; null for one a chain of collection functions takes instead. */
 	private fun sequence(where: KtExpression, name: String, receiver: Receiver, arguments: LibraryArguments):
 		Expression? {
-		val list = body.expression(receiver)
+		// Lowered only for a member this takes: a receiver that is a chain runs its loop before the statement, which
+		// must not happen for a call that a chain then takes, with the receiver in it
+		val list by lazy { body.expression(receiver) }
 		return when (name) {
 			"get" -> Expression.Index(list, position(arguments[0]))
 			"getOrNull" -> Expression.Index(list, position(arguments[0]))
@@ -603,7 +605,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			"removeAt" -> tableCall("remove", list, position(arguments[0]))
 			"removeFirst", "removeFirstOrNull" -> tableCall("remove", list, Expression.integer(1))
 			"removeLast" -> tableCall("remove", list)
-			"joinToString" -> joined(where, receiver, list, arguments)
+			"joinToString" -> joined(where, receiver, arguments)
 			// A copy: Lua's table.move of every element into a new table
 			"toMutableList", "toList" -> if (arguments.isEmpty()) {
 				val copied = stable(receiver)
@@ -629,14 +631,14 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 * `list.joinToString(separator)` as `table.concat(list, separator)`, which joins strings and numbers as Kotlin
 	 * writes them; its separator is `", "` unless the call gives another.
 	 */
-	private fun joined(where: KtExpression, receiver: Receiver, list: Expression, arguments: LibraryArguments):
-		Expression {
+	private fun joined(where: KtExpression, receiver: Receiver, arguments: LibraryArguments): Expression {
 		if (arguments.byName.keys.any { it != "separator" }) {
 			throw Rejection.notYet(where, "joinToString with a prefix, postfix, limit or transform")
 		}
 		if (type(receiver)?.let(types::elementClass) !in JOINABLE) {
 			throw Rejection.notYet(where, "Joining values other than strings and numbers")
 		}
+		val list = body.expression(receiver)
 		val separator = arguments.byName["separator"]?.let(body::expression) ?: Expression.string(", ")
 		return tableCall("concat", list, separator)
 	}
@@ -704,7 +706,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		}
 		"isEmpty", "none" -> if (arguments.isEmpty()) empty(body.expression(receiver)) else null
 		"isNotEmpty", "any" -> if (arguments.isEmpty()) notEmpty(body.expression(receiver)) else null
-		"count" -> if (arguments.isEmpty()) helper(Helper.COUNT, body.expression(receiver)) else null
+		"count" -> if (arguments.isEmpty()) helper(Helper.TABLE_LENGTH, body.expression(receiver)) else null
 		"put", "set", "remove" -> throw Rejection(where, STATEMENT_ONLY.format(name))
 		else -> null
 	}
@@ -718,7 +720,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		"last" -> if (arguments.isEmpty()) helper(Helper.LAST_KEY, body.expression(receiver)) else null
 		"isEmpty", "none" -> if (arguments.isEmpty()) empty(body.expression(receiver)) else null
 		"isNotEmpty", "any" -> if (arguments.isEmpty()) notEmpty(body.expression(receiver)) else null
-		"count" -> if (arguments.isEmpty()) helper(Helper.COUNT, body.expression(receiver)) else null
+		"count" -> if (arguments.isEmpty()) helper(Helper.TABLE_LENGTH, body.expression(receiver)) else null
 		"orEmpty" -> Expression.binary(body.expression(receiver), BinaryOperator.OR, Expression.Table(listOf()))
 		"isNullOrEmpty" -> nullOrEmpty(receiver)
 		"add", "remove" -> throw Rejection(where, STATEMENT_ONLY.format(name))

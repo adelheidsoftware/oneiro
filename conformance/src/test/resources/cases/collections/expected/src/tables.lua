@@ -22,7 +22,7 @@ local function listIndexOf(list, value)
 end
 
 -- The number of entries in a map or set, as Java's size(); a Lua table keeps no count.
-local function count(t)
+local function tableLength(t)
     local n = 0
     for _ in pairs(t) do
         n = n + 1
@@ -62,7 +62,7 @@ end
 
 function Tables.lookup(scores, name)
     if scores[name] == nil then
-        return (scores[name] or -1) + count(scores)
+        return (scores[name] or -1) + tableLength(scores)
     end
     return scores[name]
 end
@@ -77,7 +77,7 @@ function Tables.seen(values)
 end
 
 function Tables.has(seen, value)
-    return seen[value] ~= nil and next(seen) ~= nil and count(seen) > 0
+    return seen[value] ~= nil and next(seen) ~= nil and tableLength(seen) > 0
 end
 
 function Tables.doubled(source)

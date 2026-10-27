@@ -28,4 +28,26 @@ object Walker {
 	fun doubled(step: Int): Int {
 		return step * 2
 	}
+
+	private fun sum(a: Int, b: Int): Int = a + b
+
+	/** Twice each value, added up, and the sum of one and two. */
+	fun doubledSum(values: List<Int>): Int {
+		return values.sumOf { value -> value * 2 } + sum(1, 2)
+	}
+
+	/** For each factor, the values times it, then the values as they are. */
+	fun scaled(list: List<Int>, factors: List<Int>): List<List<Int>> {
+		val out = mutableListOf<List<Int>>()
+		factors.forEach { factor ->
+			out.add(list.map { value -> value * factor })
+			out.add(list)
+		}
+		return out
+	}
+
+	/** How many values are below the number of keys. */
+	fun belowKeys(values: List<Int>, keys: Map<String, Int>): Int {
+		return values.count { value -> value < keys.size }
+	}
 }

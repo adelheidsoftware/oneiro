@@ -34,7 +34,7 @@ public enum Helper {
 			"The 0-based position of the text in the string, or -1, as Java's String.indexOf."),
 	ENDS_WITH("endsWith", "Whether the string ends with the suffix, as Java's String.endsWith."),
 	TRIM("trim", "The string without leading and trailing whitespace, as Java's String.trim."),
-	COUNT("count", "The number of entries in a map or set, as Java's size(); a Lua table keeps no count."),
+	TABLE_LENGTH("tableLength", "The number of entries in a map or set, as Java's size(); a Lua table keeps no count."),
 	SPLIT("split", "The parts of the text between the separators, as Java's String.split with a plain separator: with"
 			+ " no limit, trailing empty parts are dropped; a negative limit keeps them; a positive one makes at most"
 			+ " that many parts.", "text, separator, limit", """
@@ -431,7 +431,7 @@ public enum Helper {
 					+ " String.indexOf.";
 			case ENDS_WITH -> "Whether the string ends with the suffix, as Kotlin's String.endsWith.";
 			case TRIM -> "The string without leading and trailing whitespace, as Kotlin's String.trim.";
-			case COUNT -> "The number of entries in a map or set, as Kotlin's size; a Lua table keeps no count.";
+			case TABLE_LENGTH -> "The number of entries in a map or set, as Kotlin's size; a Lua table keeps no count.";
 			case SPLIT -> "The parts of the text between the separators, as Kotlin's String.split with a plain"
 					+ " separator, empty ones among them; the limit is -1 for any number of parts, or the most parts"
 					+ " to make.";
@@ -540,7 +540,7 @@ public enum Helper {
 									Expression.name("suffix")))));
 			case TRIM -> function(List.of("s"),
 					returns(methodCall(Expression.name("s"), "match", string("^%s*(.-)%s*$"))));
-			case COUNT -> function(List.of("t"),
+			case TABLE_LENGTH -> function(List.of("t"),
 					local("n", integer(0)),
 					new Statement.GenericFor(List.of("_"),
 							List.of(call(Expression.name("pairs"), Expression.name("t"))),

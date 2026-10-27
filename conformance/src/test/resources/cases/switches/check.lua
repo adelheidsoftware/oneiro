@@ -20,3 +20,4 @@ assert(Switches.season(1) == "winter" and Switches.season(7) == "summer" and Swi
 assert(Switches.label(5) == "poor")
 assert(Switches.label(2) == "level 2")
 assert(Switches.sumOdd({ 1, 2, 3, 4, 5 }) == 9)
+assert(Switches.bonus(1) == 0 and Switches.bonus(2) == 5 and Switches.bonus(3) == 0)

@@ -100,4 +100,17 @@ object Switches {
 		}
 		return sum
 	}
+
+	// Empty branches that say why they are empty
+	fun bonus(level: Int): Int {
+		var bonus = 0
+		when (level) {
+			// Level 1 has no bonus yet
+			1 -> {}
+			2 -> bonus = 5
+			// Any other level keeps none
+			else -> {}
+		}
+		return bonus
+	}
 }

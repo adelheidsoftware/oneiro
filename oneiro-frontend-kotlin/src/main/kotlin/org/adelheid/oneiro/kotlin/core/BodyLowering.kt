@@ -37,6 +37,7 @@ import org.adelheid.oneiro.lua.UnaryOperator
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.analysis.api.resolution.KaCallableMemberCall
 import org.jetbrains.kotlin.analysis.api.resolution.KaFunctionCall
+import org.jetbrains.kotlin.analysis.api.resolution.KaImplicitInvokeCall
 import org.jetbrains.kotlin.analysis.api.resolution.KaImplicitReceiverValue
 import org.jetbrains.kotlin.analysis.api.resolution.successfulCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
@@ -75,7 +76,6 @@ import org.jetbrains.kotlin.psi.KtClassLiteralExpression
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtContinueExpression
-import org.jetbrains.kotlin.psi.KtDeclarationWithBody
 import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
@@ -437,17 +437,18 @@ internal class BodyLowering(
 
 	/**
 	 * A name for a local the Lua needs that the source does not have, such as `pcall`'s `ok`: the preferred one,
-	 * unless the function around declares it, then the preferred one with a number.
+	 * unless it would hide a name the code around reads, then the preferred one with a number; see
+	 * [FileLowering.namesAround].
 	 */
 	fun invent(preferred: String, where: PsiElement): String {
-		val scope = PsiTreeUtil.getParentOfType(where, KtDeclarationWithBody::class.java) ?: where.containingFile
-		val declared = PsiTreeUtil.collectElementsOfType(scope, KtNamedDeclaration::class.java)
-			.mapNotNull { it.name?.let(unit.names::luaName) }.toSet()
-		var name = preferred
+		val taken = unit.namesAround(where)
+		val base = unit.names.luaName(preferred)
+		var name = base
 		var number = 2
-		while (name in declared) {
-			name = preferred + number++
+		while (name in taken) {
+			name = base + number++
 		}
+		unit.inventedNames += name
 		return name
 	}
 
@@ -1284,6 +1285,7 @@ internal class BodyLowering(
 			?: throw Rejection(where, "This call does not resolve to one function.")
 		val symbol = resolved.symbol
 		checkClientHasIt(where, symbol, receiver)
+		val invoked = if (resolved is KaImplicitInvokeCall) invokedValue(call, receiver, where) else null
 		if (symbol is KaConstructorSymbol) {
 			// A type alias's constructor, such as HashMap's, belongs to no class; it makes the class the alias names
 			val type = symbol.containingClassId?.let { findClass(it) } ?: symbol.returnType.expandedSymbol
@@ -1327,9 +1329,9 @@ internal class BodyLowering(
 			return Expression.Call(expression(receiver), arguments(resolved, call))
 		}
 		if (isFunctionInvoke(symbol)) {
-			// A value of a function type, called: f(x) or f.invoke(x)
-			val function = receiver ?: call.calleeExpression ?: throw Rejection(call, EMPTY)
-			return Expression.Call(expression(function), arguments(resolved, call))
+			// A value of a function type, called: f(x), holder.f(x) or f.invoke(x)
+			val function = invoked ?: expression(receiver ?: call.calleeExpression ?: throw Rejection(call, EMPTY))
+			return Expression.Call(function, arguments(resolved, call))
 		}
 		if (preconditions.isNotNull(call)) {
 			return preconditions.notNullValue(call)
@@ -1361,6 +1363,9 @@ internal class BodyLowering(
 		}
 		if (symbol !is KaNamedFunctionSymbol) {
 			throw Rejection.notYet(where, "Calling this")
+		}
+		if (invoked != null && symbol.isExtension) {
+			throw Rejection.notYet(where, "Calling a value through an extension's invoke")
 		}
 		topLevelFunction(symbol)?.let { declaration ->
 			val callee = topLevelMember(where, declaration, symbol)
@@ -1396,7 +1401,20 @@ internal class BodyLowering(
 		if (symbol.isExtension) {
 			return extensionCall(where, symbol, ownerClass, receiver, arguments)
 		}
-		return pluginCall(where, symbol, ownerClass, receiver, arguments)
+		return pluginCall(where, symbol, ownerClass, receiver, arguments, invoked)
+	}
+
+	/**
+	 * The value an implicit `invoke` is called on: `f` for `f(x)`, and `holder.f` for `holder.f(x)`, whose receiver is
+	 * `holder` rather than that value.
+	 */
+	private fun invokedValue(call: KtCallExpression, receiver: KtExpression?, where: KtExpression): Expression {
+		val callee = call.calleeExpression ?: throw Rejection(call, EMPTY)
+		if (receiver == null) {
+			return expression(callee)
+		}
+		val name = callee as? KtNameReferenceExpression ?: throw Rejection.notYet(where, "Calling this value")
+		return reference(name, receiver, where)
 	}
 
 	/**
@@ -1588,31 +1606,41 @@ internal class BodyLowering(
 	/**
 	 * A call of a function of the plugin's own classes: a settings function of its module, a function of the plugin
 	 * class as a local of main.lua, an object's function on its table, and a class's method on the object.
+	 *
+	 * @param invoked the value an implicit `invoke` is called on, which is not the receiver, or null for any other call
 	 */
-	private fun pluginCall(call: KtExpression, function: KaNamedFunctionSymbol, ownerClass: KaClassSymbol,
-		receiver: KtExpression?, arguments: List<Expression>): Expression = with(unit.session) {
+	private fun pluginCall(
+		call: KtExpression,
+		function: KaNamedFunctionSymbol,
+		ownerClass: KaClassSymbol,
+		receiver: KtExpression?,
+		arguments: List<Expression>,
+		invoked: Expression? = null,
+	): Expression = with(unit.session) {
 		val name = unit.memberName(function)
 		val ownerDeclaration = ownerClass.psi as? KtClassOrObject
 		val declaration = function.psi
 		val isPrivate = declaration is KtNamedFunction && declaration.isPrivateInLua() &&
 			declaration.containingFile == unit.file
+		// The object the function is called on
+		fun target(memberOwner: KaClassSymbol? = null) = invoked ?: receiverOrSelf(receiver, call, memberOwner)
 		return when {
 			// An object expression that is a Lua function has no methods to call
 			ownerDeclaration is KtObjectDeclaration && ownerDeclaration.isObjectLiteral() &&
-				objects.isFunction(ownerDeclaration) -> Expression.Call(receiverOrSelf(receiver, call), arguments)
+				objects.isFunction(ownerDeclaration) -> Expression.Call(target(), arguments)
 			// super.f(): the superclass's function, called on this object
 			receiver is KtSuperExpression ->
 				Expression.Call(Expression.field(unit.moduleReference(ownerClass), name), listOf(self(receiver)) +
 					arguments)
 			// A value of a plugin's fun interface is a Lua function, which has no methods to call
 			(ownerDeclaration as? KtClass)?.hasModifier(KtTokens.FUN_KEYWORD) == true &&
-				isValueOf(receiver, ownerClass) -> {
+				(invoked != null || isValueOf(receiver, ownerClass)) -> {
 				if (function.modality != KaSymbolModality.ABSTRACT) {
 					val type = ownerClass.classId?.shortClassName
 					throw Rejection(call, "A value of $type is a Lua function, which carries no methods; make"
 						+ " ${function.name}() a function outside the interface that takes the $type.")
 				}
-				Expression.Call(receiverOrSelf(receiver, call, ownerClass), arguments)
+				Expression.Call(target(ownerClass), arguments)
 			}
 			unit.annotations.has(ownerClass, Annotations.CONFIG_GROUP) ->
 				Expression.Call(Expression.field(unit.moduleReference(ownerClass), name), arguments)
@@ -1624,9 +1652,9 @@ internal class BodyLowering(
 				} else {
 					Expression.Call(Expression.field(staticTable(ownerClass), name), arguments)
 				}
-			isPrivate -> Expression.Call(Expression.name(unit.names.luaName(name)),
-				listOf(receiverOrSelf(receiver, call, ownerClass)) + arguments)
-			else -> Expression.MethodCall(receiverOrSelf(receiver, call, ownerClass), name, arguments)
+			isPrivate -> Expression.Call(Expression.name(unit.names.luaName(name)), listOf(target(ownerClass)) +
+				arguments)
+			else -> Expression.MethodCall(target(ownerClass), name, arguments)
 		}
 	}
 

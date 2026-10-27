@@ -94,16 +94,18 @@ public object KotlinFrontend {
 
 	/**
 	 * Lowers one file into its module. A local whose name equals a helper the module uses, or a Lua global it reads
-	 * such as `config`, would hide it, so when that happens the file is lowered a second time with those names taken.
+	 * such as `config`, would hide it, so when that happens the file is lowered a second time with those names taken:
+	 * a local of the source's then gets a trailing underscore, and one Oneiro makes up a number.
 	 */
 	private fun lower(session: KaSession, file: KtFile, compilation: Compilation): Pair<LuaModule?, FileLowering> {
 		val first = FileLowering(session, file, compilation, LocalNames(setOf()))
 		val module = first.lower()
-		val clashes = first.declaredNames() intersect first.takenNames()
-		if (clashes.isEmpty()) {
+		val taken = first.takenNames()
+		val clashes = first.declaredNames() intersect taken
+		if (clashes.isEmpty() && first.inventedNames.none { it in taken }) {
 			return module to first
 		}
-		val second = FileLowering(session, file, compilation, LocalNames(clashes))
+		val second = FileLowering(session, file, compilation, LocalNames(clashes), taken)
 		return second.lower() to second
 	}
 

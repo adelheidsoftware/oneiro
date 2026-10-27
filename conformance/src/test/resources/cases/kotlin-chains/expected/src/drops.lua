@@ -369,4 +369,29 @@ function Drops.mostOf(drops, item)
     return most
 end
 
+-- How many drops worthMore has looked at.
+Drops.looks = 0
+
+-- Whether the drop is worth more than the price, counted in looks.
+---@param drop table
+---@param price number
+---@return boolean
+function Drops.worthMore(drop, price)
+    Drops.looks = Drops.looks + 1
+    return drop.price > price
+end
+
+-- Logs the items worth more than the price on one line, looking at each drop once.
+---@param drops table[]
+---@param price number
+function Drops.logItems(drops, price)
+    local list = {}
+    for _, it in ipairs(drops) do
+        if Drops.worthMore(it, price) then
+            list[#list + 1] = it.item
+        end
+    end
+    log(table.concat(list, ","))
+end
+
 return Drops

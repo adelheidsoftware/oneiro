@@ -65,12 +65,15 @@ import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
  * settings, and [References] for what each member uses. The code inside functions is lowered by [BodyLowering].
  *
  * @param names the Lua names for the file's locals, which avoid the helpers and globals a first lowering found
+ * @param reserved the helpers and globals a first lowering found the module uses, which the names Oneiro makes up for
+ *     locals avoid too; none on a first lowering
  */
 internal class FileLowering(
 	val session: KaSession,
 	val file: KtFile,
 	val compilation: KotlinFrontend.Compilation,
 	val names: LocalNames,
+	private val reserved: Set<String> = setOf(),
 ) {
 
 	val options = compilation.options
@@ -573,6 +576,26 @@ internal class FileLowering(
 
 	/** The names a local must not take: the helpers the module defines and the globals it reads. */
 	fun takenNames(): Set<String> = globals + helpers.map { it.luaName() }
+
+	/** The names Oneiro made up for locals the source does not have; see [BodyLowering.invent]. */
+	val inventedNames: MutableSet<String> = mutableSetOf()
+
+	/** The Lua names each member declares, by the member; see [namesAround]. */
+	private val declaredIn = mutableMapOf<PsiElement, Set<String>>()
+
+	/**
+	 * The Lua names a local Oneiro makes up for the code at [where] must not take, as it would hide them there: those
+	 * the code's member declares, in its own code or a lambda's, the file's own locals the member uses, and the helpers
+	 * and globals a first lowering found the module uses.
+	 */
+	fun namesAround(where: PsiElement): Set<String> {
+		val member = enclosingMember(where)
+		val declared = declaredIn.getOrPut(member) {
+			PsiTreeUtil.collectElementsOfType(member, KtNamedDeclaration::class.java)
+				.mapNotNull { it.name?.let(names::luaName) }.toSet()
+		}
+		return declared + fileLocalsUsed.getOrPut(member) { fileLocalsUsedIn(member) } + reserved
+	}
 
 	/** The names of every function, property, parameter and local the file declares. */
 	fun declaredNames(): Set<String> =

@@ -118,4 +118,17 @@ function Switches.sumOdd(values)
     return sum
 end
 
+-- Empty branches that say why they are empty
+function Switches.bonus(level)
+    local bonus = 0
+    if level == 1 then
+        -- Level 1 has no bonus yet
+    elseif level == 2 then
+        bonus = 5
+    else
+        -- Any other level keeps none
+    end
+    return bonus
+end
+
 return Switches

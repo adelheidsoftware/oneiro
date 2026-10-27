@@ -6,6 +6,32 @@ All notable changes to Oneiro are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The helper that counts a map's or a set's entries, for `map.size`, is now `tableLength`, the name Lua developers
+  know it by, rather than `count`. A local of your plugin's named `count` keeps its name now, where before it became
+  `count_`.
+
+### Fixed
+
+- A local Oneiro makes up in Kotlin, such as a chain's `sum` or `list`, no longer hides a name the code around it
+  reads. Before, `values.sumOf { it * 2 } + sum(1, 2)` beside a private function `sum` became
+  `return sum + sum(1, 2)`, `values.count { it < keys.size }` called the count it was making, and a chain inside a
+  `forEach` lambda could hide a parameter of the function around it. The local now takes a number, `sum2`.
+- A chain of collection functions whose value is an argument, `log(drops.filter { ... }.map { it.item }.joinToString())`,
+  now runs once. Before, the Lua ran the chain's first part a second time, in a loop of its own whose list nothing
+  read, so each lambda in it ran twice for each element.
+- A comment above a Kotlin `when` branch that has no code, `// Other states change nothing` above `else -> {}`, now
+  stays in the Lua, as that branch's content. Before, it was dropped without the warning a comment Oneiro cannot
+  place gets.
+
+- Calling an object as a function in Kotlin, `doubler(value)` or `Doubler()(value)`, where its class implements a
+  function type or has an `operator fun invoke`, now calls that object's `invoke`: `doubler:invoke(value)`. Before,
+  in a class's function, the Lua called the function's own object, `self:invoke(value)`, and in an object's, it was an
+  error.
+- Calling a property of another object as a function in Kotlin, `machine.callback(value)`, now calls the property's
+  value. Before, the Lua called the object that holds it, `machine(value)`.
+
 ## [0.3.0] - 2026-10-27
 
 ### Added

@@ -2,7 +2,7 @@
 -- Kotlin's functions on maps and sets: their keys and values, clear, union, intersect and subtract.
 
 -- The number of entries in a map or set, as Kotlin's size; a Lua table keeps no count.
-local function count(t)
+local function tableLength(t)
     local n = 0
     for _ in pairs(t) do
         n = n + 1
@@ -113,7 +113,7 @@ end
 ---@param xp table<string, integer>
 ---@return integer
 function Sets.skillCount(xp)
-    return count(xp)
+    return tableLength(xp)
 end
 
 -- Whether the skill has experience.
