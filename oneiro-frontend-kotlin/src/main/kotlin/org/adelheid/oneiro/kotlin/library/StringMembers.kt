@@ -23,6 +23,9 @@ internal class StringMembers(private val body: BodyLowering) {
 
 	/** A member of a string, or null when it is none of those this lists. */
 	fun member(where: KtExpression, name: String, receiver: Receiver, arguments: LibraryArguments): Expression? {
+		if (name == "isNullOrEmpty" || name == "isNullOrBlank") {
+			return nullOrEmpty(name, receiver)
+		}
 		val text = body.expression(receiver)
 		if (name == "equals" && arguments.byName.containsKey("ignoreCase")) {
 			return equalsIgnoringCase(where, text, arguments)
@@ -81,8 +84,22 @@ internal class StringMembers(private val body: BodyLowering) {
 			"trimIndent", "trimMargin" -> trimmed(where, name, receiver, arguments)
 			"get" -> body.library.characterAt(text, arguments[0])
 			"split" -> split(where, text, arguments)
+			// The text found as it is written, as Kotlin's replace of a string or a char finds it
+			"replace" -> helper(Helper.REPLACE, text, body.expression(arguments[0]), body.expression(arguments[1]))
+			"compareTo" -> helper(Helper.COMPARE, text, body.expression(arguments[0]))
 			else -> null
 		}
+	}
+
+	/**
+	 * A nullable string's `isNullOrEmpty()` and `isNullOrBlank()`: nil, or empty, or for the second without a char
+	 * that is not whitespace. The text is read twice, so it is a name or a property read.
+	 */
+	private fun nullOrEmpty(name: String, receiver: Receiver): Expression {
+		val text = body.library.stable(receiver)
+		val absent = Expression.binary(text, BinaryOperator.EQUAL, Expression.Nil())
+		val empty = ofText(if (name == "isNullOrEmpty") "isEmpty" else "isBlank", text)!!
+		return Expression.binary(absent, BinaryOperator.OR, empty)
 	}
 
 	/** A member of a string that takes no arguments, which a reference such as `String::uppercase` names too. */
@@ -100,6 +117,8 @@ internal class StringMembers(private val body: BodyLowering) {
 		"isNotBlank" -> Expression.binary(Expression.methodCall(text, "find", Expression.string("%S")),
 			BinaryOperator.NOT_EQUAL, Expression.Nil())
 		"toString" -> text
+		"orEmpty" -> Expression.binary(text, BinaryOperator.OR, Expression.string(""))
+		"lines" -> helper(Helper.LINES, text)
 		"reversed" -> Expression.methodCall(text, "reverse")
 		"first" -> Expression.methodCall(text, "sub", Expression.integer(1), Expression.integer(1))
 		"last" -> Expression.methodCall(text, "sub", Expression.integer(-1))

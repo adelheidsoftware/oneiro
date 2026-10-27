@@ -70,9 +70,17 @@ public object KotlinFrontend {
 				extendedClasses(files), objectEnums)
 			val modules = mutableListOf<LuaModule>()
 			val diagnostics = mutableListOf<Diagnostic>()
+			// The file each Lua file comes from
+			val sources = mutableMapOf<String, KtFile>()
 			for (file in files) {
 				analyze(file) {
 					val (module, lowering) = lower(this, file, compilation)
+					val first = module?.let { sources.putIfAbsent(it.path(), file) }
+					if (first != null) {
+						// Such as Drops.kt of top-level functions beside a file that declares an object Drops
+						lowering.error(file.declarations.first(), "The Lua of this file would be ${module.path()},"
+							+ " which ${first.name} makes too; rename one of them.")
+					}
 					module?.let(modules::add)
 					diagnostics += lowering.diagnostics()
 				}

@@ -1,5 +1,5 @@
-plugin/Refused.kt:10: error: Calling kotlin.collections.chunked is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
-		private val pairs = names.chunked(2)
+plugin/Refused.kt:10: error: Calling kotlin.collections.zipWithNext is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+		private val pairs = names.zipWithNext()
 		                    ^
 
 plugin/Refused.kt:17: error: An extension function inside a class with objects is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
@@ -27,8 +27,8 @@ plugin/Refused.kt:34: error: In Lua a map's entry is its key and its value, whic
 		                    ^
 
 plugin/Refused.kt:38: error: associate with a pair that is not written key to value is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
-	fun lengths(items: List<String>): Map<String, Int> = items.associate { Pair(it, it.length) }
-	                                                                       ^
+	fun lengths(items: List<String>, pair: (String) -> Pair<String, Int>) = items.associate { pair(it) }
+	                                                                                          ^
 
 plugin/Refused.kt:41: error: Oneiro reads toString() only on a receiver the code names; write this.toString() here.
 	fun Int.label(): String = toString()
@@ -43,9 +43,49 @@ plugin/Refused.kt:50: error: Lua runs the code of let in place, where a return@l
 				^
 
 plugin/Refused.kt:58: error: In Lua this when is a statement, which can run before the code around it only where nothing would see the difference; give its value to a local of its own first, val x = when ...
-	fun calm(ready: Boolean, mood: Int): Boolean = ready && when (mood) {
-	                                                        ^
+	fun calm(mood: Int): String = mood.toString() + when (mood) {
+	                                                ^
 
 plugin/Refused.kt:64: error: maxWith and minWith over a map's entries is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
 	fun most(stock: Map<String, Int>): String? = stock.maxWithOrNull(compareBy { it.value })?.key
 	                                                   ^
+
+plugin/Refused.kt:67: error: Kotlin's == compares pairs by their parts, but Lua's compares tables by identity; compare their parts instead, or use === for identity.
+	fun same(a: Pair<Int, Int>, b: Pair<Int, Int>): Boolean = a == b
+	                                                          ^
+
+plugin/Refused.kt:70: error: partition whose lists are not destructured, val (passed, failed) = ... is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+	fun parts(levels: List<Int>): Pair<List<Int>, List<Int>> = levels.partition { it > 1 }
+	                                                                  ^
+
+plugin/Refused.kt:76: error: A secondary constructor that does more than pass its parameters on to the primary constructor, with values for the rest, is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+		constructor(half: Int, twice: Boolean) : this(if (twice) half * 2 else half)
+		^
+
+plugin/Refused.kt:86: error: Lua gives a parameter a call leaves out one default, but total would take 0 and 1; give the constructors one value for it.
+		constructor(name: String) : this(name, 1)
+		^
+
+plugin/Refused.kt:93: error: An extension property inside a class with objects is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+		val String.loud: String
+		^
+
+plugin/Refused.kt:103: error: An extension property's setter is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+		set(value) {
+		^
+
+plugin/Shape.kt:4: error: Shape has no Lua module of its own to hold this top-level function; move it into a file of top-level functions and properties of its own.
+private fun side(size: Int): Int = size / 4
+^
+
+plugin/Stray.kt:4: error: Lua has one module per file, and this file's is Stray's, so a top-level property that other files use has no module to go in; make it private, or move it into Stray or a file of top-level functions and properties of its own.
+val strayCount = 1
+^
+
+plugin/Stray.kt:7: error: Lua has one module per file, and this file's is Stray's, so a top-level function that other files use has no module to go in; make it private, or move it into Stray or a file of top-level functions and properties of its own.
+fun shared(): Int = strayCount
+^
+
+plugin/TwinObject.kt:4: error: The Lua of this file would be src/twin.lua, which Twin.kt makes too; rename one of them.
+object Twin {
+^

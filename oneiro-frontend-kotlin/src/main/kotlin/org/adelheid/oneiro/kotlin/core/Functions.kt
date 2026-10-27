@@ -10,10 +10,13 @@ import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.Trivia
 import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
+import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstantExpression
+import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtProperty
 
 /**
  * Kotlin functions as Lua functions, with their comments: an object's, as fields of its table or as locals; a class's
@@ -78,21 +81,49 @@ internal class Functions(private val unit: FileLowering) {
 		return listOf("self")
 	}
 
-	/** `local function name(...)`, which `function name(...)` assigns when it is declared ahead. */
-	private fun local(function: KtNamedFunction, body: FunctionBody): Member {
-		val name = unit.names.luaName(function.name!!)
-		val trivia = Trivia(true, comments(function), null)
-		val origin = unit.source.position(unit.codeStart(function))
-		val declared = Block.Entry(Statement.LocalFunction(name, body), trivia, origin)
-		val assigned = Block.Entry(Statement.FunctionDeclaration(listOf(name), null, body), trivia, origin)
-		return Member(listOf(function), true, name, listOf(declared), listOf(assigned), References.of(unit, function))
+	/**
+	 * An extension property, as a function that takes the receiver as `self` and gives the getter's value:
+	 * `val String.initial: String get() = take(1)` is `function Texts.initial(self)`, or a local function when it is
+	 * private. A setter is not supported yet.
+	 */
+	fun extensionGetter(property: KtProperty, table: String, isPrivate: Boolean): Member {
+		val getter = property.getter?.takeIf { it.hasBody() } ?: throw Rejection(property, "An extension property"
+			+ " holds no value of its own; give it a getter, get() = ...")
+		property.setter?.let { throw Rejection.notYet(it, "An extension property's setter") }
+		// The receiver is the property's, which its getter's this names
+		unit.aliasReceiver(property, Expression.name("self"))
+		unit.aliasReceiver(getter, Expression.name("self"))
+		val lowering = BodyLowering(unit, null, false)
+		val block = getter.bodyBlockExpression?.let { lowering.block(it, endsFunction = true) }
+			?: Block(lowering.expressionBody(getter.bodyExpression!!, false), listOf())
+		val body = FunctionBody.of(listOf("self"), block)
+		val comments = getterComments(property)
+		return if (isPrivate) local(property, comments, body)
+		else field(property, comments, listOf(table, unit.memberName(property)), null, body)
 	}
 
-	private fun field(function: KtNamedFunction, path: List<String>, method: String?, body: FunctionBody): Member {
-		val trivia = Trivia(true, comments(function), null)
-		val origin = unit.source.position(unit.codeStart(function))
-		val declaration = Block.Entry(Statement.FunctionDeclaration(path, method, body), trivia, origin)
-		return Member(listOf(function), true, null, listOf(declaration), listOf(), References.of(unit, function))
+	/** `local function name(...)`, which `function name(...)` assigns when it is declared ahead. */
+	private fun local(function: KtNamedFunction, body: FunctionBody): Member = local(function, comments(function), body)
+
+	private fun local(declaration: KtCallableDeclaration, comments: List<Comment>, body: FunctionBody): Member {
+		val name = unit.names.luaName(declaration.name!!)
+		val trivia = Trivia(true, comments, null)
+		val origin = unit.source.position(unit.codeStart(declaration))
+		val declared = Block.Entry(Statement.LocalFunction(name, body), trivia, origin)
+		val assigned = Block.Entry(Statement.FunctionDeclaration(listOf(name), null, body), trivia, origin)
+		return Member(listOf(declaration), true, name, listOf(declared), listOf(assigned),
+			References.of(unit, declaration))
+	}
+
+	private fun field(function: KtNamedFunction, path: List<String>, method: String?, body: FunctionBody): Member =
+		field(function, comments(function), path, method, body)
+
+	private fun field(declaration: KtCallableDeclaration, comments: List<Comment>, path: List<String>, method: String?,
+		body: FunctionBody): Member {
+		val trivia = Trivia(true, comments, null)
+		val origin = unit.source.position(unit.codeStart(declaration))
+		val statement = Block.Entry(Statement.FunctionDeclaration(path, method, body), trivia, origin)
+		return Member(listOf(declaration), true, null, listOf(statement), listOf(), References.of(unit, declaration))
 	}
 
 	/**
@@ -139,11 +170,14 @@ internal class Functions(private val unit: FileLowering) {
 	 * The statements that give the parameters a call leaves out their defaults: `amount = amount or STEP`, or for a
 	 * `Boolean`, which `or` would not leave false, `if negative == nil then negative = false end`. A default of null
 	 * leaves the parameter nil.
+	 *
+	 * @param given the defaults that a primary constructor's parameters take from the secondary constructors
 	 */
-	fun defaults(parameters: List<KtParameter>, lowering: BodyLowering): List<Statement> = with(unit.session) {
+	fun defaults(parameters: List<KtParameter>, lowering: BodyLowering,
+		given: Map<KtParameter, KtExpression> = mapOf()): List<Statement> = with(unit.session) {
 		val statements = mutableListOf<Statement>()
 		for (parameter in parameters) {
-			val default = parameter.defaultValue ?: continue
+			val default = parameter.defaultValue ?: given[parameter] ?: continue
 			if (default is KtConstantExpression && default.node.elementType == KtNodeTypes.NULL) {
 				continue
 			}
@@ -170,10 +204,8 @@ internal class Functions(private val unit: FileLowering) {
 		val expression = function.bodyExpression
 		return when {
 			block != null -> lowering.block(block, endsFunction = true)
-			expression != null && returnsUnit(function) ->
-				Block(lowering.expressionStatement(expression).map(Block.Entry::of), listOf())
 			// An expression body is the function's return, which a chain, a when or a scope function can be too
-			expression != null -> Block(lowering.returned(expression).map(Block.Entry::of), listOf())
+			expression != null -> Block(lowering.expressionBody(expression, returnsUnit(function)), listOf())
 			else -> throw Rejection(function, "A function without a body has no Lua; give it one.")
 		}
 	}
@@ -184,18 +216,38 @@ internal class Functions(private val unit: FileLowering) {
 	/**
 	 * The `---@param` annotations of parameters, with their KDoc texts: a parameter with a default is optional,
 	 * `amount?`, and a vararg parameter is `...`, of the type of each value it takes.
+	 *
+	 * @param optional the parameters that take a default from elsewhere, as from a secondary constructor
 	 */
-	fun parameterAnnotations(parameters: List<KtParameter>, doc: KDoc): List<Comment> = with(unit.session) {
+	fun parameterAnnotations(parameters: List<KtParameter>, doc: KDoc, optional: Set<KtParameter> = setOf()):
+		List<Comment> = with(unit.session) {
 		parameters.map { parameter ->
 			val type = unit.types.luaType(parameter.symbol.returnType)
 			val text = KDocText.param(doc, parameter.name!!)
 			val name = when {
 				parameter.isVarArg -> "..."
-				parameter.hasDefaultValue() -> unit.localName(parameter, parameter.name!!) + "?"
+				parameter.hasDefaultValue() || parameter in optional ->
+					unit.localName(parameter, parameter.name!!) + "?"
 				else -> unit.localName(parameter, parameter.name!!)
 			}
 			Comment.annotation("@param $name $type $text".trimEnd())
 		}
+	}
+
+	/**
+	 * An extension property's comments: the source comments above it, its KDoc description, and, with KDoc, its
+	 * receiver as `---@param self` and its value as `---@return`.
+	 */
+	private fun getterComments(property: KtProperty): List<Comment> = with(unit.session) {
+		val lines = unit.source.leading(property).toMutableList()
+		val doc = property.docComment ?: return lines
+		KDocText.description(doc).forEach { lines += Comment.line(it) }
+		property.symbol.receiverParameter?.let { receiver ->
+			lines += Comment.annotation("@param self ${unit.types.luaType(receiver.returnType)}")
+		}
+		lines += Comment.annotation(DocAnnotations.returned(unit.types.luaType(property.symbol.returnType),
+			KDocText.returned(doc)))
+		return lines
 	}
 
 	/**

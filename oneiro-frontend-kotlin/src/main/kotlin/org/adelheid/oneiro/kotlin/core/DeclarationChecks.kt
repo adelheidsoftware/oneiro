@@ -74,6 +74,23 @@ internal class DeclarationChecks(private val unit: FileLowering) {
 		locals(main, classes)
 	}
 
+	/**
+	 * The checks of a file of top-level functions and properties, as of an object's members: no overloads, no public
+	 * property and function of one name in the module's table, and no two locals of one name in its chunk.
+	 */
+	fun checkTopLevel() {
+		val declarations = unit.file.declarations
+		overloads(declarations)
+		sharedSlots(declarations.filterIsInstance<KtProperty>().filter { !it.isPrivateInLua() }.mapNotNull { it.name },
+			declarations.filterIsInstance<KtNamedFunction>())
+		val taken = mutableMapOf<String, PsiElement>(unit.moduleName to unit.file)
+		for (declaration in declarations) {
+			if ((declaration is KtNamedFunction || declaration is KtProperty) && declaration.isPrivateInLua()) {
+				claim(taken, declaration as KtNamedDeclaration)
+			}
+		}
+	}
+
 	/** Functions of one class, object or file that share a name, which one Lua function would have to be. */
 	private fun overloads(declarations: List<KtDeclaration>) {
 		val functions = declarations.filterIsInstance<KtNamedFunction>().groupBy { it.name }
@@ -100,7 +117,12 @@ internal class DeclarationChecks(private val unit: FileLowering) {
 		val properties = declaration.declarations.filterIsInstance<KtProperty>()
 			.filter { instance || !it.isPrivateInLua() }.mapNotNull { it.name } +
 			declaration.primaryConstructorParameters.filter { it.hasValOrVar() }.mapNotNull { it.name }
-		for (function in declaration.declarations.filterIsInstance<KtNamedFunction>()) {
+		sharedSlots(properties, declaration.declarations.filterIsInstance<KtNamedFunction>())
+	}
+
+	/** The functions, other than private ones, that share a name with one of the properties, each reported. */
+	private fun sharedSlots(properties: List<String>, functions: List<KtNamedFunction>) {
+		for (function in functions) {
 			val name = function.name ?: continue
 			if (name in properties && !function.isPrivateInLua()) {
 				unit.error(function, "The property $name and the function $name() would share one slot in the Lua"

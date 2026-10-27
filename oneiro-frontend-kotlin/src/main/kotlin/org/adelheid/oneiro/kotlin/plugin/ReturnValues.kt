@@ -85,9 +85,6 @@ internal class ReturnValues(private val body: BodyLowering) {
 	/** `val (low, high) = span(values)` as `local low, high = Heights.span(values)`. */
 	fun destructured(declaration: KtDestructuringDeclaration): Statement {
 		val initializer = declaration.initializer ?: throw Rejection(declaration, "This declaration has no value.")
-		if (components(with(unit.session) { initializer.expressionType }) == null) {
-			throw Rejection.notYet(declaration, "Destructuring a value that is not a function's several values")
-		}
 		if (!isCall(initializer) || isConstructor(initializer)) {
 			throw Rejection(initializer, "The values a Lua function returns exist only at its call; destructure the"
 				+ " call itself.")

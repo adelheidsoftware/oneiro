@@ -20,12 +20,12 @@ import org.adelheid.oneiro.lowering.LuaModule
 import org.adelheid.oneiro.lowering.ModuleLayout
 import org.adelheid.oneiro.lowering.ModulePaths
 import org.adelheid.oneiro.lowering.SourceLanguage
-import org.adelheid.oneiro.lowering.client.BindingAnnotations
 import org.adelheid.oneiro.lowering.client.ClientApi
 import org.adelheid.oneiro.lowering.translation.Helper
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Comment
 import org.adelheid.oneiro.lua.Expression
+import org.adelheid.oneiro.lua.LuaNames
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.symbols.KaCallableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
@@ -36,6 +36,7 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolOrigin
 import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.types.KaType
+import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtClass
@@ -47,7 +48,6 @@ import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
-import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtTypeReference
@@ -81,8 +81,8 @@ internal class FileLowering(
 	val reviews = ReviewWarnings(this)
 	val optionals = OptionalChecks(this)
 
-	/** The parameters of the loops that count from 1, decided for the whole file at once. */
-	val oneBased: Set<KtParameter> by lazy { OneBasedLoops.find(this) }
+	/** The variables of the loops that count from 1, decided for the whole file at once; see [OneBasedLoops]. */
+	val oneBased: Set<KtNamedDeclaration> by lazy { OneBasedLoops.find(this) }
 
 	/** The file's integer values that are never negative. */
 	val nonNegative = NonNegative(this)
@@ -140,13 +140,16 @@ internal class FileLowering(
 			return null
 		}
 		val main = classes.singleOrNull()
-		if (main == null || main.name == null) {
-			reject(Rejection.notYet(file.declarations.firstOrNull() ?: file,
-				"A file that declares anything but one class, object, interface or enum"))
-			return null
+		if (main == null) {
+			// A file of top-level functions and properties is a module of its own; one of type aliases alone has no Lua
+			val first = file.declarations.firstOrNull { it is KtNamedFunction || it is KtProperty } ?: return null
+			return finished(first, topLevelModule(packageName, checks))
 		}
-		moduleName = main.name!!
-		if (main is KtClass && main.isPlainData()) {
+		moduleName = main.name ?: return null
+		val plainData = main is KtClass && main.isPlainData()
+		val settings = main is KtClass && main.isInterface() && hasAnnotation(main, Annotations.CONFIG_GROUP)
+		checkTopLevel(main, !plainData && !settings)
+		if (plainData) {
 			// A plain table, built where it is constructed, which produces no Lua of its own
 			return null
 		}
@@ -169,18 +172,20 @@ internal class FileLowering(
 					+ " of settings; make ${main.name} an interface whose functions carry @ConfigItem.")
 				main is KtClass && main.isEnum() && with(session) { main.classSymbol }?.let(::isObjectEnum) == true -> {
 					val classes = ClassLowering(this)
-					val members = classes.objectEnumMembers(main)
+					val members = classes.fileMembers(file, moduleName) + classes.objectEnumMembers(main)
 					LuaModule.of(path(packageName), header, Block(assemble(Expression.Table(listOf()), true, members),
 						listOf()))
 				}
 				main is KtClass && main.isEnum() -> {
 					// A simple enum's table holds its constants, and nothing else
-					val table = ClassLowering(this).enumTable(main)
-					LuaModule.of(path(packageName), header, Block(assemble(table, false, listOf()), listOf()))
+					val classes = ClassLowering(this)
+					val table = classes.enumTable(main)
+					LuaModule.of(path(packageName), header, Block(assemble(table, false,
+						classes.fileMembers(file, moduleName)), listOf()))
 				}
 				else -> {
 					val classes = ClassLowering(this)
-					val members = classes.members(main)
+					val members = classes.fileMembers(file, moduleName) + classes.members(main)
 					val instanceClass = main is KtClass && !main.isInterface()
 					val body = assemble(classes.classTable(main), instanceClass, members)
 					LuaModule.of(path(packageName), header, Block(body, listOf()))
@@ -190,8 +195,109 @@ internal class FileLowering(
 			reject(rejection)
 			null
 		}
+		return finished(main, module)
+	}
+
+	/**
+	 * A file of top-level functions and properties, which no class names: a module named after the file, `Texts` for
+	 * `Texts.kt`, whose functions and properties are its table's, as an object's are, or locals when they are private.
+	 */
+	private fun topLevelModule(packageName: String, checks: DeclarationChecks): LuaModule? {
+		moduleName = topLevelName(file)
+		val first = file.declarations.first { it is KtNamedFunction || it is KtProperty }
+		if (!LuaNames.isName(moduleName)) {
+			error(first, "The Lua of this file is a module named after it, and $moduleName is no Lua name; rename the"
+				+ " file.")
+			return null
+		}
+		if (path(packageName) in options.plugin.luaFiles()) {
+			error(first, "The Lua of $moduleName would be ${path(packageName)}, a file the plugin's own Lua has"
+				+ " already; rename this file or that one.")
+			return null
+		}
+		checks.checkTopLevel()
+		val header = fileHeader()
+		checkSubscribers()
+		return try {
+			val members = ClassLowering(this).fileMembers(file, moduleName)
+			LuaModule.of(path(packageName), header, Block(assemble(Expression.Table(listOf()), false, members),
+				listOf()))
+		} catch (rejection: Rejection) {
+			reject(rejection)
+			null
+		}
+	}
+
+	/**
+	 * A file's top-level functions and properties beside its class: a private one is a local of the module's chunk, and
+	 * so is any property of the plugin class's file, as the plugin class's members are. Any other has no module to go
+	 * in, since the file's is its class's, and neither has any beside a class without Lua of its own.
+	 *
+	 * @param locals whether the class's module can hold the file's private functions and properties
+	 */
+	private fun checkTopLevel(main: KtClassOrObject, locals: Boolean) {
+		val entryFile = main is KtClass && (isPluginClass(main) || isDevEntry(main))
+		for (declaration in file.declarations) {
+			if (declaration !is KtNamedFunction && declaration !is KtProperty) {
+				continue
+			}
+			val kind = if (declaration is KtNamedFunction) "function" else "property"
+			if (!locals) {
+				error(declaration, "${main.name} has no Lua module of its own to hold this top-level $kind; move it"
+					+ " into a file of top-level functions and properties of its own.")
+			} else if (!declaration.isPrivateInLua() && !(entryFile && declaration is KtProperty)) {
+				error(declaration, "Lua has one module per file, and this file's is ${main.name}'s, so a top-level"
+					+ " $kind that other files use has no module to go in; make it private, or move it into"
+					+ " ${main.name} or a file of top-level functions and properties of its own.")
+			}
+		}
+	}
+
+	/**
+	 * The comments above a file's package line, with its KDoc's description: the header of the module of a file of
+	 * top-level functions and properties, which no class's KDoc describes.
+	 */
+	private fun fileHeader(): List<Comment> {
+		val start = file.packageDirective?.takeIf { it.textLength > 0 }?.textRange?.startOffset ?: 0
+		val header = source.before(start).toMutableList()
+		val doc = PsiTreeUtil.collectElementsOfType(file, KDoc::class.java)
+			.firstOrNull { it.textRange.endOffset <= start }
+		if (doc != null) {
+			if (header.isNotEmpty()) {
+				header += Comment.line("")
+			}
+			KDocText.description(doc).forEach { header += Comment.line(it) }
+		}
+		if (header.isEmpty()) {
+			warning(file.packageDirective ?: file, "This file has no comment above its package line, but every Lua file"
+				+ " starts with a comment that says what it does; add a KDoc comment there.")
+		}
+		return header
+	}
+
+	/** The name of the module of a file of top-level functions and properties: the file's, `Texts` for `Texts.kt`. */
+	fun topLevelName(declaring: KtFile): String = declaring.name.substringBeforeLast('.')
+
+	/**
+	 * The module of a file of top-level functions and properties: a local of this file for its own, or the other
+	 * file's module, required.
+	 */
+	fun topLevelModule(declaring: KtFile): Expression {
+		val local = topLevelName(declaring)
+		if (declaring == file) {
+			return Expression.name(local)
+		}
+		return required(local, ModulePaths.requirePath(sourceFolder(), options.rootPackage,
+			declaring.packageFqName.asString(), local))
+	}
+
+	/** Whether a file holds top-level functions and properties alone, which make a module of their own. */
+	fun isTopLevelFile(declaring: KtFile): Boolean = declaring.declarations.none { it is KtClassOrObject }
+
+	/** The module, after the checks every module ends with; null when the file has errors. */
+	private fun finished(anchor: PsiElement, module: LuaModule?): LuaModule? {
 		for ((local, paths) in requireClashes) {
-			error(main, "In Lua, this file would require ${paths.joinToString(" and ")} as one local, $local;"
+			error(anchor, "In Lua, this file would require ${paths.joinToString(" and ")} as one local, $local;"
 				+ " rename the class or file of one.")
 		}
 		val failed = diagnostics.any { it.severity() == Diagnostic.Severity.ERROR }

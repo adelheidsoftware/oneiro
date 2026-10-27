@@ -276,6 +276,77 @@ public enum Helper {
 			    return text
 			end
 			return text:sub(last + 1)"""),
+	REPLACE("replace", "The text with each occurrence of old replaced by new, found as it is written, not as a"
+			+ " pattern, as Kotlin's replace.", "text, old, new", """
+			if old == "" then
+			    -- Kotlin puts new before each character and after the last
+			    return (text:gsub("", (new:gsub("%%", "%%%%"))))
+			end
+			local parts = {}
+			local start = 1
+			while true do
+			    local first, last = text:find(old, start, true)
+			    if first == nil then
+			        break
+			    end
+			    parts[#parts + 1] = text:sub(start, first - 1)
+			    parts[#parts + 1] = new
+			    start = last + 1
+			end
+			parts[#parts + 1] = text:sub(start)
+			return table.concat(parts)"""),
+	LINES("lines", "The text's lines, split at \\r\\n, \\n or \\r, as Kotlin's lines().", "text", """
+			local list = {}
+			local start = 1
+			while true do
+			    local first = text:find("[\\r\\n]", start)
+			    if first == nil then
+			        break
+			    end
+			    list[#list + 1] = text:sub(start, first - 1)
+			    -- \\r\\n ends one line, not two
+			    if text:sub(first, first + 1) == "\\r\\n" then
+			        start = first + 2
+			    else
+			        start = first + 1
+			    end
+			end
+			list[#list + 1] = text:sub(start)
+			return list"""),
+	COMPARE("compare", "-1, 0 or 1 as a comes before b, with it or after it, as Kotlin's compareTo, whose sign is all"
+			+ " it promises.", "a, b", """
+			if a < b then
+			    return -1
+			elseif b < a then
+			    return 1
+			end
+			return 0"""),
+	REVERSED("reversed", "A new list of the list's elements in the reverse order, as Kotlin's reversed().", "list", """
+			local copy = {}
+			for i = #list, 1, -1 do
+			    copy[#copy + 1] = list[i]
+			end
+			return copy"""),
+	CLEAR("clear", "Removes every element or entry of the table, as Kotlin's clear().", "t", """
+			for key in pairs(t) do
+			    t[key] = nil
+			end"""),
+	INTERSECTION("intersection", "Adds each element of a that b has too to the set, and gives the set, as Kotlin's"
+			+ " intersect.", "set, a, b", """
+			for key in pairs(a) do
+			    if b[key] ~= nil then
+			        set[key] = true
+			    end
+			end
+			return set"""),
+	DIFFERENCE("difference", "Adds each element of a that b lacks to the set, and gives the set, as Kotlin's"
+			+ " subtract.", "set, a, b", """
+			for key in pairs(a) do
+			    if b[key] == nil then
+			        set[key] = true
+			    end
+			end
+			return set"""),
 	SORTED_TABLE("sortedTable", "A table whose pairs walks its keys in sorted order, as Java's TreeMap and TreeSet"
 			+ " do; comesBefore orders them, and Lua's < when it is nil.", "comesBefore", """
 			return setmetatable({}, {
@@ -383,8 +454,9 @@ public enum Helper {
 			case VALUES_OF -> "The table's values as a list, in the order pairs gives them, as Kotlin copies a map's"
 					+ " values into a list.";
 			case ADD_ELEMENTS, ADD_KEYS, COPY_ENTRIES, PUT_ENTRIES -> comment;
-			// Kotlin's own string functions, which only the Kotlin front end uses
-			case PAD_START, PAD_END, REMOVE_PREFIX, REMOVE_SUFFIX, SUBSTRING_BEFORE, SUBSTRING_AFTER -> comment;
+			// Kotlin's own functions, which only the Kotlin front end uses
+			case PAD_START, PAD_END, REMOVE_PREFIX, REMOVE_SUFFIX, SUBSTRING_BEFORE, SUBSTRING_AFTER, REPLACE, LINES,
+					COMPARE, REVERSED, CLEAR, INTERSECTION, DIFFERENCE -> comment;
 			case FIRST_KEY -> "The first key pairs gives, as a sorted set's first() or a sorted map's firstKey(); nil"
 					+ " for an empty table, where Kotlin throws.";
 			case LAST_KEY -> "The last key pairs gives, as a sorted set's last() or a sorted map's lastKey(); nil for"

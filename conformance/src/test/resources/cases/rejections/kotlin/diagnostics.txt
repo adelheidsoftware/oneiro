@@ -70,13 +70,13 @@ plugin/Gaps.kt:108: error: A Lua string holds bytes, and 'é' takes several, so 
 		return 'é' - 'a'
 		       ^
 
-plugin/Gaps.kt:112: error: Calling kotlin.collections.chunked is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
-		return names.chunked(2)
+plugin/Gaps.kt:112: error: Calling kotlin.collections.zipWithNext is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
+		return names.zipWithNext()
 		       ^
 
-plugin/Gaps.kt:116: error: In Lua a chain of collection functions is a loop, which runs as statements; make the chain the whole value of a local, an assignment or a return, or a forEach statement of its own.
-		return 1 + names.count { it.isNotEmpty() }
-		           ^
+plugin/Gaps.kt:116: error: In Lua a chain of collection functions is a loop, which can run before the code around it only where nothing would see the difference; give its value to a local of its own first, val x = ...
+		return names.indexOf("") + names.count { it.isNotEmpty() }
+		                           ^
 
 plugin/Gaps.kt:120: error: A chain's loop sees one element at a time, so it sorts only what it collects; sort at the end of the chain, or sort the list afterwards.
 		return names.sorted().filter { it.isNotEmpty() }

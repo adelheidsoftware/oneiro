@@ -28,7 +28,8 @@ import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 
 /**
- * The plugin class as `main.lua`, a chunk of locals: the file's constants, the class's properties and functions,
+ * The plugin class as `main.lua`, a chunk of locals: the file's constants and private functions, the class's
+ * properties and functions,
  * whatever their visibility, then the statements of `startUp()`, which run when the client loads the file, a
  * subscription for each `@Subscribe` function, and the global `PluginShutdown`, which unsubscribes them and runs
  * `shutDown()`. A property of a settings interface holds nothing: calls through it call the settings module. The dev
@@ -45,6 +46,9 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 		for (constant in unit.file.declarations.filterIsInstance<KtProperty>()) {
 			members += local(constant)
 		}
+		for (function in unit.file.declarations.filterIsInstance<KtNamedFunction>()) {
+			members += functions.static(function, unit.moduleName, true)
+		}
 		val subscriptions = mutableListOf<Subscription>()
 		// The class's members stand apart from the file's constants above them
 		val fileConstants = members.size
@@ -54,6 +58,8 @@ internal class PluginClass(private val unit: FileLowering, private val type: KtC
 					member is KtProperty && unit.isSettingsProperty(member) -> member.initializer?.let {
 						throw Rejection(it, SETTINGS_VALUE + "initializer.")
 					}
+					member is KtProperty && member.receiverTypeReference != null ->
+						members += functions.extensionGetter(member, unit.moduleName, true)
 					member is KtProperty -> members += local(member, members.size == fileConstants && fileConstants > 0)
 					member is KtAnonymousInitializer || member is KtSecondaryConstructor -> {
 						val instead = if (member is KtAnonymousInitializer) "an init block" else "a constructor"

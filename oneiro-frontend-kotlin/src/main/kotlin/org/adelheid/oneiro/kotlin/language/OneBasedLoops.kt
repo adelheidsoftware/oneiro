@@ -1,18 +1,24 @@
 package org.adelheid.oneiro.kotlin.language
 
+import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.kotlin.core.FileLowering
+import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
+import org.jetbrains.kotlin.analysis.api.resolution.symbol
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
+import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtContainerNode
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
+import org.jetbrains.kotlin.psi.KtPsiUtil
 
 /**
  * A range a `for` loop counts over: `start until end` and `start ..< end`, which stop before the end; `start..end`,
@@ -78,18 +84,30 @@ internal class CountingRange(
  * Decides which loops count from 1 in Lua, by the Java front end's rule. A loop `for (i in 0 until n)` becomes
  * `for i = 1, n do` when its body uses `i` only as an index (`list[i]`), in `i + 1`, or compared with another loop
  * variable that counts from 1. Lua's `i` is then Kotlin's `i + 1`: every index loses its `+ 1`, `i + 1` becomes `i`,
- * and comparing two such variables keeps its meaning. Whether a comparison qualifies depends on the other loop, so the
- * whole file is decided at once, dropping loops until every one left qualifies.
+ * and comparing two such variables keeps its meaning. The position of a list's element follows the same rule, in
+ * `for ((index, name) in names.withIndex())` and the lambdas of `forEachIndexed`, `mapIndexed` and `filterIndexed`,
+ * where it is `ipairs`'s own then. Whether a comparison qualifies depends on the other loop, so the whole file is
+ * decided at once, dropping loops until every one left qualifies.
  */
 internal object OneBasedLoops {
 
-	fun find(unit: FileLowering): Set<KtParameter> {
-		val candidates = PsiTreeUtil.collectElementsOfType(unit.file, KtForExpression::class.java)
-			.filter { countsFromZero(it) }
-			.associateBy { it.loopParameter!! }
-			.toMutableMap()
+	fun find(unit: FileLowering): Set<KtNamedDeclaration> {
+		// Each variable that may count from 1, with the code it is read in
+		val candidates = mutableMapOf<KtNamedDeclaration, PsiElement?>()
+		for (loop in PsiTreeUtil.collectElementsOfType(unit.file, KtForExpression::class.java)) {
+			if (countsFromZero(loop)) {
+				candidates[loop.loopParameter!!] = loop.body
+			}
+			val index = loop.destructuringDeclaration?.entries?.firstOrNull()
+			if (index != null && index.name != "_" && indexedList(unit, loop.loopRange) != null) {
+				candidates[index] = loop.body
+			}
+		}
+		for (call in PsiTreeUtil.collectElementsOfType(unit.file, KtCallExpression::class.java)) {
+			indexParameter(unit, call)?.let { (parameter, code) -> candidates[parameter] = code }
+		}
 		while (true) {
-			val unfit = candidates.filter { (parameter, loop) -> !qualifies(unit, parameter, loop, candidates.keys) }
+			val unfit = candidates.filter { (variable, code) -> !qualifies(unit, variable, code, candidates.keys) }
 			if (unfit.isEmpty()) {
 				return candidates.keys.toSet()
 			}
@@ -97,22 +115,51 @@ internal object OneBasedLoops {
 		}
 	}
 
+	/** The list a loop walks the positions and elements of, `names` of `names.withIndex()`; null for another range. */
+	fun indexedList(unit: FileLowering, range: KtExpression?): KtExpression? = with(unit.session) {
+		val qualified = range?.let(KtPsiUtil::safeDeparenthesize) as? KtDotQualifiedExpression ?: return null
+		val call = qualified.selectorExpression as? KtCallExpression ?: return null
+		val id = call.resolveToCall()?.successfulFunctionCallOrNull()?.symbol?.callableId ?: return null
+		if (id.packageName.asString() != "kotlin.collections" || id.callableName.asString() != "withIndex") {
+			return null
+		}
+		val list = qualified.receiverExpression
+		if (list.expressionType?.let(unit.types::isSequence) == true) list else null
+	}
+
+	/**
+	 * The position parameter of the lambda of `forEachIndexed`, `mapIndexed` or `filterIndexed`, with the lambda's
+	 * code; null for any other call, and for a lambda that leaves the position unnamed.
+	 */
+	private fun indexParameter(unit: FileLowering, call: KtCallExpression): Pair<KtParameter, PsiElement?>? =
+		with(unit.session) {
+			val id = call.resolveToCall()?.successfulFunctionCallOrNull()?.symbol?.callableId ?: return null
+			if (id.packageName.asString() != "kotlin.collections" || id.callableName.asString() !in INDEXED) {
+				return null
+			}
+			val lambda = call.lambdaArguments.singleOrNull()?.getLambdaExpression() ?: return null
+			val index = lambda.functionLiteral.valueParameters.firstOrNull() ?: return null
+			if (index.name == null || index.name == "_" || index.destructuringDeclaration != null) null
+			else index to lambda.bodyExpression
+		}
+
 	private fun countsFromZero(loop: KtForExpression): Boolean {
 		val range = CountingRange.of(loop) ?: return false
 		return loop.loopParameter?.destructuringDeclaration == null && loop.loopParameter?.name != null &&
 			range.countsFromZero
 	}
 
-	private fun qualifies(unit: FileLowering, parameter: KtParameter, loop: KtForExpression,
-			candidates: Set<KtParameter>): Boolean {
-		val body = loop.body ?: return true
+	private fun qualifies(unit: FileLowering, variable: KtNamedDeclaration, code: PsiElement?,
+			candidates: Set<KtNamedDeclaration>): Boolean {
+		val body = code ?: return true
 		return PsiTreeUtil.collectElementsOfType(body, KtNameReferenceExpression::class.java)
-			.filter { declaration(unit, it) == parameter }
+			.filter { declaration(unit, it) == variable }
 			.all { fits(unit, it, candidates) }
 	}
 
 	/** Whether one use of the loop variable keeps its meaning when the variable counts from 1. */
-	private fun fits(unit: FileLowering, use: KtNameReferenceExpression, candidates: Set<KtParameter>): Boolean {
+	private fun fits(unit: FileLowering, use: KtNameReferenceExpression, candidates: Set<KtNamedDeclaration>):
+		Boolean {
 		val parent = use.parent
 		if (parent is KtContainerNode) {
 			val access = parent.parent as? KtArrayAccessExpression ?: return false
@@ -136,4 +183,7 @@ internal object OneBasedLoops {
 
 	private fun declaration(unit: FileLowering, reference: KtNameReferenceExpression): Any? =
 		with(unit.session) { reference.resolveSymbol()?.psi }
+
+	/** The functions whose lambda takes an element's position before the element. */
+	private val INDEXED = setOf("forEachIndexed", "mapIndexed", "filterIndexed")
 }

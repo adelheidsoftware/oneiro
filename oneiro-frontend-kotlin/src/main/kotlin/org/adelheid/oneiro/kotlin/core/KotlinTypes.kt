@@ -58,6 +58,9 @@ internal class KotlinTypes(
 
 	fun isBoolean(type: KaType): Boolean = classId(type) == StandardClassIds.Boolean
 
+	/** A `Pair` or a `Triple`, which Lua holds as a table of its parts. */
+	fun isPair(type: KaType): Boolean = classId(type) in PAIRS
+
 	/** `Nothing`, the type of code that never gives a value, such as `throw` and `error(...)`. */
 	fun isNothing(type: KaType): Boolean = classId(type) == StandardClassIds.Nothing
 
@@ -76,6 +79,7 @@ internal class KotlinTypes(
 			isList(type) || isArray(type) -> element(type, 0) + "[]"
 			isSet(type) -> "table<" + element(type, 0) + ", true>"
 			isMap(type) -> "table<" + element(type, 0) + ", " + element(type, 1) + ">"
+			isPair(type) -> "table"
 			else -> classType(type)
 		}
 		return if (isNullable(type) && base != "any") "$base?" else base
@@ -139,5 +143,6 @@ internal class KotlinTypes(
 		val INTEGRAL = setOf(StandardClassIds.Int, StandardClassIds.Long, StandardClassIds.Short, StandardClassIds.Byte)
 		val PRIMITIVE_ARRAYS = StandardClassIds.elementTypeByPrimitiveArrayType.keys
 		val VOID = ClassId.topLevel(FqName("java.lang.Void"))
+		val PAIRS = setOf(ClassId.topLevel(FqName("kotlin.Pair")), ClassId.topLevel(FqName("kotlin.Triple")))
 	}
 }

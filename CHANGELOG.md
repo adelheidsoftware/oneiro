@@ -63,6 +63,29 @@ All notable changes to Oneiro are listed here. The format follows
 - **A guide to using Lua.** [Using Lua](docs/using-lua.md) explains the three kinds of Lua a plugin can use, where
   their types come from, how to write a definition file for a library that has none, how to check it and share it,
   and the overrides file.
+- **More of Kotlin compiles.**
+  - A chain of collection functions anywhere a value goes, such as `if (drops.any { it.rare })` or
+    `drops.count { ... } + 1`: its loop runs before the statement, where nothing the statement does would see the
+    difference. So does a chain, an `if` or a `when` on the right of `&&` and `||`, inside an `if` that runs it only
+    where Kotlin's right side would run.
+  - `fold`, `reduce`, `average`, `single`, `flatten`, `filterIsInstance`, `chunked`, `windowed` and `zip` in a
+    chain, and a text's `count { }`, `any { }`, `all { }`, `none { }`, `first { }`, `last { }`, `find { }` and
+    `forEach { }`, which walk its chars.
+  - `repeat(n) { }`, `takeIf { }` and `takeUnless { }`, `run { }` that gives a value, and `buildList { }`,
+    `buildSet { }` and `buildMap { }`.
+  - On numbers, `coerceIn`, `coerceAtLeast`, `coerceAtMost`, `roundToInt` and `compareTo`; on text, `replace`,
+    `lines()`, `compareTo`, `orEmpty()`, `isNullOrEmpty()` and `isNullOrBlank()`.
+  - On collections, a map's `keys` and `values` as values of their own, `getOrElse`, `clear()`, `reversed()`,
+    `orEmpty()` and `isNullOrEmpty()`, and `union`, `intersect` and `subtract` of two sets.
+  - A file of top-level functions and properties, as a module named after the file, `Levels.kt` as
+    `src/levels.lua`, which other files require. Beside a class, private top-level functions and properties are
+    locals of the class's module.
+  - Secondary constructors: one that passes its parameters on to the primary constructor gives the rest their
+    defaults, and a class without a primary constructor takes its one secondary constructor's parameters.
+    Extension properties, whose getters are functions that take the receiver first.
+  - `Pair`, `Triple` and `a to b`, as tables of their parts; `val (a, b) = ...` of a pair, a data class's value, a
+    list, or `partition`'s two lists; `for ((name, level) in entries)`; `withIndex()`, `forEachIndexed`,
+    `mapIndexed` and `filterIndexed`, whose positions count from 0 as Kotlin's do; and `toMap()`.
 - **Module descriptors.** Oneiro's Java modules now have a `module-info`, named after their packages, such as
   `org.adelheid.oneiro.api`, for builds that use the module path.
 
@@ -114,6 +137,9 @@ All notable changes to Oneiro are listed here. The format follows
 
 ### Fixed
 
+- A top-level property in a Kotlin file with an object or a class, other than the plugin class, is now a local of
+  that file's module when it is private, and an error otherwise. Before, the Lua read it as a global that was never
+  set.
 - Two classes with the same name from different packages, used in the same file, now give an error. Before, Oneiro
   required the first one for both.
 - A class of fields that a function takes as one type of a union, as in `string|Options`, is now a table your plugin

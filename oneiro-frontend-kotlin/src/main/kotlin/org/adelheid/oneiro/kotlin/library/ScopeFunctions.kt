@@ -47,6 +47,9 @@ import org.jetbrains.kotlin.psi.KtThisExpression
  * expression, or for `apply` and `also`, the receiver. Code that declares locals of its own runs in a `do` block, so
  * that they end with it.
  *
+ * `takeIf { ... }` and `takeUnless` give their receiver where the test passes, and fails, and nil otherwise:
+ * `level > 0 and level or nil` on a receiver the code names, and a local that the test empties otherwise.
+ *
  * On `receiver?.`, the lambda's code runs when the receiver is not nil:
  *
  * ```kotlin
@@ -107,6 +110,68 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 			else -> return null
 		}
 		Scope(name, scoped, lambda, whole)
+	}
+
+	/**
+	 * A call of `takeIf` or `takeUnless`: its name, its receiver, its lambda, and the whole call.
+	 */
+	class Test(val function: String, val receiver: KtExpression, val lambda: KtLambdaExpression, val call: KtExpression)
+
+	/** The `takeIf` or `takeUnless` an expression calls, or null for any other expression. */
+	fun test(expression: KtExpression): Test? {
+		val plain = KtPsiUtil.safeDeparenthesize(expression) as? KtDotQualifiedExpression ?: return null
+		val call = plain.selectorExpression as? KtCallExpression ?: return null
+		return test(call, plain.receiverExpression, plain)
+	}
+
+	/** The `takeIf` or `takeUnless` a call is, on the receiver before its dot, or null for any other call. */
+	fun test(call: KtCallExpression, receiver: KtExpression?, whole: KtExpression): Test? = with(unit.session) {
+		val id = call.resolveToCall()?.successfulFunctionCallOrNull()?.symbol?.callableId ?: return null
+		val name = id.callableName.asString()
+		if (id.packageName.asString() != "kotlin" || id.classId != null || name !in TESTS || receiver == null) {
+			return null
+		}
+		val predicate = call.valueArguments.singleOrNull()?.getArgumentExpression()?.let(KtPsiUtil::safeDeparenthesize)
+		val lambda = predicate as? KtLambdaExpression
+			?: throw Rejection.notYet(whole, "$name with a function reference")
+		Test(name, receiver, lambda, whole)
+	}
+
+	/**
+	 * `takeIf { ... }` or `takeUnless` inside an expression, on a receiver the code names: the test, and the receiver,
+	 * `level > 0 and level or nil`. Null for a receiver that is no name, which Lua would read twice, and for a
+	 * `Boolean`, whose false `and` would turn into nil; those go into a local first, as [testLocal] makes.
+	 */
+	fun testValue(test: Test): Expression? {
+		val name = stableName(test.receiver) ?: return null
+		if (with(unit.session) { test.receiver.expressionType }?.let(body.types::isBoolean) != false) {
+			return null
+		}
+		return Expression.binary(Expression.binary(kept(test, name), BinaryOperator.AND, Expression.name(name)),
+			BinaryOperator.OR, Expression.Nil())
+	}
+
+	/**
+	 * `val x = receiver.takeIf { ... }`: the value [testValue] gives, where it can; otherwise the local takes the
+	 * receiver, and then nil where the test fails, `if not (x > 0) then x = nil end`, or for `takeUnless`, passes.
+	 */
+	fun testLocal(name: String, test: Test): List<Statement> {
+		testValue(test)?.let { return listOf(local(name, it)) }
+		val holder = local(name, body.expression(test.receiver))
+		val emptied = Block.of(Statement.assignment(Expression.name(name), Expression.Nil()))
+		return listOf(holder, Statement.ifThen(body.operators.negation(kept(test, name)), emptied))
+	}
+
+	/**
+	 * The test that keeps the receiver, under the name given, which the lambda's parameter stands for: the lambda's
+	 * for `takeIf`, its negation for `takeUnless`.
+	 */
+	private fun kept(test: Test, name: String): Expression {
+		val condition = body.lambdas.value(test.lambda, "In Lua the test of ${test.function} becomes a condition;"
+			+ " write it as one expression, { it > 0 }.")
+		unit.alias(body.lambdas.parameter(test.lambda).declaration, name)
+		val passed = body.expression(condition)
+		return if (test.function == "takeIf") passed else body.operators.negation(passed)
 	}
 
 	/** The scope function a call on `receiver?.` is, as [scope] finds one on `receiver.`; null for any other. */
@@ -362,5 +427,6 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 		val FUNCTIONS = setOf("let", "also", "apply", "run", "with")
 		val LAMBDA_VALUE = setOf("let", "run", "with")
 		val PASSES_RECEIVER = setOf("let", "also")
+		val TESTS = setOf("takeIf", "takeUnless")
 	}
 }

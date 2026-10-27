@@ -7,7 +7,7 @@ object Refused {
 
 	/** Names in pairs, which a class's property works out in a way Lua cannot yet. */
 	class Pairs(names: List<String>) {
-		private val pairs = names.chunked(2)
+		private val pairs = names.zipWithNext()
 	}
 
 	/** A running total. */
@@ -34,8 +34,8 @@ object Refused {
 		stock.forEach { log(it) }
 	}
 
-	/** Each item and the length of its name, as pairs made another way. */
-	fun lengths(items: List<String>): Map<String, Int> = items.associate { Pair(it, it.length) }
+	/** Each item and the length of its name, as pairs a function makes. */
+	fun lengths(items: List<String>, pair: (String) -> Pair<String, Int>) = items.associate { pair(it) }
 
 	/** A number as text, by toString() on the receiver without naming it. */
 	fun Int.label(): String = toString()
@@ -54,12 +54,53 @@ object Refused {
 		return shown
 	}
 
-	/** A when that runs only when the && gets to it. */
-	fun calm(ready: Boolean, mood: Int): Boolean = ready && when (mood) {
-		1 -> true
-		else -> false
+	/** A when after a call, whose effects would then come after the branches' code. */
+	fun calm(mood: Int): String = mood.toString() + when (mood) {
+		1 -> " calm"
+		else -> " angry"
 	}
 
 	/** The item there is most of, by a comparator, which a map's entries do not take yet. */
 	fun most(stock: Map<String, Int>): String? = stock.maxWithOrNull(compareBy { it.value })?.key
+
+	/** Whether two pairs are equal, which Kotlin decides by their parts. */
+	fun same(a: Pair<Int, Int>, b: Pair<Int, Int>): Boolean = a == b
+
+	/** The levels split in two, kept as a pair of lists. */
+	fun parts(levels: List<Int>): Pair<List<Int>, List<Int>> = levels.partition { it > 1 }
+
+	/** A tally whose secondary constructor works out the value it passes on. */
+	class Doubled(val total: Int) {
+
+		/** Twice the half, when asked. */
+		constructor(half: Int, twice: Boolean) : this(if (twice) half * 2 else half)
+	}
+
+	/** A tally whose secondary constructors give one parameter two defaults. */
+	class Torn(val name: String, val total: Int) {
+
+		/** From none. */
+		constructor() : this("", 0)
+
+		/** From one. */
+		constructor(name: String) : this(name, 1)
+	}
+
+	/** A class with an extension property, which its objects cannot hold. */
+	class Shouter(val volume: Int) {
+
+		/** The text, shouted. */
+		val String.loud: String
+			get() = uppercase()
+	}
+
+	/** A count kept for the extension property below. */
+	private var kept = 0
+
+	/** The count, through an extension property with a setter. */
+	var Int.counted: Int
+		get() = kept + this
+		set(value) {
+			kept = value
+		}
 }

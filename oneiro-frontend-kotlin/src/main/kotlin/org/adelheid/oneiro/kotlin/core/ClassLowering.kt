@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.kotlin.core
 
 import com.intellij.psi.PsiElement
+import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.kotlin.language.InheritedMembers
 import org.adelheid.oneiro.kotlin.plugin.ApiCalls
 import org.adelheid.oneiro.lua.BinaryOperator
@@ -20,9 +21,15 @@ import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtEnumEntry
+import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
+import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtReturnExpression
+import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
 
 /**
@@ -106,17 +113,40 @@ internal class ClassLowering(private val unit: FileLowering) {
 		return Expression.Table(fields)
 	}
 
+	/**
+	 * A file's own functions and properties, as an object's members: each belongs to the module's table, or is a local
+	 * when it is private. A type alias has no Lua.
+	 */
+	fun fileMembers(file: KtFile, table: String): List<Member> {
+		val members = mutableListOf<Member>()
+		for (member in file.declarations) {
+			try {
+				when {
+					member is KtNamedFunction -> members += functions.static(member, table, isPrivate(member))
+					member is KtProperty && member.receiverTypeReference != null ->
+						members += functions.extensionGetter(member, table, isPrivate(member))
+					member is KtProperty -> members += staticProperty(member, table)
+				}
+			} catch (rejection: Rejection) {
+				unit.reject(rejection)
+			}
+		}
+		return constantsFirst(members)
+	}
+
 	/** The members of an object, or of a class's companion object: each belongs to the table, or is a local. */
 	private fun staticMembers(declaration: KtClassOrObject, table: String): List<Member> {
 		val members = mutableListOf<Member>()
 		val nested = mutableListOf<Member>()
 		for (member in declaration.declarations) {
 			try {
-				when (member) {
-					is KtNamedFunction -> members += functions.static(member, table, isPrivate(member))
-					is KtProperty -> members += staticProperty(member, table)
-					is KtClassOrObject -> nested += nestedType(member, declaration, table)
-					is KtAnonymousInitializer -> members += staticInitializer(member)
+				when {
+					member is KtNamedFunction -> members += functions.static(member, table, isPrivate(member))
+					member is KtProperty && member.receiverTypeReference != null ->
+						members += functions.extensionGetter(member, table, isPrivate(member))
+					member is KtProperty -> members += staticProperty(member, table)
+					member is KtClassOrObject -> nested += nestedType(member, declaration, table)
+					member is KtAnonymousInitializer -> members += staticInitializer(member)
 					else -> throw Rejection.notYet(member, "This member of an object")
 				}
 			} catch (rejection: Rejection) {
@@ -188,6 +218,9 @@ internal class ClassLowering(private val unit: FileLowering) {
 		var constructorPlaced = false
 		for (member in declaration.declarations) {
 			try {
+				if (member is KtProperty && member.receiverTypeReference != null) {
+					throw Rejection.notYet(member, "An extension property inside a class with objects")
+				}
 				when (member) {
 					is KtProperty, is KtAnonymousInitializer -> if (!constructorPlaced) {
 						// Placed once, where it is first needed, even when Oneiro rejects it
@@ -204,6 +237,8 @@ internal class ClassLowering(private val unit: FileLowering) {
 						nested += nestedType(member, declaration, table)
 					}
 					is KtClass -> nested += nestedType(member, declaration, table)
+					// Class.new takes in what the secondary constructors do
+					is KtSecondaryConstructor -> {}
 					else -> throw Rejection.notYet(member, "This member of a class")
 				}
 			} catch (rejection: Rejection) {
@@ -300,7 +335,9 @@ internal class ClassLowering(private val unit: FileLowering) {
 	 * `Class.new`: a new object with the class as its metatable, the primary constructor's properties set from its
 	 * parameters, then each property's value and each `init` block, in declaration order. An inner class's
 	 * constructor takes the object it belongs to first and keeps it as `outer`; a subclass's object starts as its
-	 * superclass makes one.
+	 * superclass makes one. A class with a secondary constructor alone takes that one's parameters, and runs its code
+	 * last; one with a primary constructor takes defaults for its parameters from the secondary constructors, as
+	 * [givenDefaults] works out.
 	 *
 	 * @param kept the values the constructor takes first and keeps under their names, as an object enum's constant
 	 *     keeps its `name` and `ordinal`
@@ -310,12 +347,23 @@ internal class ClassLowering(private val unit: FileLowering) {
 		val self = Expression.name("self")
 		val entries = mutableListOf<Block.Entry>()
 		val superclass = superclass(declaration)
+		// A class without a primary constructor makes its objects with its one secondary constructor
+		val sole = declaration.secondaryConstructors.singleOrNull()?.takeIf { declaration.primaryConstructor == null }
+		if (sole == null && declaration.primaryConstructor == null && declaration.secondaryConstructors.isNotEmpty()) {
+			throw Rejection.notYet(declaration.secondaryConstructors[1], "A class of several secondary constructors"
+				+ " without a primary one")
+		}
+		val given = if (sole == null) givenDefaults(declaration, body) else mapOf()
+		val constructorParameters = sole?.valueParameters ?: declaration.primaryConstructorParameters
 		val created = if (superclass == null) {
 			Expression.Table(listOf())
 		} else {
-			val superCall = declaration.superTypeListEntries.filterIsInstance<KtSuperTypeCallEntry>().firstOrNull()
-			val arguments = superCall?.valueArguments?.map {
-				body.expression(it.getArgumentExpression() ?: throw Rejection(superCall, "This argument is empty."))
+			val arguments = if (sole != null) {
+				sole.getDelegationCall().valueArguments
+			} else {
+				declaration.superTypeListEntries.filterIsInstance<KtSuperTypeCallEntry>().firstOrNull()?.valueArguments
+			}?.map {
+				body.expression(it.getArgumentExpression() ?: throw Rejection(declaration, "This argument is empty."))
 			} ?: listOf()
 			Expression.Call(Expression.field(unit.moduleReference(superclass), "new"), arguments)
 		}
@@ -326,12 +374,12 @@ internal class ClassLowering(private val unit: FileLowering) {
 			entries += Block.Entry.of(Statement.assignment(Expression.field(self, value), Expression.name(value)))
 		}
 		// A parameter a call leaves out gets its default before the object is made
-		entries.addAll(0, functions.defaults(declaration.primaryConstructorParameters, body).map(Block.Entry::of))
+		entries.addAll(0, functions.defaults(constructorParameters, body, given).map(Block.Entry::of))
 		if (declaration.isInner()) {
 			parameters += "outer"
 			entries += Block.Entry.of(Statement.assignment(Expression.field(self, "outer"), Expression.name("outer")))
 		}
-		for (parameter in declaration.primaryConstructorParameters) {
+		for (parameter in constructorParameters) {
 			val name = unit.localName(parameter, parameter.name!!)
 			parameters += name
 			if (parameter.hasValOrVar()) {
@@ -365,31 +413,85 @@ internal class ClassLowering(private val unit: FileLowering) {
 				unit.reject(rejection)
 			}
 		}
+		// The secondary constructor's code runs after the properties' values and the init blocks
+		if (sole != null) {
+			sole.bodyBlockExpression?.let { code ->
+				if (PsiTreeUtil.findChildOfType(code, KtReturnExpression::class.java) != null) {
+					throw Rejection.notYet(sole, "A return inside a constructor")
+				}
+				val lowered = body.block(code)
+				add(entries, lowered.entries(), pending)
+				pending += lowered.closingComments()
+			}
+		}
 		add(entries, listOf(Block.Entry.of(Statement.Return(listOf(self)))), pending)
 		val function = Statement.FunctionDeclaration(listOf(declaration.name!!, "new"), null,
 			FunctionBody.of(parameters, Block(entries, listOf())))
+		val constructorDeclaration = sole ?: declaration.primaryConstructor
 		// A nested class's own key is its table's
-		val keys: List<PsiElement> =
-			listOfNotNull(declaration.takeIf { it.isTopLevel() }, declaration.primaryConstructor)
+		val keys: List<PsiElement> = listOfNotNull(declaration.takeIf { it.isTopLevel() }, constructorDeclaration)
 		val origin = unit.source.position(unit.codeStart(declaration))
-		val trivia = Trivia(false, constructorComments(declaration), null)
+		val trivia = Trivia(false, constructorComments(declaration, constructorParameters, given.keys), null)
 		return Member(keys, true, null, listOf(Block.Entry(function, trivia, origin)), listOf(),
-			References.of(unit, declaration.primaryConstructor) +
+			References.of(unit, constructorDeclaration) +
 				declaration.declarations.filter { it is KtProperty || it is KtAnonymousInitializer }
 					.flatMap { References.of(unit, it) })
 	}
 
 	/**
+	 * The defaults the secondary constructors give the primary constructor's parameters, where each passes its own
+	 * parameters on, in order, and values for the rest: `constructor(name: String) : this(name, 0)` makes `0` the
+	 * default of the second, which `Tally.new(name)` then takes. A secondary constructor that does anything else is not
+	 * supported yet, and two that give one parameter different defaults are refused.
+	 */
+	private fun givenDefaults(declaration: KtClass, body: BodyLowering): Map<KtParameter, KtExpression> =
+		with(unit.session) {
+			val primary = declaration.primaryConstructorParameters
+			val given = mutableMapOf<KtParameter, KtExpression>()
+			for (secondary in declaration.secondaryConstructors) {
+				val delegation = secondary.getDelegationCall()
+				val arguments = delegation.valueArguments.mapNotNull { it.getArgumentExpression() }
+				val parameters = secondary.valueParameters
+				val passesOn = delegation.isCallToThis && secondary.bodyBlockExpression?.statements.isNullOrEmpty() &&
+					delegation.valueArguments.none { it.isNamed() } && arguments.size >= parameters.size &&
+					parameters.indices.all { index ->
+						(arguments[index] as? KtNameReferenceExpression)?.resolveSymbol()?.psi == parameters[index]
+					} &&
+					arguments.drop(parameters.size).none { argument -> parameters.any { body.uses(argument, it) } }
+				if (!passesOn) {
+					throw Rejection.notYet(secondary, "A secondary constructor that does more than pass its parameters"
+						+ " on to the primary constructor, with values for the rest,")
+				}
+				for (index in parameters.size until arguments.size) {
+					val parameter = primary[index]
+					val value = arguments[index]
+					val known = parameter.defaultValue ?: given[parameter]
+					if (known != null && known.text != value.text) {
+						throw Rejection(secondary, "Lua gives a parameter a call leaves out one default, but"
+							+ " ${parameter.name} would take ${known.text} and ${value.text}; give the constructors one"
+							+ " value for it.")
+					}
+					if (parameter.defaultValue == null) {
+						given[parameter] = value
+					}
+				}
+			}
+			given
+		}
+
+	/**
 	 * The annotations of a constructor's parameters, when the class's KDoc describes them with `@param` or
 	 * `@property`, as Kotlin documents a primary constructor.
+	 *
+	 * @param optional the parameters that take their defaults from the secondary constructors
 	 */
-	private fun constructorComments(declaration: KtClass): List<Comment> {
+	private fun constructorComments(declaration: KtClass, parameters: List<KtParameter>, optional: Set<KtParameter>):
+		List<Comment> {
 		val doc = declaration.docComment ?: return listOf()
-		val parameters = declaration.primaryConstructorParameters
 		if (parameters.none { KDocText.param(doc, it.name!!).isNotEmpty() }) {
 			return listOf()
 		}
-		return functions.parameterAnnotations(parameters, doc)
+		return functions.parameterAnnotations(parameters, doc, optional)
 	}
 
 	/**

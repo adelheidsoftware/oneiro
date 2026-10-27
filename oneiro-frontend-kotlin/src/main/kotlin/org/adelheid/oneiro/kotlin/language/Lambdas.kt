@@ -230,6 +230,8 @@ internal class Lambdas(private val body: BodyLowering) {
 		unit.optionals.loadedCheck(function)?.let { alias ->
 			throw Rejection(reference, OptionalDependencies.reference("{ $alias.isLoaded() }"))
 		}
+		// A top-level function of the plugin's is the function itself, as an object's is
+		body.topLevelFunction(function)?.let { return body.topLevelMember(reference, it, function) }
 		val owner = body.api.owner(function)
 		if (owner != null && body.api.isApi(owner)) {
 			throw Rejection.notYet(reference, "A reference to a function of the client")

@@ -13,6 +13,7 @@ import org.adelheid.oneiro.lua.Statement
 import org.adelheid.oneiro.lua.UnaryOperator
 import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.symbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtContinueExpression
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
@@ -22,7 +23,11 @@ import org.jetbrains.kotlin.psi.KtExpressionWithLabel
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtLabeledExpression
+import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtLoopExpression
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
+import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtPsiUtil
 import org.jetbrains.kotlin.psi.KtWhileExpression
 
 /**
@@ -75,6 +80,31 @@ internal class Loops(private val body: BodyLowering) {
 		return Statement.NumericFor(name, start, last, step, code)
 	}
 
+	/**
+	 * `repeat(n) { ... }` as a numeric `for`: `for _ = 1, n do`, or for a lambda that reads its index, which Kotlin
+	 * counts from 0, `for i = 0, n - 1 do`.
+	 */
+	fun repeat(call: KtCallExpression): Statement = with(unit.session) {
+		val (times, action) = call.valueArguments.mapNotNull { it.getArgumentExpression() }
+		val lambda = KtPsiUtil.safeDeparenthesize(action) as? KtLambdaExpression
+			?: throw Rejection.notYet(action, "repeat with a function reference")
+		val inlined = body.lambdas.inline(lambda, "repeat")
+		val count = body.expression(times)
+		val literal = lambda.functionLiteral
+		// The index's declaration: the lambda's parameter, or for the implicit it, the lambda
+		val index = literal.valueParameters.singleOrNull() ?: literal
+		val names = PsiTreeUtil.collectElementsOfType(literal.bodyExpression, KtNameReferenceExpression::class.java)
+		val readsIndex = names.any { reference ->
+			val symbol = reference.resolveSymbol() as? KaValueParameterSymbol
+			symbol != null && body.declarationOf(symbol, reference) == index
+		}
+		if (!readsIndex) {
+			return Statement.NumericFor("_", Expression.integer(1), count, null, inlined.code)
+		}
+		Statement.NumericFor(inlined.parameters.single(), Expression.integer(0), IndexArithmetic.minusOne(count), null,
+			inlined.code)
+	}
+
 	/** A range's end; for indices, the collection's size, which they stop before. */
 	private fun end(range: CountingRange): Expression =
 		range.end?.let(body::expression) ?: LibraryCalls.length(body.expression(range.indicesOf!!))
@@ -102,8 +132,21 @@ internal class Loops(private val body: BodyLowering) {
 			val matches = LuaPatterns.matches(body.expression(text), body.expression(pattern))
 			return Statement.GenericFor(listOf(single(loop, variables)), listOf(matches), loopBody(loop))
 		}
+		OneBasedLoops.indexedList(unit, collection)?.let { list -> return indexed(loop, list) }
 		val view = body.library.mapView(collection)
-		val kind = if (view != null) null else body.library.kind(with(unit.session) { collection.expressionType })
+		val type = with(unit.session) { collection.expressionType }
+		val kind = if (view != null) null else body.library.kind(type)
+		val destructured = loop.destructuringDeclaration
+		if (destructured != null && (kind == LibraryCalls.Kind.SEQUENCE || kind == LibraryCalls.Kind.SET)) {
+			// Each element in the loop's variable, whose parts the body reads first
+			val elementType = type?.let { body.types.typeArgumentOf(it, 0) }
+			val element = body.invent(body.destructuring.holderName(elementType), loop)
+			val code = body.destructuring.unpacked(destructured.entries, element, elementType, loopBody(loop))
+			val walk = if (kind == LibraryCalls.Kind.SEQUENCE) "ipairs" else "pairs"
+			val names = if (kind == LibraryCalls.Kind.SEQUENCE) listOf("_", element) else listOf(element)
+			return Statement.GenericFor(names, listOf(Expression.call(Expression.name(walk),
+				body.expression(collection))), code)
+		}
 		val names = when {
 			view != null && view.selector == "keys" -> listOf(single(loop, variables))
 			view != null && view.selector == "values" -> listOf("_", single(loop, variables))
@@ -119,6 +162,37 @@ internal class Loops(private val body: BodyLowering) {
 		val entries = kind == LibraryCalls.Kind.MAP || view?.selector == "entries"
 		val walked = if (entries) LibraryCalls.entryVariables(names[0], names[1], code) else names
 		return Statement.GenericFor(walked, listOf(Expression.call(Expression.name(walk), iterated)), code)
+	}
+
+	/** `for ((index, name) in names.withIndex())`: the list's positions and elements, as [indexedLoop] walks them. */
+	private fun indexed(loop: KtForExpression, list: KtExpression): Statement {
+		val entries = loop.destructuringDeclaration?.entries
+			?: throw Rejection.notYet(loop, "A loop over withIndex() whose variable is not destructured")
+		val index = entries.getOrNull(0)?.takeIf { it.name != "_" }
+		val value = entries.getOrNull(1)?.takeIf { it.name != "_" }?.let { unit.localName(it, it.name!!) } ?: "_"
+		return indexedLoop(index, value, body.expression(list), loopBody(loop))
+	}
+
+	/**
+	 * A loop over a list's positions and elements, which Kotlin counts from 0: `for index, name in ipairs(names) do`
+	 * when the position counts from 1 in Lua (see [OneBasedLoops]), and otherwise `for i, name in ipairs(names) do`,
+	 * whose body starts `local index = i - 1`.
+	 *
+	 * @param index the declaration of the position, or null when nothing reads it
+	 */
+	fun indexedLoop(index: KtNamedDeclaration?, value: String, list: Expression, code: Block): Statement {
+		val walked = listOf(Expression.call(Expression.name("ipairs"), list))
+		if (index == null) {
+			return Statement.GenericFor(listOf("_", value), walked, code)
+		}
+		val name = unit.localName(index, index.name!!)
+		if (index in unit.oneBased) {
+			return Statement.GenericFor(listOf(name, value), walked, code)
+		}
+		val position = body.invent("i", index)
+		val counted = Statement.Local(listOf(name), listOf(IndexArithmetic.minusOne(Expression.name(position))))
+		return Statement.GenericFor(listOf(position, value), walked,
+			Block(listOf(Block.Entry.of(counted)) + code.entries(), code.closingComments()))
 	}
 
 	/** The text and pattern of `LuaString.gmatch(text, pattern)`, whose iterator a loop walks; null for others. */

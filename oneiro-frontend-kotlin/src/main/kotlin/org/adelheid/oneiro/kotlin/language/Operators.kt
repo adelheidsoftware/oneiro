@@ -58,8 +58,7 @@ internal class Operators(private val body: BodyLowering) {
 			KtTokens.EQEQEQ -> BinaryOperator.EQUAL
 			KtTokens.EXCLEQEQEQ -> BinaryOperator.NOT_EQUAL
 			KtTokens.LT, KtTokens.GT, KtTokens.LTEQ, KtTokens.GTEQ -> return comparison(binary, left, right)
-			KtTokens.ANDAND -> BinaryOperator.AND
-			KtTokens.OROR -> BinaryOperator.OR
+			KtTokens.ANDAND, KtTokens.OROR -> return body.shortCircuit(binary, left, right)
 			KtTokens.PLUS -> {
 				val type = with(unit.session) { binary.expressionType }
 				if (type != null && types.isString(type)) {
@@ -230,6 +229,12 @@ internal class Operators(private val body: BodyLowering) {
 		if (type == null || function == null || !body.isLibrary(function.symbol)) {
 			throw Rejection.notYet(binary, "The infix function $name")
 		}
+		if (name == "union" || name == "intersect" || name == "subtract") {
+			return body.library.setOperation(binary, name, left, right)
+		}
+		if (name == "to") {
+			return body.library.pair(listOf(left, right))
+		}
 		val first = body.expression(left)
 		val second = body.expression(right)
 		if (types.isBoolean(type)) {
@@ -274,10 +279,14 @@ internal class Operators(private val body: BodyLowering) {
 	}
 
 	/**
-	 * Kotlin's `==` calls `equals`, which a data class, or a class that declares `equals`, makes compare values; Lua's
-	 * compares tables by identity, as Kotlin's `===` does.
+	 * Kotlin's `==` calls `equals`, which a pair, a data class, or a class that declares `equals`, makes compare
+	 * values; Lua's compares tables by identity, as Kotlin's `===` does.
 	 */
 	private fun checkEquality(binary: KtBinaryExpression, left: KtExpression): Unit = with(unit.session) {
+		if (left.expressionType?.let(types::isPair) == true) {
+			throw Rejection(binary, "Kotlin's == compares pairs by their parts, but Lua's compares tables by identity;"
+				+ " compare their parts instead, or use === for identity.")
+		}
 		val type = left.expressionType?.expandedSymbol as? KaNamedClassSymbol ?: return
 		if (!unit.isPluginType(type)) {
 			return

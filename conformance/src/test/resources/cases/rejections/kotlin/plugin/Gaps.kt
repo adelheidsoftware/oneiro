@@ -108,12 +108,12 @@ object Gaps {
 		return 'é' - 'a'
 	}
 
-	fun chunks(names: List<String>): List<List<String>> {
-		return names.chunked(2)
+	fun neighbours(names: List<String>): List<kotlin.Pair<String, String>> {
+		return names.zipWithNext()
 	}
 
 	fun counted(names: List<String>): Int {
-		return 1 + names.count { it.isNotEmpty() }
+		return names.indexOf("") + names.count { it.isNotEmpty() }
 	}
 
 	fun sortedFirst(names: List<String>): List<String> {
