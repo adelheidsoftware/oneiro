@@ -19,14 +19,15 @@ import org.adelheid.oneiro.bindings.JavaBindings.Node;
  */
 final class SourceFiles {
 
-	private static final List<String> ANNOTATION_IMPORTS = List.of("org.adelheid.oneiro.api.LuaColon",
-			"org.adelheid.oneiro.api.LuaCopy", "org.adelheid.oneiro.api.LuaDevOnly", "org.adelheid.oneiro.api.LuaDot",
-			"org.adelheid.oneiro.api.LuaEvent", "org.adelheid.oneiro.api.LuaFromId",
-			"org.adelheid.oneiro.api.LuaGlobal", "org.adelheid.oneiro.api.LuaIndex",
-			"org.adelheid.oneiro.api.LuaManifestFlag", "org.adelheid.oneiro.api.LuaName",
-			"org.adelheid.oneiro.api.LuaOperator", "org.adelheid.oneiro.api.LuaSame",
-			"org.adelheid.oneiro.api.LuaPermission", "org.adelheid.oneiro.api.LuaReturnValues",
-			"org.adelheid.oneiro.api.LuaReview", "org.adelheid.oneiro.api.LuaType",
+	private static final List<String> ANNOTATION_IMPORTS = List.of("org.adelheid.oneiro.api.LuaName",
+			"org.adelheid.oneiro.api.LuaReturnValues", "org.adelheid.oneiro.api.binding.LuaColon",
+			"org.adelheid.oneiro.api.binding.LuaCopy", "org.adelheid.oneiro.api.binding.LuaDevOnly",
+			"org.adelheid.oneiro.api.binding.LuaDot", "org.adelheid.oneiro.api.binding.LuaEvent",
+			"org.adelheid.oneiro.api.binding.LuaFromId", "org.adelheid.oneiro.api.binding.LuaGlobal",
+			"org.adelheid.oneiro.api.binding.LuaIndex", "org.adelheid.oneiro.api.binding.LuaManifestFlag",
+			"org.adelheid.oneiro.api.binding.LuaOperator", "org.adelheid.oneiro.api.binding.LuaPermission",
+			"org.adelheid.oneiro.api.binding.LuaReview", "org.adelheid.oneiro.api.binding.LuaSame",
+			"org.adelheid.oneiro.api.binding.LuaType",
 			"org.jspecify.annotations.Nullable");
 	/**
 	 * The JDK types the bindings use, which the generator names fully until {@link #file} imports them, a nullable one
@@ -68,13 +69,13 @@ final class SourceFiles {
 		BindingsTarget target = bindings.target;
 		Set<String> imports = new TreeSet<>(ANNOTATION_IMPORTS);
 		if (!target.isRs3()) {
-			imports.add("org.adelheid.oneiro.api.LuaModule");
+			imports.add("org.adelheid.oneiro.api.binding.LuaModule");
 		}
 		if (target.isPlugin()) {
 			imports.add("org.jspecify.annotations.NullMarked");
 		}
 		if (target.optional()) {
-			imports.add("org.adelheid.oneiro.api.LuaOptional");
+			imports.add("org.adelheid.oneiro.api.binding.LuaOptional");
 		}
 		Set<String> taken = new HashSet<>(shadowed);
 		String body = classes;

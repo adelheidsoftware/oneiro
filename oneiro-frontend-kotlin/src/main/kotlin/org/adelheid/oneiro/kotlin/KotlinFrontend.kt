@@ -2,6 +2,11 @@ package org.adelheid.oneiro.kotlin
 
 import com.intellij.openapi.util.Disposer
 import com.intellij.psi.util.PsiTreeUtil
+import java.nio.file.Path
+import org.adelheid.oneiro.kotlin.core.Annotations
+import org.adelheid.oneiro.kotlin.core.FileLowering
+import org.adelheid.oneiro.kotlin.core.SourceText
+import org.adelheid.oneiro.kotlin.language.ObjectEnums
 import org.adelheid.oneiro.lowering.CompileResult
 import org.adelheid.oneiro.lowering.Diagnostic
 import org.adelheid.oneiro.lowering.LocalNames
@@ -14,7 +19,6 @@ import org.jetbrains.kotlin.analysis.api.diagnostics.KaSeverity
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtFile
-import java.nio.file.Path
 
 /**
  * Compiles a plugin's Kotlin sources to Lua modules. Each call builds a standalone Analysis API session over the

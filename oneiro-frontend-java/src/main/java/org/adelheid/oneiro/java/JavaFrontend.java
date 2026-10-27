@@ -38,6 +38,8 @@ import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
+import org.adelheid.oneiro.java.core.JavaTypes;
+import org.adelheid.oneiro.java.core.UnitLowering;
 import org.adelheid.oneiro.lowering.CompileResult;
 import org.adelheid.oneiro.lowering.Diagnostic;
 import org.adelheid.oneiro.lowering.LocalNames;

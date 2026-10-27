@@ -25,7 +25,7 @@ import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
-import org.adelheid.oneiro.api.LuaGlobal;
+import org.adelheid.oneiro.api.binding.LuaGlobal;
 import org.adelheid.oneiro.plugin.ClientFacts;
 import org.adelheid.oneiro.plugin.LuaLibraries;
 import org.jspecify.annotations.NullMarked;

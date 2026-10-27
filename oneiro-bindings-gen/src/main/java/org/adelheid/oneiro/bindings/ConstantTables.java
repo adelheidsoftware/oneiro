@@ -9,7 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import org.adelheid.oneiro.api.LuaConstants;
+import org.adelheid.oneiro.api.binding.LuaConstants;
 import org.adelheid.oneiro.bindings.JavaBindings.ConstantNamespace;
 import org.adelheid.oneiro.bindings.JavaBindings.HookLine;
 import org.adelheid.oneiro.bindings.JavaBindings.JParam;

@@ -52,15 +52,15 @@ plugin's Kotlin ──► kotlinc ───────────────�
 
 | Module | Published | What it holds |
 | --- | --- | --- |
-| `oneiro-api` | Yes | What plugin authors compile against: `Plugin`, `@Subscribe`, `@ConfigGroup`, the annotations that describe existing Lua, and `LuaString`, Lua's string patterns, where Java and Kotlin have regular expressions. |
+| `oneiro-api` | Yes | What plugin authors compile against: `Plugin`, `@Subscribe`, `@ConfigGroup`, `@LuaName`, `@LuaReturnValues` and `LuaString`, Lua's string patterns, where Java and Kotlin have regular expressions; and in `org.adelheid.oneiro.api.binding`, the annotations that only generated bindings carry, which describe existing Lua. |
 | `oneiro-lua-tree` | Yes | The Lua tree (`Chunk`, `Statement`, `Expression`), the printer and the line map. It knows nothing about Java or Kotlin. |
 | `oneiro-lua-runner` | Yes | Runs Lua 5.4: the bundled Lua 5.4.8 through LuaJava, or an installed interpreter, and the plugin's Lua tests. |
 | `oneiro-bindings-gen` | Yes | Generates the RS3 bindings from the stubs and `overrides.txt`. |
 | `oneiro-plugin-model` | Yes | The plugin apart from its code: the manifest and the permissions it may request, the checks of the folder that ships, the typed `Resources` and `Urls` classes, the compiler's settings, and the line maps, console errors and client messages behind `explainError`. |
-| `oneiro-lowering` | Yes | What lowering is apart from the source language, shared by both front ends: the compile result and its diagnostics, Lua modules, the plugin facts the code is checked against, the layout of a module's members, the Lua helpers, the settings functions and the plugin lifecycle, module paths, local names, comment text, doc annotations, index arithmetic, the review warnings' wording, what the client has nothing for (a clock and threads), the parts of the client's API the compiler writes on its own, the Lua of `LuaString`, the opening of a reference's small function where it is called, the folding of a table's field assignments into its constructor, and the writing of the Lua and its line map. |
+| `oneiro-lowering` | Yes | What lowering is apart from the source language, shared by both front ends: the compile result and its diagnostics, Lua modules, the plugin facts the code is checked against, the layout of a module's members, the Lua helpers, the settings functions and the plugin lifecycle, module paths, local names, comment text, doc annotations, index arithmetic, the review warnings' wording, what the client has nothing for (a clock and threads), the parts of the client's API the compiler writes on its own, the Lua of `LuaString`, the opening of a reference's small function where it is called, the folding of a table's field assignments into its constructor, and the writing of the Lua and its line map. What the client and the plugin model require is in `client`, and the translations both front ends share in `translation`. |
 | `oneiro-frontend-java` | Yes | The Java front end: javac's trees to the Lua tree, and the javac plugin. |
 | `oneiro-frontend-kotlin` | Yes | The Kotlin front end, in Kotlin: the Kotlin Analysis API's trees to the Lua tree, and the entry the Gradle plugin's worker calls. It depends on the Analysis API and the IntelliJ platform modules it runs on, which JetBrains publishes only to its own repositories; the Gradle plugin adds those to a Kotlin plugin's build. |
-| `oneiro-gradle-plugin` | Yes | The Gradle plugin `org.adelheid.oneiro`: the `oneiro { }` block and the tasks. |
+| `oneiro-gradle-plugin` | Yes | The Gradle plugin `org.adelheid.oneiro`: the `oneiro { }` block and the wiring of the tasks; the tasks in `tasks`, what they run in worker processes in `workers`, and the fetching of repositories in `remote`. |
 | `conformance` | No | The conformance suite: Java inputs and their Kotlin twins, with hand-written expected Lua. |
 
 ```text
@@ -76,11 +76,20 @@ which may use an older JDK than Oneiro's. Everything else needs JDK 25. The Grad
 without linking against it: the compiler runs inside the plugin's javac, and the bindings generator and the Lua tests
 run in worker processes on JDK 25, called by name (`Reflection`).
 
+Each Java module but the Gradle plugin has a module descriptor, named after its root package, such as
+`org.adelheid.oneiro.api`, which exports the packages other modules or plugin authors use; the others are the
+module's own. Oneiro runs from a classpath, where a descriptor enforces nothing, but the published Javadoc shows only
+what the descriptor exports. The Kotlin front end has none: the Analysis API's jars are no modules, and its classes
+are `internal` instead. A new package needs a `package-info.java` that marks it `@NullMarked`, since NullAway checks
+only marked code.
+
 ## The Java front end
 
-The front end lives in `org.adelheid.oneiro.java`. `JavaFrontend` compiles a set of sources on its own (the conformance
-suite uses it), and `OneiroJavacPlugin` does the same inside a plugin's `compileJava`. Both hand each analysed source
-file to the classes below.
+The front end's API is `org.adelheid.oneiro.java`, the one package its descriptor exports: `JavaFrontend` compiles a
+set of sources on its own (the conformance suite uses it), and `OneiroJavacPlugin` does the same inside a plugin's
+`compileJava`. Both hand each analysed source file to the classes below, in four packages: `core` lowers a file and
+its code, with what they share; `language` holds Java's constructs, `library` the JDK classes a plugin may use, and
+`plugin` what makes a class an RS3 plugin's.
 
 - **`UnitLowering`** turns one source file into one Lua module: the header from the class Javadoc, a `require` line
   for each plugin class it uses, the helpers its translations need, the module table, and its members. The parts of
@@ -108,7 +117,8 @@ file to the classes below.
 The Kotlin front end lives in `org.adelheid.oneiro.kotlin` and is written in Kotlin, the language the Kotlin
 Analysis API is made for. [kotlin-subset.md](kotlin-subset.md) lists what it accepts. In a plugin's build,
 `oneiroKotlin` runs it in a worker process through `KotlinCompiler`, which reads the same settings the javac plugin
-reads and writes the Lua and its line map to the same places.
+reads and writes the Lua and its line map to the same places. Below `KotlinFrontend` and `KotlinCompiler`, its classes
+are in the same four packages as the Java front end's: `core`, `language`, `library` and `plugin`.
 
 - **`KotlinFrontend`** compiles a set of sources: `AnalysisSessions` builds a standalone Analysis API session over
   them and their classpath, Kotlin's own errors are reported first, and each file is then lowered and the session

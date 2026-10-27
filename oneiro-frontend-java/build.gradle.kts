@@ -16,3 +16,11 @@ dependencies {
 	// the annotations themselves by name, in the plugin's own classpath
 	compileOnly(project(":oneiro-api"))
 }
+
+tasks.javadoc {
+	// The Javadoc shows the package module-info exports, the front end's API; javadoc reads the rest from the source
+	// folder, to resolve the names the API uses, without documenting it
+	include("module-info.java", "org/adelheid/oneiro/java/*.java")
+	(options as StandardJavadocDocletOptions).addStringOption("-source-path",
+		sourceSets.main.get().java.srcDirs.joinToString(File.pathSeparator))
+}

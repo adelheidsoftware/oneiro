@@ -59,8 +59,8 @@ public final class TypedSources {
 		}
 		return header(rootPackage, "the plugin's resources folder")
 				+ "import javax.annotation.processing.Generated;\n"
-				+ "import org.adelheid.oneiro.api.LuaGlobal;\n"
 				+ "import org.adelheid.oneiro.api.LuaName;\n"
+				+ "import org.adelheid.oneiro.api.binding.LuaGlobal;\n"
 				+ "import org.adelheid.oneiro.rs3.PluginAudioResource;\n"
 				+ "import org.adelheid.oneiro.rs3.PluginImageResource;\n\n"
 				+ "/**\n * The plugin's resources, the files under {@code src/main/resources/} that the client loads.\n"
@@ -155,8 +155,8 @@ public final class TypedSources {
 		});
 		return header(rootPackage, "the manifest's urls")
 				+ "import javax.annotation.processing.Generated;\n"
-				+ "import org.adelheid.oneiro.api.LuaGlobal;\n"
 				+ "import org.adelheid.oneiro.api.LuaName;\n"
+				+ "import org.adelheid.oneiro.api.binding.LuaGlobal;\n"
 				+ "import org.adelheid.oneiro.rs3.PluginURL;\n\n"
 				+ "/**\n * The base URLs the manifest declares, by their aliases; HTTP requests reach only these.\n"
 				+ " *\n * <p>Lua: {@code Plugin.urls}\n */\n"

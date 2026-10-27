@@ -11,8 +11,8 @@ import java.lang.constant.ConstantDescs;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import org.adelheid.oneiro.api.LuaConstants;
-import org.adelheid.oneiro.api.LuaGlobal;
+import org.adelheid.oneiro.api.binding.LuaConstants;
+import org.adelheid.oneiro.api.binding.LuaGlobal;
 
 /**
  * Writes the names of a constant namespace straight to class files, as a chain of chunk classes. {@code config.Loc}

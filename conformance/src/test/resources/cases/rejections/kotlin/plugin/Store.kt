@@ -1,7 +1,7 @@
 package plugin
 
-import org.adelheid.oneiro.api.LuaColon
-import org.adelheid.oneiro.api.LuaModule
+import org.adelheid.oneiro.api.binding.LuaColon
+import org.adelheid.oneiro.api.binding.LuaModule
 
 /** A hand-written Lua store, declared in Kotlin, where its annotations should give its bindings. */
 @LuaModule("src/store")

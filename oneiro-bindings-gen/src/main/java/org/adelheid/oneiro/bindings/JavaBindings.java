@@ -14,7 +14,7 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.lang.model.SourceVersion;
-import org.adelheid.oneiro.api.LuaConstants;
+import org.adelheid.oneiro.api.binding.LuaConstants;
 import org.jspecify.annotations.Nullable;
 
 /**

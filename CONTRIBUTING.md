@@ -83,7 +83,8 @@ The build enforces the layout through Checkstyle and `.editorconfig`; the rest i
   class shadows in its own file, where Java leaves no other way.
 - Compiler trees are sealed interfaces of records, and passes over them are exhaustive `switch` expressions.
 - Every package is `@NullMarked` (JSpecify), and NullAway turns a nullness mistake into a compile error. Mark what can
-  be null with `@Nullable`.
+  be null with `@Nullable`. A new package needs its own `package-info.java` with `@NullMarked`, or NullAway skips it,
+  and an `exports` line in the module's `module-info.java` when another module uses it.
 - An error message is a full sentence that says what is wrong and what to write instead.
 
 ## The Lua style

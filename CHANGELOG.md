@@ -63,6 +63,8 @@ All notable changes to Oneiro are listed here. The format follows
 - **A guide to using Lua.** [Using Lua](docs/using-lua.md) explains the three kinds of Lua a plugin can use, where
   their types come from, how to write a definition file for a library that has none, how to check it and share it,
   and the overrides file.
+- **Module descriptors.** Oneiro's Java modules now have a `module-info`, named after their packages, such as
+  `org.adelheid.oneiro.api`, for builds that use the module path.
 
 ### Changed
 
@@ -91,6 +93,12 @@ All notable changes to Oneiro are listed here. The format follows
 - **No more hand-written declarations of Lua.** Your own classes can no longer describe existing Lua with the
   bindings' annotations (`@LuaModule`, `@LuaGlobal`, ...), Java `native` methods or Kotlin `external` functions. Put
   that Lua in `src/main/lua/` with LuaCATS annotations instead, and Oneiro generates the classes.
+- **The bindings' annotations moved** to `org.adelheid.oneiro.api.binding`. `org.adelheid.oneiro.api` now holds only
+  what your own code uses: `Plugin`, `DevPlugin`, `Subscribe`, `ConfigGroup`, `ConfigItem`, `LuaName`,
+  `LuaReturnValues` and `LuaString`.
+- **The Gradle plugin's task classes moved** to `org.adelheid.oneiro.gradle.tasks`, such as
+  `org.adelheid.oneiro.gradle.tasks.CheckPlugin`. Only a build that names a task by its type, as in
+  `tasks.withType<CheckPlugin>()`, needs the new import; the tasks' names are unchanged.
 - **Dependencies named by a folder.** `required(alias, "folder")` and `optional(alias, "folder")` are removed; write
   `required(alias) { devFolder("folder") }` instead. The build properties `getRequiredDependencies()` and
   `getOptionalDependencies()` are removed too.

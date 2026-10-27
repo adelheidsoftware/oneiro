@@ -35,8 +35,8 @@ class TypedSourcesTest {
 				package com.example.herbs;
 
 				import javax.annotation.processing.Generated;
-				import org.adelheid.oneiro.api.LuaGlobal;
 				import org.adelheid.oneiro.api.LuaName;
+				import org.adelheid.oneiro.api.binding.LuaGlobal;
 				import org.adelheid.oneiro.rs3.PluginAudioResource;
 				import org.adelheid.oneiro.rs3.PluginImageResource;
 
