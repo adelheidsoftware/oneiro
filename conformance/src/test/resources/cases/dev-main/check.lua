@@ -1,0 +1,22 @@
+-- Dev code reads the main source set's types as the main set's own Lua makes them.
+
+local Checks = require("dev/checks")
+local SummaryStyle = require("src/summary_style")
+local Speed = require("src/speed")
+local Pace = require("src/pace")
+local Bank = require("src/bank")
+local Circle = require("src/circle")
+
+assert(Checks.styles() == 2, "a main simple enum's constants")
+assert(Checks.styleName(SummaryStyle.DETAILED) == "DETAILED", "a main simple enum's constant is its name")
+assert(Checks.skillsOrder() == 1, "a main object enum's ordinal")
+assert(Checks.skillsLabel() == "SKILLS: Skills", "a main object enum's name and property")
+assert(Checks.isFast(Speed.FAST) and not Checks.isFast(Speed.SLOW), "an enum the main set's order makes objects")
+assert(Pace.order(Speed.FAST) == 1, "the main set's own reading of that order")
+local summary = Checks.summary(50)
+assert(summary.xp == 50 and summary.levels == 1, "a main data class of properties alone is a plain table")
+assert(Checks.doubledThree() == 6, "a main data class with a function of its own is a class")
+assert(Checks.isShape(Circle.new()), "an object of a subclass of a main class is one of the main class")
+assert(not Checks.isShape({}), "a table of nothing is no shape")
+local tab = Checks.tab(Bank.new("me"), "ores")
+assert(tab.name == "ores" and tab.outer.owner == "me", "a main inner class's object belongs to an outer one")

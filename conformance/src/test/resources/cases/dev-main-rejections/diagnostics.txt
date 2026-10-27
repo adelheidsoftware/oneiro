@@ -1,0 +1,11 @@
+plugin/Order.java:10: error: In the main source set's Lua, SummaryStyle's constants are the strings of their names, which have no order, and code of the dev source set cannot change that; read its order in the main source set too, or give the enum a property, and its constants become objects with an ordinal.
+		return style.ordinal();
+		       ^
+
+plugin/Order.java:14: error: In the main source set's Lua, SummaryStyle's constants are the strings of their names, which have no order, and code of the dev source set cannot change that; read its order in the main source set too, or give the enum a property, and its constants become objects with an ordinal.
+		return a.compareTo(b) < 0;
+		       ^
+
+plugin/Order.java:18: error: In the main source set's Lua, Plain is a table of its static members, which has no objects, and code of the dev source set cannot change that; create one in the main source set too, or give the class an instance field or method.
+		return new Plain();
+		       ^

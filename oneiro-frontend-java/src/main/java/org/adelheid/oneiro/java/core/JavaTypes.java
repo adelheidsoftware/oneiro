@@ -58,27 +58,27 @@ public final class JavaTypes {
 	private final Elements elements;
 	private final Set<TypeElement> pluginTypes;
 	private final Set<TypeElement> objectTypes;
-	private final @Nullable String compiledRootPackage;
+	private final Set<TypeElement> ownTypes;
 
 	/** @param pluginTypes the classes declared in the plugin's own sources, as opposed to library classes */
 	public JavaTypes(Types types, Elements elements, Set<TypeElement> pluginTypes) {
-		this(types, elements, pluginTypes, Set.of(), null);
+		this(types, elements, pluginTypes, Set.of(), pluginTypes);
 	}
 
 	/**
-	 * @param pluginTypes the classes declared in the sources being compiled
-	 * @param objectTypes the plugin's enums whose constants are Lua objects, not the strings of their names, and its
-	 *     records that are classes, not plain tables
-	 * @param compiledRootPackage for the dev source set, the plugin's root package, whose classes from the main source
-	 *     set are plugin classes too, though they come compiled; null otherwise
+	 * @param pluginTypes the classes declared in the plugin's sources: the source set's own, and for the dev source
+	 *     set, the main set's too
+	 * @param objectTypes the plugin's classes that have objects, not only static members, its enums whose constants
+	 *     are Lua objects, not the strings of their names, and its records that are classes, not plain tables
+	 * @param ownTypes the classes declared in the sources being lowered, whose modules are the source set's own
 	 */
 	public JavaTypes(Types types, Elements elements, Set<TypeElement> pluginTypes, Set<TypeElement> objectTypes,
-			@Nullable String compiledRootPackage) {
+			Set<TypeElement> ownTypes) {
 		this.types = types;
 		this.elements = elements;
 		this.pluginTypes = Set.copyOf(pluginTypes);
 		this.objectTypes = Set.copyOf(objectTypes);
-		this.compiledRootPackage = compiledRootPackage;
+		this.ownTypes = Set.copyOf(ownTypes);
 	}
 
 	/**
@@ -91,9 +91,17 @@ public final class JavaTypes {
 				&& element.getKind() == ElementKind.ENUM && objectTypes.contains(element);
 	}
 
-	/** Whether a class is declared in the sources being compiled, rather than in the main source set's classes. */
-	boolean isSourceType(TypeElement type) {
-		return pluginTypes.contains(type);
+	/**
+	 * Whether a class of the plugin's has objects, and so becomes the {@code setmetatable} class pattern rather than a
+	 * module of its static members: by its members, or because code creates one or another class extends it.
+	 */
+	public boolean hasObjects(TypeElement type) {
+		return objectTypes.contains(type);
+	}
+
+	/** Whether a class is declared in the sources being lowered, rather than in the main source set's. */
+	boolean isOwnType(TypeElement type) {
+		return ownTypes.contains(type);
 	}
 
 	public boolean isString(TypeMirror type) {
@@ -176,17 +184,7 @@ public final class JavaTypes {
 	}
 
 	public boolean isPluginType(Element element) {
-		return element instanceof TypeElement type && (pluginTypes.contains(type) || isCompiledPluginType(type));
-	}
-
-	/** For the dev source set: a class of the main source set, compiled, in the plugin's root package. */
-	private boolean isCompiledPluginType(TypeElement type) {
-		String root = compiledRootPackage;
-		if (root == null || isApi(type)) {
-			return false;
-		}
-		String name = elements.getPackageOf(type).getQualifiedName().toString();
-		return name.equals(root) || name.startsWith(root + ".");
+		return element instanceof TypeElement type && pluginTypes.contains(type);
 	}
 
 	/** Whether the type is an enum of the plugin's, whose values are the constants' names as Lua strings. */

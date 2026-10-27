@@ -120,7 +120,7 @@ public final class OneiroJavacPlugin implements Plugin {
 			PluginFacts facts = new PluginFacts(settings.id(), settings.permissions(), settings.flags(),
 					settings.luaFiles(), settings.dev());
 			CompileResult result = JavaFrontend.lower(task, units,
-					new JavaFrontend.Options(rootPackage, List.of(), facts));
+					new JavaFrontend.Options(rootPackage, List.of(), facts, settings.mainSources()));
 			boolean failed = false;
 			for (Diagnostic diagnostic : result.diagnostics()) {
 				boolean error = diagnostic.severity() == Diagnostic.Severity.ERROR || settings.warningsAsErrors();

@@ -49,6 +49,15 @@ public abstract class CompileKotlinLua extends DefaultTask {
 	@PathSensitive(PathSensitivity.RELATIVE)
 	public abstract ConfigurableFileCollection getJavaSources();
 
+	/**
+	 * For the dev source set, the main set's files, which the compile reads for what their classes are; the compiler's
+	 * settings name them, and they are here so that a change to one compiles the dev set again.
+	 */
+	@InputFiles
+	@IgnoreEmptyDirectories
+	@PathSensitive(PathSensitivity.RELATIVE)
+	public abstract ConfigurableFileCollection getMainSources();
+
 	/** Java files of the plugin's own, which a plugin written in Kotlin must not have. */
 	@InputFiles
 	@IgnoreEmptyDirectories

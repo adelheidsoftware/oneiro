@@ -24,7 +24,8 @@ import org.jetbrains.kotlin.psi.KtFile
  * Compiles a plugin's Kotlin sources to Lua modules. Each call builds a standalone Analysis API session over the
  * sources and their classpath, checks that they compile, lowers every Kotlin file into a module, and disposes of the
  * session. Java sources among them, such as the generated `Resources` and `Urls`, are read for their types and not
- * lowered. When the sources have errors of Kotlin's own, those are the only diagnostics, as javac's are for Java.
+ * lowered. When the sources have errors of Kotlin's own, those are the only diagnostics, as javac's are for Java. For
+ * the dev source set, the main set's sources come into the session too, read for what their classes are.
  */
 public object KotlinFrontend {
 
@@ -36,19 +37,22 @@ public object KotlinFrontend {
 	 * @property classpath the jars the sources compile against: the RS3 bindings, Oneiro's API, JSpecify and the
 	 *     Kotlin standard library
 	 * @property plugin the plugin's identifier, permissions and manifest flags
+	 * @property mainSources for the dev source set, the main set's files, which are read for what their classes are,
+	 *     as the main set's own Lua makes them, but not lowered; none otherwise
 	 */
-	public class Options(
+	public class Options @JvmOverloads public constructor(
 		public val rootPackage: String,
 		public val classpath: List<Path>,
 		public val plugin: PluginFacts,
+		public val mainSources: List<Path> = listOf(),
 	)
 
 	@JvmStatic
 	public fun compile(sources: List<Path>, options: Options): CompileResult {
 		val disposable = Disposer.newDisposable("Oneiro's Kotlin front end")
 		try {
-			val files = AnalysisSessions.build(disposable, sources, options.classpath)
-				.sortedBy { it.virtualFilePath }
+			val parsed = AnalysisSessions.build(disposable, sources, options.mainSources, options.classpath)
+			val files = parsed.lowered.sortedBy { it.virtualFilePath }
 			if (files.isEmpty()) {
 				return CompileResult(listOf(), listOf())
 			}
@@ -64,10 +68,21 @@ public object KotlinFrontend {
 					+ " rootPackage = \"com.example.herbs\" }.")
 				return CompileResult(listOf(), listOf(noRoot))
 			}
+			// The main set's enums are what its own compile makes them, from its files alone; the files being lowered
+			// make only their own objects
 			val objectEnums = mutableSetOf<String>()
-			files.forEach { file -> analyze(file) { ObjectEnums.find(this, file, objectEnums) } }
+			val mainFiles = parsed.main.toSet()
+			parsed.main.forEach { file -> analyze(file) { ObjectEnums.find(this, file, mainFiles, objectEnums, null) } }
+			val mainOrderReads = mutableListOf<ObjectEnums.OrderRead>()
+			files.forEach { file ->
+				analyze(file) { ObjectEnums.find(this, file, files.toSet(), objectEnums, mainOrderReads) }
+			}
+			val orderErrors = mainOrderReads.filter { it.enum !in objectEnums }.map { it.diagnostic() }
+			if (orderErrors.isNotEmpty()) {
+				return CompileResult(listOf(), orderErrors)
+			}
 			val compilation = Compilation(Options(rootPackage, options.classpath, options.plugin), entries,
-				extendedClasses(files), objectEnums)
+				extendedClasses(files + parsed.main), objectEnums, files.toSet())
 			val modules = mutableListOf<LuaModule>()
 			val diagnostics = mutableListOf<Diagnostic>()
 			// The file each Lua file comes from
@@ -132,7 +147,7 @@ public object KotlinFrontend {
 		}
 	}
 
-	/** The classes of the sources that another class of theirs extends, by qualified name. */
+	/** The classes of the sources, the main set's among them, that another of their classes extends, by name. */
 	private fun extendedClasses(files: List<KtFile>): Set<String> = files.flatMap { file ->
 		analyze(file) {
 			PsiTreeUtil.collectElementsOfType(file, KtClassOrObject::class.java).flatMap { declaration ->
@@ -147,12 +162,14 @@ public object KotlinFrontend {
 	 *
 	 * @property extended the classes another class extends, by qualified name, which a type test walks up to
 	 * @property objectEnums the enums whose constants are objects, by qualified name; see [ObjectEnums]
+	 * @property lowered the files being lowered, whose modules are the source set's own, rather than the main set's
 	 */
 	internal class Compilation(
 		val options: Options,
 		val entries: List<EntryClass>,
 		val extended: Set<String>,
 		val objectEnums: Set<String>,
+		val lowered: Set<KtFile>,
 	)
 
 	/**

@@ -298,7 +298,7 @@ public final class UnitLowering {
 				// An object enum's constants are its instances; an object record's values are; an interface has none
 				instanceClass = !isEntry && type.getKind() != Tree.Kind.INTERFACE
 						&& (type.getKind() == Tree.Kind.ENUM || type.getKind() == Tree.Kind.RECORD
-						|| isInstanceClass(type));
+						|| types.hasObjects(typeElement));
 				// The plugin class is a singleton whose members are locals of main.lua, so it has no table
 				table = isEntry ? null : classTable(typeElement);
 				List<PluginEntry.Subscription> subscriptions = isEntry ? pluginEntry.subscriptions(type) : List.of();
@@ -359,44 +359,6 @@ public final class UnitLowering {
 		return header;
 	}
 
-	/**
-	 * Whether the class has instances, and so becomes the {@code setmetatable} class pattern rather than a plain
-	 * module: a class that is abstract or extends another, any instance field or method, or a constructor other than
-	 * the private empty one that only stops a utility class from being instantiated.
-	 */
-	private boolean isInstanceClass(ClassTree type) {
-		if (type.getExtendsClause() != null || type.getModifiers().getFlags().contains(Modifier.ABSTRACT)) {
-			return true;
-		}
-		for (Tree member : type.getMembers()) {
-			if (isSynthetic(member)) {
-				continue;
-			}
-			switch (member) {
-				case VariableTree field when !isStatic(field.getModifiers().getFlags()) -> {
-					return true;
-				}
-				case BlockTree block when !block.isStatic() -> {
-					return true;
-				}
-				case MethodTree method when isConstructor(method) -> {
-					boolean utilityGuard = method.getModifiers().getFlags().contains(Modifier.PRIVATE)
-							&& method.getParameters().isEmpty()
-							&& constructors.realStatements(method.getBody()).isEmpty();
-					if (!utilityGuard) {
-						return true;
-					}
-				}
-				case MethodTree method when !isStatic(method.getModifiers().getFlags()) -> {
-					return true;
-				}
-				default -> {
-				}
-			}
-		}
-		return false;
-	}
-
 	/** The class of the plugin's that a class extends, or null when it extends {@code Object}. */
 	public @Nullable TypeElement pluginSuperclass(TypeElement type) {
 		if (type.getSuperclass() instanceof DeclaredType declared
@@ -427,7 +389,7 @@ public final class UnitLowering {
 			}
 		}
 		declarationChecks.checkHeritage(type);
-		boolean instanceClass = isInstanceClass(type);
+		boolean instanceClass = types.hasObjects(element);
 		String table = tableName(element);
 		List<Statement> lowered = new ArrayList<>();
 		lowered.add(new Statement.Local(List.of(table), List.of(classTable(element))));
@@ -703,7 +665,7 @@ public final class UnitLowering {
 			case CLASS -> {
 				declarationChecks.checkHeritage(nested);
 				// An inner class's objects keep their outer object, so it always has objects
-				boolean instanceClass = JavaTypes.isInner(element) || isInstanceClass(nested);
+				boolean instanceClass = JavaTypes.isInner(element) || types.hasObjects(element);
 				out.add(tableMember(nested, element, outer, outerTable, classTable(element), instanceClass, trivia));
 				List<Member> inner = new ArrayList<>();
 				List<Member> own = classMembers(nested, element, tableName(element), instanceClass, inner);
@@ -1041,7 +1003,7 @@ public final class UnitLowering {
 			throw new IllegalStateException("a plugin class outside a package: " + type);
 		}
 		String local = type.getSimpleName().toString();
-		return required(local, ModulePaths.requirePath(types.isSourceType(type) ? sourceFolder() : "src", rootPackage,
+		return required(local, ModulePaths.requirePath(types.isOwnType(type) ? sourceFolder() : "src", rootPackage,
 				packageElement.getQualifiedName().toString(), local));
 	}
 
@@ -1435,15 +1397,17 @@ public final class UnitLowering {
 	}
 
 	private Diagnostic diagnostic(Diagnostic.Severity severity, int position, String message) {
-		long line = compilationUnit.getLineMap().getLineNumber(position);
-		// A character count, not javac's getColumnNumber, which expands tabs to eight columns
-		long column = position - compilationUnit.getLineMap().getStartPosition(line) + 1;
-		return new Diagnostic(severity, compilationUnit.getSourceFile().getName(), line, column, message,
-				sourceLine(line), position);
+		return diagnostic(compilationUnit, source, severity, position, message);
 	}
 
-	private String sourceLine(long line) {
+	/** A diagnostic at a place in a file, with the line it is on, for the caret under it. */
+	public static Diagnostic diagnostic(CompilationUnitTree unit, CharSequence source, Diagnostic.Severity severity,
+			long position, String message) {
+		long line = unit.getLineMap().getLineNumber(position);
+		// A character count, not javac's getColumnNumber, which expands tabs to eight columns
+		long column = position - unit.getLineMap().getStartPosition(line) + 1;
 		String[] lines = source.toString().split("\\R", -1);
-		return line >= 1 && line <= lines.length ? lines[(int) line - 1] : "";
+		String sourceLine = line >= 1 && line <= lines.length ? lines[(int) line - 1] : "";
+		return new Diagnostic(severity, unit.getSourceFile().getName(), line, column, message, sourceLine, position);
 	}
 }

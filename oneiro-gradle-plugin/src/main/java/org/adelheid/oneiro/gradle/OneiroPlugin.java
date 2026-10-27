@@ -209,7 +209,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 		Provider<Directory> mainLua = layout.getBuildDirectory().dir("oneiro/lua/main");
 		Compilers compilers = new Compilers(project, extension, kotlin, kotlinTool, launcher);
 		Provider<Directory> mainLuaBuilt = compilers.lua(JavaPlugin.COMPILE_JAVA_TASK_NAME, "oneiroKotlin", "main",
-				false, mainLua, main, sources.flatMap(GenerateSources::getOutputDirectory));
+				false, mainLua, main, sources.flatMap(GenerateSources::getOutputDirectory), null);
 
 		Action<WriteManifest> manifestInputs = task -> {
 			OneiroExtension.PluginManifest plugin = extension.getPlugin();
@@ -425,7 +425,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 				.extendsFrom(project.getConfigurations().getByName(JavaPlugin.ANNOTATION_PROCESSOR_CONFIGURATION_NAME));
 		Provider<Directory> devLua = layout.getBuildDirectory().dir("oneiro/lua/dev");
 		Provider<Directory> devLuaBuilt = compilers.lua(dev.getCompileJavaTaskName(), "oneiroDevKotlin", "dev", true,
-				devLua, dev, null);
+				devLua, dev, null, main);
 		TaskProvider<WriteDevMain> devMain = project.getTasks().register("oneiroDevMain", WriteDevMain.class, task -> {
 			task.setDescription("Writes the development folder's main.lua, which loads the DevPlugin class.");
 			task.getShippedMain().set(layout.dir(assemblePlugin.map(Sync::getDestinationDir))

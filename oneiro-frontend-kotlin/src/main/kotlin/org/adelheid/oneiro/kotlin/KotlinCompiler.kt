@@ -29,7 +29,7 @@ public object KotlinCompiler {
 		val plugin = PluginFacts(compiler.id(), compiler.permissions(), compiler.flags(), compiler.luaFiles(),
 			compiler.dev())
 		val result = KotlinFrontend.compile(paths(sources),
-			KotlinFrontend.Options(compiler.rootPackage(), paths(classpath), plugin))
+			KotlinFrontend.Options(compiler.rootPackage(), paths(classpath), plugin, compiler.mainSources()))
 		// With warningsAsErrors, a warning fails the build like an error
 		val diagnostics = result.diagnostics().map {
 			if (compiler.warningsAsErrors()) Diagnostic(Diagnostic.Severity.ERROR, it.file(), it.line(), it.column(),

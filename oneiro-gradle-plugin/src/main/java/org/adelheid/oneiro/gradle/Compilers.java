@@ -8,6 +8,7 @@ import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.file.Directory;
+import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.file.RegularFile;
 import org.gradle.api.provider.Provider;
@@ -53,16 +54,24 @@ final class Compilers {
 	 * @param compileKotlin the name of the task that runs Oneiro for a plugin written in Kotlin
 	 * @param generated the folder of Java sources Oneiro generates for the source set, such as {@code Resources}, which
 	 *     the Kotlin reads; null for none
+	 * @param main for the dev source set, the main one, whose sources its compile reads for what their classes are, in
+	 *     place of their compiled classes; null for the main set itself
 	 */
 	Provider<Directory> lua(String compileJava, String compileKotlin, String name, boolean dev, Provider<Directory> lua,
-			SourceSet sourceSet, @Nullable Provider<Directory> generated) {
+			SourceSet sourceSet, @Nullable Provider<Directory> generated, @Nullable SourceSet main) {
 		ProjectLayout layout = project.getLayout();
 		Provider<RegularFile> lineMap = OneiroPlugin.lineMap(layout, name);
-		TaskProvider<WriteCompilerSettings> settings = settings(name, dev, lua, lineMap);
+		// The main set's Kotlin, and its Java, which for a plugin written in Kotlin is the generated Resources and Urls
+		FileCollection mainSources = main == null
+				? project.files()
+				: OneiroPlugin.sourceFiles(layout, "main", "kt").plus(main.getJava());
+		TaskProvider<WriteCompilerSettings> settings = settings(name, dev, lua, lineMap, mainSources);
 		Provider<RegularFile> settingsFile = settings.flatMap(WriteCompilerSettings::getSettingsFile);
 		project.getTasks().named(compileJava, JavaCompile.class, compile -> {
 			// The Lua of every file depends on the others, so every build compiles them all
 			compile.getOptions().setIncremental(false);
+			// A plugin written in Java has its dev set compiled with the main set's sources, which Oneiro reads
+			compile.source(kotlin.map(isKotlin -> isKotlin ? project.files() : mainSources));
 			compile.getOptions().getCompilerArgumentProviders()
 					.add(new OneiroJavacArguments(settingsFile, kotlin.map(isKotlin -> !isKotlin)));
 			// Only a plugin written in Java writes its Lua here
@@ -80,7 +89,11 @@ final class Compilers {
 						task.getJavaSources().from(generated);
 					}
 					task.getOwnJavaSources().from(OneiroPlugin.sourceFiles(layout, name, "java"));
-					task.getClasspath().from(sourceSet.getCompileClasspath());
+					task.getMainSources().from(mainSources);
+					// The main set's compiled classes would be its sources a second time
+					task.getClasspath().from(main == null
+							? sourceSet.getCompileClasspath()
+							: sourceSet.getCompileClasspath().minus(main.getOutput()));
 					task.getSettingsFile().set(settingsFile);
 					task.getToolClasspath().from(kotlinTool);
 					task.getJavaLauncher().set(launcher);
@@ -98,7 +111,7 @@ final class Compilers {
 
 	/** The settings Oneiro reads when it compiles a source set, in either language. */
 	private TaskProvider<WriteCompilerSettings> settings(String name, boolean dev, Provider<Directory> lua,
-			Provider<RegularFile> lineMap) {
+			Provider<RegularFile> lineMap, FileCollection mainSources) {
 		ProjectLayout layout = project.getLayout();
 		return project.getTasks().register(dev ? "oneiroDevCompilerSettings" : "oneiroCompilerSettings",
 				WriteCompilerSettings.class, task -> {
@@ -110,6 +123,7 @@ final class Compilers {
 					task.getPermissions().addAll(plugin.getOptionalPermissions());
 					task.getFlags().set(plugin.getSettingsIcon().zip(plugin.getRibbonIcon(), Manifest::flags));
 					task.getDev().set(dev);
+					task.getMainSources().from(mainSources);
 					Directory luaFolder = layout.getProjectDirectory().dir("src/" + name + "/lua");
 					task.getLuaFolder().set(luaFolder);
 					task.getLuaFiles().from(luaFolder.getAsFileTree());

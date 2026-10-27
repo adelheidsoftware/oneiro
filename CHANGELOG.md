@@ -6,6 +6,11 @@ All notable changes to Oneiro are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Kotlin code of the dev source set can call the main set's top-level functions and properties,
+  `Levels.clampLevel(it)`, which before was not supported.
+
 ### Changed
 
 - The helper that counts a map's or a set's entries, for `map.size`, is now `tableLength`, the name Lua developers
@@ -24,7 +29,15 @@ All notable changes to Oneiro are listed here. The format follows
 - A comment above a Kotlin `when` branch that has no code, `// Other states change nothing` above `else -> {}`, now
   stays in the Lua, as that branch's content. Before, it was dropped without the warning a comment Oneiro cannot
   place gets.
-
+- Code of the dev source set now sees the main set's classes as the main set's Lua makes them: Oneiro reads the main
+  set's sources with it, where before it saw only their compiled classes, and got the Lua wrong without an error. A
+  Kotlin enum's `entries` were empty, `#{}`; an enum whose constants are objects was taken for one whose constants are
+  strings, so its `ordinal` was refused in Kotlin and its `name()` in Java gave the constant's table; data classes,
+  records and inner classes were built wrongly; and a type test did not see the main set's subclasses. Dev code that
+  would change what the main set's Lua makes of a class is now an error, such as reading the order of an enum whose
+  constants the main set's Lua makes strings.
+- A Java class without members of its objects, `public class Marker {}`, now has objects where code creates one or
+  another class extends it. Before, its Lua was a table without `new`, which failed when the plugin ran.
 - Calling an object as a function in Kotlin, `doubler(value)` or `Doubler()(value)`, where its class implements a
   function type or has an `operator fun invoke`, now calls that object's `invoke`: `doubler:invoke(value)`. Before,
   in a class's function, the Lua called the function's own object, `self:invoke(value)`, and in an object's, it was an

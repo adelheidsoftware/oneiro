@@ -2,6 +2,7 @@ package org.adelheid.oneiro.kotlin.core
 
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.util.PsiTreeUtil
 import java.util.EnumSet
@@ -32,7 +33,6 @@ import org.jetbrains.kotlin.analysis.api.symbols.KaClassKind
 import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaJavaFieldSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolOrigin
 import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
 import org.jetbrains.kotlin.analysis.api.types.KaType
@@ -283,16 +283,19 @@ internal class FileLowering(
 
 	/**
 	 * The module of a file of top-level functions and properties: a local of this file for its own, or the other
-	 * file's module, required.
+	 * file's module, required, from the main set's folder for a file of the main set's.
 	 */
 	fun topLevelModule(declaring: KtFile): Expression {
 		val local = topLevelName(declaring)
 		if (declaring == file) {
 			return Expression.name(local)
 		}
-		return required(local, ModulePaths.requirePath(sourceFolder(), options.rootPackage,
+		return required(local, ModulePaths.requirePath(folderOf(declaring), options.rootPackage,
 			declaring.packageFqName.asString(), local))
 	}
+
+	/** The folder of a file's module: the source set's own, or the main set's for a file of the main set's. */
+	private fun folderOf(declaring: PsiFile?): String = if (declaring in compilation.lowered) sourceFolder() else "src"
 
 	/** Whether a file holds top-level functions and properties alone, which make a module of their own. */
 	fun isTopLevelFile(declaring: KtFile): Boolean = declaring.declarations.none { it is KtClassOrObject }
@@ -390,9 +393,8 @@ internal class FileLowering(
 			return Expression.field(moduleReference(outerSymbol), classId.shortClassName.asString())
 		}
 		val local = classId.shortClassName.asString()
-		val folder = if (type.origin == KaSymbolOrigin.SOURCE) sourceFolder() else "src"
-		return required(local, ModulePaths.requirePath(folder, options.rootPackage, classId.packageFqName.asString(),
-			local))
+		return required(local, ModulePaths.requirePath(folderOf(declaration?.containingFile), options.rootPackage,
+			classId.packageFqName.asString(), local))
 	}
 
 	/**

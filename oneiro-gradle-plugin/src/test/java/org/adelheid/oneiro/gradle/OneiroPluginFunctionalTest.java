@@ -238,6 +238,60 @@ class OneiroPluginFunctionalTest {
 	}
 
 	@Test
+	void theDevSetReadsTheMainSetsSources() throws IOException {
+		plugin();
+		write("src/main/java/com/example/herbs/Mode.java", """
+				package com.example.herbs;
+
+				/** How the tracker counts, each mode with its label. */
+				public enum Mode {
+					FAST("fast"), SAFE("safe");
+
+					public final String label;
+
+					Mode(String label) {
+						this.label = label;
+					}
+				}
+				""");
+		write("src/dev/java/com/example/herbs/Cheats.java", """
+				package com.example.herbs;
+
+				import static org.adelheid.oneiro.rs3.Globals.log;
+
+				import org.adelheid.oneiro.api.DevPlugin;
+
+				/** Development helpers: logs the fast mode's name. */
+				public final class Cheats extends DevPlugin {
+
+					@Override
+					protected void startUp() {
+						log("mode", Mode.FAST.name());
+					}
+				}
+				""");
+		gradle("build", "assembleDevPlugin").build();
+		Path cheats = project.resolve("build/oneiro/dev-plugin/dev/main.lua");
+		// An object enum of the main set's, whose constants keep their names, as the main set's Lua makes them
+		String lua = Files.readString(cheats);
+		assertTrue(lua.contains("local Mode = require(\"src/mode\")"), lua);
+		assertTrue(lua.contains("log(\"mode\", Mode.FAST.name)"), lua);
+
+		// The main set's sources change what the dev set's Lua is: a simple enum's constants are their names
+		write("src/main/java/com/example/herbs/Mode.java", """
+				package com.example.herbs;
+
+				/** How the tracker counts. */
+				public enum Mode {
+					FAST, SAFE
+				}
+				""");
+		gradle("assembleDevPlugin").build();
+		lua = Files.readString(cheats);
+		assertTrue(lua.contains("log(\"mode\", Mode.FAST)"), lua);
+	}
+
+	@Test
 	void explainErrorShowsTheJavaLinesOfAClientError() throws IOException {
 		plugin();
 		gradle("compileJava").build();
@@ -754,6 +808,48 @@ class OneiroPluginFunctionalTest {
 				"src/", "src/herb_config.lua", "src/tally.lua"),
 				entries(project.resolve("build/distributions/herb-tracker-1.2.0.zip")));
 		assertTrue(Files.readString(project.resolve("build/oneiro/line-maps/main.txt")).contains("HerbPlugin.kt"));
+	}
+
+	@Test
+	void theDevSetReadsTheMainSetsKotlin() throws IOException {
+		kotlinPlugin();
+		write("src/main/kotlin/com/example/herbs/Mode.kt", """
+				package com.example.herbs
+
+				/** How the tracker counts. */
+				enum class Mode { FAST, SAFE }
+				""");
+		write("src/dev/kotlin/com/example/herbs/Cheats.kt", """
+				package com.example.herbs
+
+				import org.adelheid.oneiro.api.DevPlugin
+				import org.adelheid.oneiro.rs3.Globals.log
+
+				/** Development helpers: logs how many modes there are. */
+				class Cheats : DevPlugin() {
+
+					override fun startUp() {
+						log("modes", Mode.entries.size)
+					}
+				}
+				""");
+		gradle("build", "assembleDevPlugin").build();
+		Path cheats = project.resolve("build/oneiro/dev-plugin/dev/main.lua");
+		// The main set's enum, read from its sources, which its compiled classes do not hold
+		String lua = Files.readString(cheats);
+		assertTrue(lua.contains("local Mode = require(\"src/mode\")"), lua);
+		assertTrue(lua.contains("log(\"modes\", #{ Mode.FAST, Mode.SAFE })"), lua);
+
+		// A change to the main set's sources compiles the dev set again
+		write("src/main/kotlin/com/example/herbs/Mode.kt", """
+				package com.example.herbs
+
+				/** How the tracker counts. */
+				enum class Mode { FAST, SAFE, IDLE }
+				""");
+		gradle("assembleDevPlugin").build();
+		lua = Files.readString(cheats);
+		assertTrue(lua.contains("log(\"modes\", #{ Mode.FAST, Mode.SAFE, Mode.IDLE })"), lua);
 	}
 
 	@Test

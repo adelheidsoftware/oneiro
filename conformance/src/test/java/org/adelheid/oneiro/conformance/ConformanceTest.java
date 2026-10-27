@@ -57,9 +57,12 @@ import org.junit.jupiter.api.TestFactory;
  *       library plugins the case depends on, whose bindings it compiles against too;
  *   <li>{@code case.properties}: the plugin's {@code id}, {@code permissions} and {@code flags}, and whether the
  *       sources are the {@code dev} source set;
+ *   <li>{@code main/}: for a case of the dev source set, the main set's sources, which the dev set's are compiled
+ *       with and read for what their classes are; they are compiled as the main set too, without a diagnostic, so that
+ *       the dev set's Lua runs beside theirs, which {@code expected/} leaves out;
  *   <li>{@code kotlin/}: the same plugin in Kotlin, its twin, which must give the same Lua, and its own
  *       {@code diagnostics.txt}; with {@code kotlin/expected/} and {@code kotlin/check.lua} where idiomatic Kotlin
- *       reads or behaves differently.
+ *       reads or behaves differently, and {@code kotlin/main/} for the main set's sources.
  * </ul>
  *
  * <p>A case for what only Kotlin has keeps its sources in {@code kotlin/} alone, without {@code input/}, and its
@@ -135,9 +138,16 @@ class ConformanceTest {
 	 */
 	static Map<String, String> compileAndCompare(Path folder) throws IOException {
 		Path input = folder.resolve("input");
+		List<Path> main = sources(folder.resolve("main"), ".java");
+		PluginFacts facts = facts(folder);
 		CompileResult result = JavaFrontend.compile(sources(input, ".java"),
-				new JavaFrontend.Options(ROOT_PACKAGE, classpath(folder), facts(folder)));
-		return compare(folder, input, result, folder.resolve("diagnostics.txt"), null);
+				new JavaFrontend.Options(ROOT_PACKAGE, classpath(folder), facts, main));
+		Map<String, String> modules = compare(folder, input, result, folder.resolve("diagnostics.txt"), null);
+		if (!main.isEmpty()) {
+			modules.putAll(mainModules(JavaFrontend.compile(main,
+					new JavaFrontend.Options(ROOT_PACKAGE, classpath(folder), mainSet(facts)))));
+		}
+		return modules;
 	}
 
 	/**
@@ -148,10 +158,18 @@ class ConformanceTest {
 	 */
 	private static void compileKotlinAndCompare(Path folder) throws IOException {
 		Path input = folder.resolve("kotlin");
-		CompileResult result = KotlinFrontend.compile(sources(input, ".kt"),
-				new KotlinFrontend.Options(ROOT_PACKAGE, kotlinClasspath(folder), facts(folder)));
+		Path mainFolder = input.resolve("main");
+		List<Path> main = sources(mainFolder, ".kt");
+		List<Path> sources = sources(input, ".kt").stream().filter(file -> !file.startsWith(mainFolder)).toList();
+		PluginFacts facts = facts(folder);
+		CompileResult result = KotlinFrontend.compile(sources,
+				new KotlinFrontend.Options(ROOT_PACKAGE, kotlinClasspath(folder), facts, main));
 		Map<String, String> modules = compare(folder, input, result, input.resolve("diagnostics.txt"),
 				input.resolve("expected"));
+		if (!main.isEmpty()) {
+			modules.putAll(mainModules(KotlinFrontend.compile(main,
+					new KotlinFrontend.Options(ROOT_PACKAGE, kotlinClasspath(folder), mainSet(facts)))));
+		}
 		if (Files.exists(folder.resolve("expected"))) {
 			Path own = input.resolve("check.lua");
 			Path check = Files.exists(own) ? own : folder.resolve("check.lua");
@@ -159,10 +177,29 @@ class ConformanceTest {
 		}
 	}
 
+	/** The files of a folder that have the extension; none when there is no such folder. */
 	private static List<Path> sources(Path input, String extension) throws IOException {
+		if (!Files.isDirectory(input)) {
+			return List.of();
+		}
 		try (Stream<Path> files = Files.walk(input)) {
 			return files.filter(file -> file.toString().endsWith(extension)).sorted().toList();
 		}
+	}
+
+	/** The facts of a case's main set, for a case of the dev source set: the same plugin's. */
+	private static PluginFacts mainSet(PluginFacts dev) {
+		return new PluginFacts(dev.id(), dev.permissions(), dev.manifestFlags(), dev.luaFiles(), false);
+	}
+
+	/** The modules of a case's main set, which must compile without a diagnostic, by path. */
+	private static Map<String, String> mainModules(CompileResult result) {
+		assertEquals(List.of(), result.diagnostics(), "the diagnostics of the case's main set");
+		Map<String, String> modules = new TreeMap<>();
+		for (LuaModule module : result.modules()) {
+			modules.put(module.path(), LuaPrinter.print(module.chunk()).text());
+		}
+		return modules;
 	}
 
 	/**

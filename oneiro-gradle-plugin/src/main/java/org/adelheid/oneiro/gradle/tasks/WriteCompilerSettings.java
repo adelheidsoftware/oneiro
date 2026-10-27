@@ -26,7 +26,8 @@ import org.gradle.api.tasks.TaskAction;
 /**
  * Writes the settings Oneiro compiles a source set with, which its javac plugin reads inside {@code compileJava} and
  * its Kotlin front end in {@code oneiroKotlin}: the root package, the plugin's identifier, the permissions and flags
- * its manifest declares, the files of the source set's own Lua, and where the Lua and its line map go.
+ * its manifest declares, the files of the source set's own Lua, for the dev source set the main set's sources, and
+ * where the Lua and its line map go.
  */
 @CacheableTask
 public abstract class WriteCompilerSettings extends DefaultTask {
@@ -46,6 +47,15 @@ public abstract class WriteCompilerSettings extends DefaultTask {
 
 	@Input
 	public abstract Property<Boolean> getDev();
+
+	/**
+	 * For the dev source set, the main set's source files, which its compile reads for what their classes are; the
+	 * settings name them by their absolute paths.
+	 */
+	@InputFiles
+	@IgnoreEmptyDirectories
+	@PathSensitive(PathSensitivity.ABSOLUTE)
+	public abstract ConfigurableFileCollection getMainSources();
 
 	/** The files of the source set's own Lua, under {@link #getLuaFolder()}. */
 	@InputFiles
@@ -75,7 +85,8 @@ public abstract class WriteCompilerSettings extends DefaultTask {
 	public void write() {
 		try {
 			CompilerSettings settings = new CompilerSettings(getRootPackage().get(), getPluginId().get(),
-					getPermissions().get(), getFlags().get(), luaFiles(), getDev().get(), Path.of(getLuaOutput().get()),
+					getPermissions().get(), getFlags().get(), luaFiles(), getDev().get(),
+					getMainSources().getFiles().stream().map(File::toPath).toList(), Path.of(getLuaOutput().get()),
 					Path.of(getLineMap().get()), getWarningsAsErrors().get());
 			settings.write(getSettingsFile().get().getAsFile().toPath());
 		} catch (IOException e) {

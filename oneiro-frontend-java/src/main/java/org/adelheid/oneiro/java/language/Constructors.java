@@ -233,7 +233,8 @@ public final class Constructors {
 				.toList();
 	}
 
-	private static boolean isSuperCall(StatementTree statement) {
+	/** Whether a statement calls the superclass's constructor without arguments, as javac adds or Object's. */
+	public static boolean isSuperCall(StatementTree statement) {
 		MethodInvocationTree call = superCall(statement);
 		return call != null && call.getArguments().isEmpty();
 	}

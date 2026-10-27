@@ -37,7 +37,7 @@ only when it uses them. Each one is listed in [Helpers](#helpers).
 
 | Java | Lua | Notes |
 | --- | --- | --- |
-| Class with only static members | `local Row = {}` ... `return Row` | |
+| Class with only static members | `local Row = {}` ... `return Row` | Unless code creates one, `new Marker()` or `Marker::new`, or another class extends it: then it has objects, as a class with members of its objects does, `Marker.__index = Marker` and `Marker.new()`. |
 | `public static` method | `function Row.complete(row)` | |
 | `private static` method | `local function helper(...)` | Members keep their source order, except that code which runs while the module loads (a field's value, an initializer) comes after the functions it calls. A local that a function uses above its definition, as in mutual recursion, is declared ahead: `local isOdd`, with a comment. |
 | `public static` field | `Row.LIMIT = 5` | |

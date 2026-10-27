@@ -1,8 +1,10 @@
 package org.adelheid.oneiro.java;
 
+import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.LiteralTree;
+import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.MethodTree;
@@ -40,7 +42,9 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.adelheid.oneiro.java.core.JavaTypes;
 import org.adelheid.oneiro.java.core.UnitLowering;
+import org.adelheid.oneiro.java.language.Constructors;
 import org.adelheid.oneiro.lowering.CompileResult;
+import org.adelheid.oneiro.lowering.DevSourceSet;
 import org.adelheid.oneiro.lowering.Diagnostic;
 import org.adelheid.oneiro.lowering.LocalNames;
 import org.adelheid.oneiro.lowering.LuaModule;
@@ -60,11 +64,18 @@ public final class JavaFrontend {
 	 * @param rootPackage the plugin's root package; its subpackages become folders under {@code src/}
 	 * @param classpath what the sources compile against besides the JDK, such as JSpecify and the RS3 bindings
 	 * @param plugin the plugin's identifier, permissions and manifest flags
+	 * @param mainSources for the dev source set, the main set's files, which are compiled with it and read for what
+	 *     their classes are, as the main set's own Lua makes them, but not lowered; none otherwise
 	 */
-	public record Options(String rootPackage, List<Path> classpath, PluginFacts plugin) {
+	public record Options(String rootPackage, List<Path> classpath, PluginFacts plugin, List<Path> mainSources) {
 
 		public Options {
 			classpath = List.copyOf(classpath);
+			mainSources = List.copyOf(mainSources);
+		}
+
+		public Options(String rootPackage, List<Path> classpath, PluginFacts plugin) {
+			this(rootPackage, classpath, plugin, List.of());
 		}
 
 		/** Options for code that is not part of a configured plugin, such as a conformance case. */
@@ -86,8 +97,10 @@ public final class JavaFrontend {
 					.collect(Collectors.joining(File.pathSeparator));
 			List<String> javacOptions =
 					List.of("--release", "25", "-proc:none", "-Xlint:none", "-classpath", classpath);
+			List<Path> compiled = new ArrayList<>(sources);
+			compiled.addAll(options.mainSources());
 			JavacTask task = (JavacTask) compiler.getTask(null, files, javacDiagnostics, javacOptions, null,
-					files.getJavaFileObjectsFromPaths(sources));
+					files.getJavaFileObjectsFromPaths(compiled));
 			List<CompilationUnitTree> units = new ArrayList<>();
 			task.parse().forEach(units::add);
 			task.analyze();
@@ -122,14 +135,35 @@ public final class JavaFrontend {
 
 	/**
 	 * Lowers sources that javac has parsed and analysed without errors, as the javac plugin does inside the plugin's
-	 * own compilation.
+	 * own compilation. The units of the main set's files, for the dev source set, are read for what their classes are,
+	 * and only the others are lowered.
 	 */
 	public static CompileResult lower(JavacTask task, List<CompilationUnitTree> units, Options options) {
 		DocTrees trees = DocTrees.instance(task);
-		Set<TypeElement> pluginTypes = pluginTypes(units, trees);
-		JavaTypes types = new JavaTypes(task.getTypes(), task.getElements(), pluginTypes,
-				objectTypes(units, trees, pluginTypes), options.plugin().dev() ? options.rootPackage() : null);
-		List<CompilationUnitTree> sorted = new ArrayList<>(units);
+		Set<Path> mainFiles = options.mainSources().stream().map(JavaFrontend::normalized).collect(Collectors.toSet());
+		List<CompilationUnitTree> own = new ArrayList<>();
+		List<CompilationUnitTree> main = new ArrayList<>();
+		for (CompilationUnitTree unit : units) {
+			(mainFiles.contains(normalized(Path.of(unit.getSourceFile().toUri()))) ? main : own).add(unit);
+		}
+		Set<TypeElement> ownTypes = pluginTypes(own, trees);
+		Set<TypeElement> mainTypes = pluginTypes(main, trees);
+		Set<TypeElement> pluginTypes = new HashSet<>(ownTypes);
+		pluginTypes.addAll(mainTypes);
+		// The main set's classes, records and enums are what its own compile makes them, from its units alone; the
+		// units being lowered make only their own objects
+		Set<TypeElement> objectTypes = new HashSet<>(objectTypes(main, trees, mainTypes, pluginTypes, null));
+		List<MainSetUse> mainSetUses = new ArrayList<>();
+		objectTypes.addAll(objectTypes(own, trees, ownTypes, pluginTypes, mainSetUses));
+		List<Diagnostic> mainSetErrors = mainSetUses.stream()
+				.filter(use -> !objectTypes.contains(use.type()))
+				.map(use -> use.diagnostic(trees))
+				.toList();
+		if (!mainSetErrors.isEmpty()) {
+			return new CompileResult(List.of(), mainSetErrors);
+		}
+		JavaTypes types = new JavaTypes(task.getTypes(), task.getElements(), pluginTypes, objectTypes, ownTypes);
+		List<CompilationUnitTree> sorted = new ArrayList<>(own);
 		sorted.sort(Comparator.comparing(unit -> unit.getSourceFile().getName()));
 		List<Diagnostic> diagnostics = new ArrayList<>();
 		List<LuaModule> modules = new ArrayList<>();
@@ -200,25 +234,63 @@ public final class JavaFrontend {
 	}
 
 	/**
-	 * The plugin's enums and records that become Lua classes. An enum's constants become objects when the enum has
-	 * anything but plain constants (fields, constructors, methods or constant bodies), or when code reads their order:
-	 * through {@code ordinal()} or {@code compareTo()}, or by sorting in natural order. Plain constants are strings,
-	 * which would sort by name. A record becomes a class when it declares members of its own or implements an
-	 * interface; otherwise it is a plain table.
+	 * The plugin's classes, enums and records whose values are Lua objects. A class has objects when its members give
+	 * it some (see {@link #hasObjects}), when code creates one, or when another class extends it; otherwise it is a
+	 * module of its static members. An enum's constants become objects when the enum has anything but plain constants
+	 * (fields, constructors, methods or constant bodies), or when code reads their order: through {@code ordinal()} or
+	 * {@code compareTo()}, or by sorting in natural order. Plain constants are strings, which would sort by name. A
+	 * record becomes a class when it declares members of its own or implements an interface; otherwise it is a plain
+	 * table.
+	 *
+	 * @param owned the classes the units declare, which code that creates or extends them, or reads their order, can
+	 *     give objects
+	 * @param pluginTypes every class of the plugin's sources, the main set's among them
+	 * @param elsewhere where the units would give objects to a class of the plugin's that they do not declare, which
+	 *     only its own units decide about; null to leave those out
 	 */
 	private static Set<TypeElement> objectTypes(List<CompilationUnitTree> units, DocTrees trees,
-			Set<TypeElement> pluginTypes) {
+			Set<TypeElement> owned, Set<TypeElement> pluginTypes, @Nullable List<MainSetUse> elsewhere) {
 		Set<TypeElement> found = new HashSet<>();
 		for (CompilationUnitTree unit : units) {
 			new TreePathScanner<Void, Void>() {
 				@Override
 				public Void visitClass(ClassTree node, Void unused) {
 					boolean object = (node.getKind() == Tree.Kind.ENUM && !isSimpleEnum(node, trees, getCurrentPath()))
-							|| (node.getKind() == Tree.Kind.RECORD && hasOwnMembers(node, trees, getCurrentPath()));
+							|| (node.getKind() == Tree.Kind.RECORD && hasOwnMembers(node, trees, getCurrentPath()))
+							|| (node.getKind() == Tree.Kind.CLASS && hasObjects(node, trees, getCurrentPath()));
 					if (object && trees.getElement(getCurrentPath()) instanceof TypeElement type) {
 						found.add(type);
 					}
+					// A subclass's object is one of its superclass's too
+					if (node.getExtendsClause() != null) {
+						noteObjects(trees.getTypeMirror(new TreePath(getCurrentPath(), node.getExtendsClause())), node);
+					}
 					return super.visitClass(node, null);
+				}
+
+				// new Shape(), and new Shape() { ... }, whose object is one of Shape's too
+				@Override
+				public Void visitNewClass(NewClassTree node, Void unused) {
+					noteObjects(trees.getTypeMirror(new TreePath(getCurrentPath(), node.getIdentifier())), node);
+					TypeMirror created = trees.getTypeMirror(getCurrentPath());
+					String name = created instanceof DeclaredType declared
+							? ((TypeElement) declared.asElement()).getQualifiedName().toString()
+							: "";
+					// A TreeMap or TreeSet without a comparator orders its keys naturally
+					if ((name.equals("java.util.TreeMap") || name.equals("java.util.TreeSet"))
+							&& node.getArguments().isEmpty()) {
+						note(firstTypeArgument(trees.getTypeMirror(getCurrentPath())), node);
+					}
+					return super.visitNewClass(node, null);
+				}
+
+				@Override
+				public Void visitMemberReference(MemberReferenceTree node, Void unused) {
+					if (node.getMode() == MemberReferenceTree.ReferenceMode.NEW) {
+						noteObjects(trees.getTypeMirror(new TreePath(getCurrentPath(), node.getQualifierExpression())),
+								node);
+					}
+					return super.visitMemberReference(node, null);
 				}
 
 				@Override
@@ -226,7 +298,7 @@ public final class JavaFrontend {
 					if (node.getMethodSelect() instanceof MemberSelectTree select
 							&& (select.getIdentifier().contentEquals("ordinal")
 									|| select.getIdentifier().contentEquals("compareTo"))) {
-						note(trees.getTypeMirror(new TreePath(getCurrentPath(), select.getExpression())));
+						note(trees.getTypeMirror(new TreePath(getCurrentPath(), select.getExpression())), node);
 					}
 					// A sort in natural order: Collections.sort(list), list.sort(null), stream.sorted(),
 					// Comparator.naturalOrder() and reverseOrder()
@@ -239,42 +311,44 @@ public final class JavaFrontend {
 								&& literal.getValue() == null)
 								|| (method.equals("sorted") && node.getArguments().isEmpty());
 						if (natural) {
-							note(firstTypeArgument(receiver));
+							note(firstTypeArgument(receiver), node);
 						}
 						if (method.equals("sort") && node.getArguments().size() == 1
 								&& trees.getElement(getCurrentPath()) instanceof ExecutableElement sort
 								&& sort.getEnclosingElement() instanceof TypeElement owner
 								&& owner.getQualifiedName().contentEquals("java.util.Collections")) {
 							note(firstTypeArgument(trees.getTypeMirror(
-									new TreePath(getCurrentPath(), node.getArguments().getFirst()))));
+									new TreePath(getCurrentPath(), node.getArguments().getFirst()))), node);
 						}
 						if ((method.equals("naturalOrder") || method.equals("reverseOrder"))
 								&& node.getArguments().isEmpty()) {
-							note(firstTypeArgument(trees.getTypeMirror(getCurrentPath())));
+							note(firstTypeArgument(trees.getTypeMirror(getCurrentPath())), node);
 						}
 					}
 					return super.visitMethodInvocation(node, null);
 				}
 
-				// A TreeMap or TreeSet without a comparator orders its keys naturally
-				@Override
-				public Void visitNewClass(NewClassTree node, Void unused) {
-					TypeMirror created = trees.getTypeMirror(getCurrentPath());
-					String name = created instanceof DeclaredType declared
-							? ((TypeElement) declared.asElement()).getQualifiedName().toString()
-							: "";
-					if ((name.equals("java.util.TreeMap") || name.equals("java.util.TreeSet"))
-							&& node.getArguments().isEmpty()) {
-						note(firstTypeArgument(trees.getTypeMirror(getCurrentPath())));
+				// Marks an enum of the plugin's as one whose order code reads, where these units declare it
+				private void note(@Nullable TypeMirror type, Tree where) {
+					if (type instanceof DeclaredType declared && declared.asElement() instanceof TypeElement element
+							&& element.getKind() == ElementKind.ENUM) {
+						mark(element, where, DevSourceSet.enumOrder(element.getSimpleName().toString()));
 					}
-					return super.visitNewClass(node, null);
 				}
 
-				// Marks an enum of the plugin's as one whose order code reads
-				private void note(@Nullable TypeMirror type) {
+				// Marks a class of the plugin's as one whose objects code makes, where these units declare it
+				private void noteObjects(@Nullable TypeMirror type, Tree where) {
 					if (type instanceof DeclaredType declared && declared.asElement() instanceof TypeElement element
-							&& element.getKind() == ElementKind.ENUM && pluginTypes.contains(element)) {
+							&& element.getKind() == ElementKind.CLASS) {
+						mark(element, where, DevSourceSet.classObjects(element.getSimpleName().toString()));
+					}
+				}
+
+				private void mark(TypeElement element, Tree where, String elsewhereMessage) {
+					if (owned.contains(element)) {
 						found.add(element);
+					} else if (elsewhere != null && pluginTypes.contains(element)) {
+						elsewhere.add(new MainSetUse(unit, where, element, elsewhereMessage));
 					}
 				}
 
@@ -286,6 +360,62 @@ public final class JavaFrontend {
 			}.scan(unit, null);
 		}
 		return found;
+	}
+
+	/**
+	 * Where dev code would give objects to a class of the main set's, or read an enum's order, which only the main set
+	 * decides.
+	 *
+	 * @param message why it cannot, for when the main set's Lua does not
+	 */
+	private record MainSetUse(CompilationUnitTree unit, Tree where, TypeElement type, String message) {
+
+		Diagnostic diagnostic(DocTrees trees) {
+			try {
+				return UnitLowering.diagnostic(unit, unit.getSourceFile().getCharContent(true),
+						Diagnostic.Severity.ERROR, trees.getSourcePositions().getStartPosition(unit, where), message);
+			} catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		}
+	}
+
+	/** A file's path as both javac and the build give it, so that the two compare. */
+	private static Path normalized(Path file) {
+		return file.toAbsolutePath().normalize();
+	}
+
+	/**
+	 * Whether a class's members give it objects: it is abstract or extends another, or it has an instance field,
+	 * block or method, or a constructor other than the private empty one that only stops a utility class from being
+	 * instantiated.
+	 */
+	private static boolean hasObjects(ClassTree type, DocTrees trees, TreePath path) {
+		if (type.getExtendsClause() != null || type.getModifiers().getFlags().contains(Modifier.ABSTRACT)) {
+			return true;
+		}
+		CompilationUnitTree unit = path.getCompilationUnit();
+		for (Tree member : type.getMembers()) {
+			// What javac adds, such as the default constructor, has no source of its own
+			if (trees.getSourcePositions().getEndPosition(unit, member) < 0) {
+				continue;
+			}
+			boolean instance = switch (member) {
+				case VariableTree field -> !field.getModifiers().getFlags().contains(Modifier.STATIC);
+				case BlockTree block -> !block.isStatic();
+				case MethodTree method when method.getName().contentEquals("<init>") ->
+					!method.getModifiers().getFlags().contains(Modifier.PRIVATE) || !method.getParameters().isEmpty()
+							|| method.getBody().getStatements().stream().anyMatch(statement ->
+									trees.getSourcePositions().getEndPosition(unit, statement) >= 0
+											&& !Constructors.isSuperCall(statement));
+				case MethodTree method -> !method.getModifiers().getFlags().contains(Modifier.STATIC);
+				default -> false;
+			};
+			if (instance) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Whether a record declares methods, constructors, static fields or nested types, or implements an interface. */

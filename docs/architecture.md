@@ -89,7 +89,9 @@ The front end's API is `org.adelheid.oneiro.java`, the one package its descripto
 set of sources on its own (the conformance suite uses it), and `OneiroJavacPlugin` does the same inside a plugin's
 `compileJava`. Both hand each analysed source file to the classes below, in four packages: `core` lowers a file and
 its code, with what they share; `language` holds Java's constructs, `library` the JDK classes a plugin may use, and
-`plugin` what makes a class an RS3 plugin's.
+`plugin` what makes a class an RS3 plugin's. Before that, `JavaFrontend` finds the classes, enums and records whose
+values are Lua objects. For the dev source set, javac compiles the main set's sources too: `JavaFrontend` reads them for
+what their classes are, which the main set's code alone decides, and hands on the dev set's files alone.
 
 - **`UnitLowering`** turns one source file into one Lua module: the header from the class Javadoc, a `require` line
   for each plugin class it uses, the helpers its translations need, the module table, and its members. The parts of
@@ -121,8 +123,8 @@ reads and writes the Lua and its line map to the same places. Below `KotlinFront
 are in the same four packages as the Java front end's: `core`, `language`, `library` and `plugin`.
 
 - **`KotlinFrontend`** compiles a set of sources: `AnalysisSessions` builds a standalone Analysis API session over
-  them and their classpath, Kotlin's own errors are reported first, and each file is then lowered and the session
-  disposed of. The Analysis API is released with Kotlin and needs the IntelliJ platform build that Kotlin release
+  them and their classpath, with a module of the main set's sources besides for the dev source set, Kotlin's own
+  errors are reported first, and each file is then lowered and the session disposed of. The Analysis API is released with Kotlin and needs the IntelliJ platform build that Kotlin release
   was built against; the version catalog pins the pair.
 - **`FileLowering`** turns one file into one Lua module, and keeps what the file shares: its diagnostics, its
   `SourceText` (positions, and the comments, which Kotlin's tree keeps), `KotlinTypes`, its requires, helpers and
@@ -131,7 +133,8 @@ are in the same four packages as the Java front end's: `core`, `language`, `libr
   from its interfaces), `PluginClass` (the plugin class as `main.lua`), `SettingsLowering` (an interface of
   settings), `Functions`, and `References`, which finds what each member uses for `ModuleLayout`.
   `DeclarationChecks` checks the file's names and declarations before any of them is lowered, and `ObjectEnums`
-  finds, across the compilation, the enums whose constants must be objects.
+  finds, across the compilation, the enums whose constants must be objects; the main set's code alone decides about
+  the main set's, and the dev set's code that would change one is an error.
 - **`BodyLowering`** lowers the statements and expressions of a function, handing each kind of code to a class of its
   own: `Loops`, `Branches`, `Exceptions`, `Lambdas`, `ObjectExpressions`, `Operators`, `TypeTests` and
   `ReturnValues` (the several values of a `@LuaReturnValues` type). `ApiCalls` handles the RS3 bindings, reading their

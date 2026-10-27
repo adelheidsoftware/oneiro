@@ -279,7 +279,11 @@ in `SettingsLayerReady`, with the `ui` bindings. The exact rules, and every reje
 
 Code that must never ship, such as cheats that teleport or spawn items, goes in `src/dev/java/`, or in
 `src/dev/kotlin/` for a plugin written in Kotlin. That source set
-compiles against the main one, and its Lua goes under `dev/` in `build/oneiro/dev-plugin/`, never into the zip. One of
+compiles against the main one, and its Lua goes under `dev/` in `build/oneiro/dev-plugin/`, never into the zip. Oneiro
+reads the main set's sources with it, so that its code sees each main class as the main set's Lua makes it, and lowers
+only the dev set's. What the main set's Lua makes of a class is the main set's code alone to decide, so dev code that
+would change it is an error: reading the order of an enum whose constants the main set's Lua makes strings, or
+creating or extending a Java class it makes a table of static members. One of
 its classes may extend `DevPlugin`: it works like the plugin class, becomes `dev/main.lua`, which the development
 folder's `main.lua` requires last, subscribes its methods under `"<id>.dev.<method>"`, and wraps `PluginShutdown` so
 that the plugin's own shutdown runs first. When the dev source set exists, `linkDevPlugin` links the development

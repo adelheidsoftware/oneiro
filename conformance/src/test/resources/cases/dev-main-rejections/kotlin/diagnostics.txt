@@ -1,0 +1,7 @@
+plugin/Order.kt:6: error: In the main source set's Lua, SummaryStyle's constants are the strings of their names, which have no order, and code of the dev source set cannot change that; read its order in the main source set too, or give the enum a property, and its constants become objects with an ordinal.
+	fun place(style: SummaryStyle): Int = style.ordinal
+	                                      ^
+
+plugin/Order.kt:8: error: In the main source set's Lua, SummaryStyle's constants are the strings of their names, which have no order, and code of the dev source set cannot change that; read its order in the main source set too, or give the enum a property, and its constants become objects with an ordinal.
+	fun before(a: SummaryStyle, b: SummaryStyle): Boolean = a < b
+	                                                        ^
