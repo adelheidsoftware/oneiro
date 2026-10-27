@@ -179,7 +179,8 @@ only the RS3 API's have its events, hooks, constant namespaces and `Globals`.
    go into a jar of their own. In a plugin's build, the libraries it vendors come first, those of its main source
    set and then those of its dev source set alone, and its own Lua after them, which gives two jars more: its main
    source set's, compiled against the RS3 jar and the main set's libraries, and its dev source set's, compiled against
-   everything. The Gradle plugin stages the libraries for this with `oneiroLibraries` (`StageLibraries`), which
+   everything. Before either compiles, the names of both sets' classes are checked against the packages their folders
+   and the plugin's code make, which `oneiroSources` lists, and against each other. The Gradle plugin stages the libraries for this with `oneiroLibraries` (`StageLibraries`), which
    copies each vendored library's Lua and licence as they ship, and each library plugin's types, and lists them
    (`LuaLibraries`, in the plugin model) for the generator and for `checkPlugin`.
 

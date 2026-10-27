@@ -18,8 +18,8 @@ public abstract class GenerateLuaBindingsAction implements WorkAction<GenerateLu
 	private static final Logger LOGGER = Logging.getLogger(GenerateLuaBindingsAction.class);
 
 	/**
-	 * The stubs, the RS3 bindings, the folder the jars go to, the language, the root package, the staged libraries and
-	 * the folders of the plugin's own Lua.
+	 * The stubs, the RS3 bindings, the folder the jars go to, the language, the root package, the file of the packages
+	 * of the plugin's code, the staged libraries and the folders of the plugin's own Lua.
 	 */
 	public interface Parameters extends WorkParameters {
 
@@ -32,6 +32,8 @@ public abstract class GenerateLuaBindingsAction implements WorkAction<GenerateLu
 		Property<String> getLanguage();
 
 		Property<String> getRootPackage();
+
+		RegularFileProperty getCodePackages();
 
 		DirectoryProperty getLibraries();
 
@@ -46,7 +48,8 @@ public abstract class GenerateLuaBindingsAction implements WorkAction<GenerateLu
 		List<?> warnings = (List<?>) Reflection.call("org.adelheid.oneiro.bindings.BindingsGenerator",
 				"generateLuaForBuild", path(parameters.getStubs()),
 				parameters.getRs3Jar().get().getAsFile().getAbsolutePath(), path(parameters.getOutput()),
-				parameters.getLanguage().get(), parameters.getRootPackage().get(), path(parameters.getLibraries()),
+				parameters.getLanguage().get(), parameters.getRootPackage().get(),
+				parameters.getCodePackages().get().getAsFile().getAbsolutePath(), path(parameters.getLibraries()),
 				path(parameters.getMainLua()), path(parameters.getDevLua()));
 		for (Object warning : warnings) {
 			LOGGER.warn("Oneiro bindings of the plugin's Lua: {}", warning);

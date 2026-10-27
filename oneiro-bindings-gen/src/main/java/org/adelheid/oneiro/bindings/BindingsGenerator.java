@@ -9,11 +9,16 @@ import java.nio.file.Path;
 import java.security.CodeSource;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.lang.model.SourceVersion;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -167,7 +172,8 @@ public final class BindingsGenerator {
 	 * LuaCATS files of the main source set, which ship under {@code src/}, {@code main-bindings.jar}, and from those of
 	 * the dev source set, which go under {@code dev/}, {@code dev-bindings.jar}; each with a sources jar. A file of the
 	 * plugin's own Lua is a class of the package of its folder below the root package, so that
-	 * {@code core/levels.lua} is {@code <root>.core.Levels}.
+	 * {@code core/levels.lua} is {@code <root>.core.Levels}. Names Java cannot give those classes are refused before
+	 * anything compiles, with the file each comes from.
 	 *
 	 * <p>A type the Lua names but does not declare resolves to the RS3 bindings' class, then to a library's; the dev
 	 * source set's own Lua names the main set's types before those. Each set compiles against the sets it may name: the
@@ -175,12 +181,15 @@ public final class BindingsGenerator {
 	 * and the main libraries, and the dev set's against everything.
 	 *
 	 * @param rs3Jar the classes of the RS3 bindings the stubs gave
+	 * @param codePackages the packages of the plugin's Java or Kotlin code, whose names its own Lua's classes cannot
+	 *     take
 	 * @param main the folder of the main source set's LuaCATS files, its Lua or definition files for it; a folder that
 	 *     does not exist has none
 	 * @param dev the folder of the dev source set's, or null for none
 	 */
 	public static LuaResult generateLua(Path stubsRoot, Path rs3Jar, Path output, Language language, String rootPackage,
-			List<Library> mainLibraries, List<Library> devLibraries, Path main, @Nullable Path dev) throws IOException {
+			Set<String> codePackages, List<Library> mainLibraries, List<Library> devLibraries, Path main,
+			@Nullable Path dev) throws IOException {
 		ApiModel mainModel = read(main, "src/");
 		ApiModel devModel = dev == null ? new ApiModel() : read(dev, "dev/");
 		Path work = output.resolve("work");
@@ -198,10 +207,17 @@ public final class BindingsGenerator {
 		Generated devSet = generateLibraries(concat(rs3, mainSet.bindings()),
 				concat(List.of(rs3Jar), mainSet.classes()), devLibraries, language, libraries.resolve("dev"),
 				work.resolve("libraries-dev"));
-		Generated ownMain = generateOwn("main", mainModel, main, rootPackage, language, concat(rs3, mainSet.bindings()),
-				concat(List.of(rs3Jar), mainSet.classes()), output, work);
-		Generated ownDev = generateOwn("dev", devModel, dev, rootPackage, language,
-				concat(concat(ownMain.bindings(), rs3), concat(mainSet.bindings(), devSet.bindings())),
+		JavaBindings mainLua = ownBindings("main", mainModel, main, rootPackage, language,
+				concat(rs3, mainSet.bindings()));
+		JavaBindings devLua = ownBindings("dev", devModel, dev, rootPackage, language,
+				concat(concat(List.of(mainLua), rs3), concat(mainSet.bindings(), devSet.bindings())));
+		Map<JavaBindings, Path> ownSets = new LinkedHashMap<>(Map.of(mainLua, main));
+		if (dev != null) {
+			ownSets.put(devLua, dev);
+		}
+		checkNames(rootPackage, codePackages, ownSets);
+		Generated ownMain = writeOwn(mainLua, concat(List.of(rs3Jar), mainSet.classes()), output, work);
+		Generated ownDev = writeOwn(devLua,
 				concat(concat(List.of(rs3Jar), mainSet.classes()), concat(devSet.classes(), ownMain.classes())), output,
 				work);
 		delete(work);
@@ -214,9 +230,11 @@ public final class BindingsGenerator {
 	 * warning. The libraries are those {@code oneiroLibraries} staged in the folder {@code libraries}
 	 * ({@link LuaLibraries}), each from its LuaCATS files there, a vendored library's own Lua or the types the build
 	 * names for a library plugin, with the overrides file the build keeps for it.
+	 *
+	 * @param codePackages the file that holds the packages of the plugin's code, one a line
 	 */
 	public static List<String> generateLuaForBuild(String stubsRoot, String rs3Jar, String output, String language,
-			String rootPackage, String libraries, String main, String dev) throws IOException {
+			String rootPackage, String codePackages, String libraries, String main, String dev) throws IOException {
 		Path staged = Path.of(libraries);
 		List<Library> mainLibraries = new ArrayList<>();
 		List<Library> devLibraries = new ArrayList<>();
@@ -228,8 +246,10 @@ public final class BindingsGenerator {
 					LIBRARIES_PACKAGE + "." + library.name(), LuaLibraries.typesFolder(staged, library.name()), "",
 					Files.isRegularFile(overrides) ? overrides : null, library.use()));
 		}
+		Set<String> packages = new HashSet<>(Files.readAllLines(Path.of(codePackages), StandardCharsets.UTF_8));
+		packages.remove("");
 		return generateLua(Path.of(stubsRoot), Path.of(rs3Jar), Path.of(output), Language.valueOf(language),
-				rootPackage, mainLibraries, devLibraries, Path.of(main), Path.of(dev)).warnings();
+				rootPackage, packages, mainLibraries, devLibraries, Path.of(main), Path.of(dev)).warnings();
 	}
 
 	/** Whether a model declares any type, which needs the RS3 API's to name. */
@@ -238,15 +258,13 @@ public final class BindingsGenerator {
 	}
 
 	/**
-	 * The bindings of a source set's own Lua, {@code <sourceSet>-bindings.jar} and its sources jar in {@code output}.
+	 * The bindings of a source set's own Lua.
 	 *
 	 * @param folder the folder of its LuaCATS files, which the warnings name the files by; null for none
 	 * @param named the bindings its types may name, in the order a name resolves in
-	 * @param classpath their classes
 	 */
-	private static Generated generateOwn(String sourceSet, ApiModel model, @Nullable Path folder, String rootPackage,
-			Language language, List<JavaBindings> named, List<Path> classpath, Path output, Path work)
-			throws IOException {
+	private static JavaBindings ownBindings(String sourceSet, ApiModel model, @Nullable Path folder,
+			String rootPackage, Language language, List<JavaBindings> named) {
 		List<String> warnings = new ArrayList<>();
 		if (folder != null) {
 			for (ApiModel.Unparsed unparsed : model.unparsed) {
@@ -257,6 +275,82 @@ public final class BindingsGenerator {
 		JavaBindings bindings = new JavaBindings(model, Map.of(), Overrides.none(),
 				BindingsTarget.plugin(sourceSet, rootPackage), language, warnings);
 		bindings.foreign.addAll(named);
+		return bindings;
+	}
+
+	/**
+	 * Refuses, all at once, the names Java cannot give the classes of the plugin's own Lua: a folder named as no
+	 * package can be, such as {@code ui-parts}; a class with the name of a package, as the class {@code core} of
+	 * {@code core.lua} beside the folder {@code core/} or beside the plugin's code in {@code <root>.core}, since Java
+	 * has no class and package of one name; and a class both source sets have, as they share the root package.
+	 *
+	 * @param codePackages the packages of the plugin's Java or Kotlin code
+	 * @param sets the bindings of each source set's own Lua, the main set's first, with the folder of its files
+	 */
+	private static void checkNames(String rootPackage, Set<String> codePackages, Map<JavaBindings, Path> sets)
+			throws IOException {
+		List<String> problems = new ArrayList<>();
+		// The packages the folders make, each with the first folder that makes it; core/deep/ makes core one too
+		Map<String, Path> folderPackages = new HashMap<>();
+		for (Map.Entry<JavaBindings, Path> set : sets.entrySet()) {
+			for (JavaBindings.Node top : set.getKey().tops().values()) {
+				List<String> parts = List.of(top.file.split("/"));
+				for (int depth = 1; depth < parts.size(); depth++) {
+					String folder = String.join("/", parts.subList(0, depth));
+					String name = parts.get(depth - 1);
+					String packageName = rootPackage + "." + folder.replace('/', '.');
+					Path path = set.getValue().resolve(folder);
+					if (folderPackages.putIfAbsent(packageName, path) == null
+							&& (!SourceVersion.isIdentifier(name) || SourceVersion.isKeyword(name))) {
+						problems.add(path + ": the classes of its Lua would be in the package " + packageName
+								+ ", which Java cannot name; rename the folder, such as to "
+								+ JavaText.javaIdentifier(name) + ".");
+					}
+				}
+			}
+		}
+		Set<String> codeMade = new HashSet<>();
+		for (String packageName : codePackages) {
+			for (String name = packageName; name.startsWith(rootPackage + ".");
+					name = name.substring(0, name.lastIndexOf('.'))) {
+				codeMade.add(name);
+			}
+		}
+		Map<String, Path> classFiles = new HashMap<>();
+		for (Map.Entry<JavaBindings, Path> set : sets.entrySet()) {
+			for (Map.Entry<String, JavaBindings.Node> top : set.getKey().tops().entrySet()) {
+				String name = top.getKey();
+				Path file = set.getValue().resolve(top.getValue().file);
+				String described = file + ": the class " + top.getValue().luaSegment + " would be " + name;
+				Path folder = folderPackages.get(name);
+				if (folder != null) {
+					problems.add(described + ", but the folder " + folder + " makes that a package, and Java cannot"
+							+ " have a class and a package of one name; rename the class or the folder.");
+				} else if (codeMade.contains(name)) {
+					problems.add(described + ", but the plugin's code makes that a package, and Java cannot have a"
+							+ " class and a package of one name; rename the class or that package.");
+				}
+				Path other = classFiles.putIfAbsent(name, file);
+				if (other != null) {
+					problems.add(described + ", as " + other + " already is; rename one of them.");
+				}
+			}
+		}
+		if (!problems.isEmpty()) {
+			throw new IOException("The plugin's own Lua has names Java cannot give its bindings:\n  - "
+					+ String.join("\n  - ", problems));
+		}
+	}
+
+	/**
+	 * Writes the bindings of a source set's own Lua, {@code <sourceSet>-bindings.jar} and its sources jar in
+	 * {@code output}.
+	 *
+	 * @param classpath the classes of the bindings its types may name
+	 */
+	private static Generated writeOwn(JavaBindings bindings, List<Path> classpath, Path output, Path work)
+			throws IOException {
+		String sourceSet = bindings.target.library();
 		Path sources = Files.createDirectories(work.resolve(sourceSet).resolve("sources"));
 		Path classes = Files.createDirectories(work.resolve(sourceSet).resolve("classes"));
 		List<Path> sourceFiles = write(bindings.sources(), sources);
@@ -267,7 +361,8 @@ public final class BindingsGenerator {
 		Path sourcesJar = output.resolve(sourceSet + "-bindings-sources.jar");
 		Jars.write(classes, classesJar, "");
 		Jars.write(sources, sourcesJar, "");
-		return new Generated(List.of(new LibraryResult(sourceSet, classesJar, sourcesJar, warnings, List.of())),
+		return new Generated(
+				List.of(new LibraryResult(sourceSet, classesJar, sourcesJar, bindings.warnings, List.of())),
 				List.of(bindings), List.of(classes));
 	}
 

@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.bindings;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -149,6 +150,11 @@ final class JavaBindings {
 		@Nullable TypeRef byName;
 		/** For a library's module, as a top-level class: the path {@code require} loads it by. */
 		@Nullable String module;
+		/**
+		 * For a top-level class: the file that declares its table or type, or for a namespace that a dotted name
+		 * makes, the file that declares that name, in the folder of Lua files; empty when none does.
+		 */
+		String file = "";
 
 		Node(String javaName, String luaSegment, @Nullable Node parent) {
 			this.javaName = javaName;
@@ -310,21 +316,20 @@ final class JavaBindings {
 	 * that declares it ({@link BindingsTarget#packageOf}).
 	 */
 	String packageOf(Node top) {
-		return target.packageOf(fileOf(top));
+		return target.packageOf(top.file);
 	}
 
-	/** The file that declares a top-level class's table or type, in the folder of Lua files; empty when none does. */
-	private String fileOf(Node top) {
-		ApiModel.ModuleDef module = top.module == null ? null : model.modules.get(top.module);
-		if (module != null) {
-			return module.file();
-		}
-		ApiModel.ClassDef classDef = top.classDef;
-		if (classDef != null && !classDef.files.isEmpty()) {
-			return classDef.files.getFirst();
-		}
-		ApiModel.EnumDef enumDef = top.enumDef;
-		return enumDef == null ? "" : enumDef.file();
+	/**
+	 * The top-level classes, each by its name, or for the plugin's own Lua, whose classes are in several packages, by
+	 * its name with its package, so that {@code core/levels.lua} and {@code ui/levels.lua} are two classes.
+	 */
+	Map<String, Node> tops() {
+		return Collections.unmodifiableMap(tops);
+	}
+
+	/** The key of a top-level class in {@link #tops()}, for the file that declares it. */
+	private String topKey(String javaName, String file) {
+		return target.isPlugin() ? target.packageOf(file) + "." + javaName : javaName;
 	}
 
 	/**
@@ -443,7 +448,7 @@ final class JavaBindings {
 		placeModules();
 		for (ApiModel.ClassDef classDef : model.classes.values()) {
 			if (isGenerated(classDef) && !placed.contains(classDef.name)) {
-				Node node = node(luaPath(classDef.name));
+				Node node = node(luaPath(classDef.name), classDef.files.isEmpty() ? "" : classDef.files.getFirst());
 				// _global.id and the table id are one namespace, and the class holds the fields
 				ApiModel.ClassDef existing = node.classDef;
 				if (existing == null || existing.fields.isEmpty()) {
@@ -457,7 +462,7 @@ final class JavaBindings {
 			if (placed.contains(enumDef.name())) {
 				continue;
 			}
-			Node node = node(enumDef.name());
+			Node node = node(enumDef.name(), enumDef.file());
 			node.enumDef = enumDef;
 			byLuaName.put(enumDef.name(), node);
 		}
@@ -467,7 +472,7 @@ final class JavaBindings {
 		for (EventInfo event : events.values()) {
 			Node node = byLuaName.get(event.payload());
 			if (node == null) {
-				node = node(event.payload());
+				node = node(event.payload(), "");
 				byLuaName.put(event.payload(), node);
 			}
 			node.payloadOf = event;
@@ -507,14 +512,20 @@ final class JavaBindings {
 				continue;
 			}
 			String name = moduleName(module, classDef);
-			if (tops.containsKey(name)) {
-				warnings.add("The module " + module.path() + " would be the class " + name
+			String key = topKey(name, module.file());
+			if (tops.containsKey(key)) {
+				warnings.add("The module " + module.path() + " would be the class " + key
 						+ ", which another module is already; it is left out.");
+				if (module.implicit()) {
+					// Its table's class is named by the module's path, which no class is named by
+					placed.add(classDef.name);
+				}
 				continue;
 			}
 			Node node = new Node(name, name, null);
 			node.module = module.path();
-			tops.put(name, node);
+			node.file = module.file();
+			tops.put(key, node);
 			placeTable(node, classDef);
 		}
 		if (target.isDependency()) {
@@ -645,11 +656,32 @@ final class JavaBindings {
 		return luaName.equals("var") ? "vars" : luaName;
 	}
 
-	private Node node(String luaName) {
+	/**
+	 * The node of a class or enum by its Lua name, made with the classes it nests in where they are missing: its first
+	 * part is a top-level class, in the package of the file that declares the name, and each part after it a class
+	 * nested in the one before. For the plugin's own Lua, whose classes are in several packages, the longest start of
+	 * the name that names a class already placed is that class, wherever it is, so that {@code core.Levels.Options}
+	 * nests in the module {@code core.Levels}.
+	 */
+	private Node node(String luaName, String file) {
 		List<String> segments = List.of(luaName.split("\\.", -1));
-		Node current = tops.computeIfAbsent(javaTopName(segments.getFirst()),
-				name -> new Node(name, segments.getFirst(), null));
-		for (int index = 1; index < segments.size(); index++) {
+		@Nullable Node current = null;
+		int nested = 1;
+		if (target.isPlugin()) {
+			for (int length = segments.size() - 1; length > 0 && current == null; length--) {
+				current = byLuaName.get(String.join(".", segments.subList(0, length)));
+				nested = length;
+			}
+		}
+		if (current == null) {
+			String javaName = javaTopName(segments.getFirst());
+			current = tops.computeIfAbsent(topKey(javaName, file), key -> {
+				Node top = new Node(javaName, segments.getFirst(), null);
+				top.file = file;
+				return top;
+			});
+		}
+		for (int index = nested; index < segments.size(); index++) {
 			Node parent = current;
 			String segment = segments.get(index);
 			current = parent.children.computeIfAbsent(JavaText.javaIdentifier(segment),

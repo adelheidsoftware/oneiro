@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -34,7 +36,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * {@code oneiroSources}: the typed {@code Resources} and {@code Urls} classes, in the plugin's root package, from its
  * resource files and its manifest's base URLs, and the root package itself, which {@code oneiroLuaBindings} puts the
- * bindings of the plugin's own Lua below.
+ * bindings of the plugin's own Lua below, with the packages of the plugin's code, whose names those bindings leave to
+ * it.
  */
 @CacheableTask
 public abstract class GenerateSources extends DefaultTask {
@@ -58,7 +61,10 @@ public abstract class GenerateSources extends DefaultTask {
 	@Input
 	public abstract Property<String> getRootPackage();
 
-	/** The plugin's Java and Kotlin sources, read to find the plugin class's package when the build names none. */
+	/**
+	 * The plugin's Java and Kotlin sources, of both source sets, read for their packages, and for the plugin class's
+	 * package when the build names none.
+	 */
 	@InputFiles
 	@PathSensitive(PathSensitivity.RELATIVE)
 	public abstract ConfigurableFileCollection getPluginSources();
@@ -70,6 +76,10 @@ public abstract class GenerateSources extends DefaultTask {
 	@OutputFile
 	public abstract RegularFileProperty getRootPackageFile();
 
+	/** The file the packages of the plugin's code go to, one a line. */
+	@OutputFile
+	public abstract RegularFileProperty getCodePackagesFile();
+
 	@TaskAction
 	public void generate() {
 		try {
@@ -80,6 +90,9 @@ public abstract class GenerateSources extends DefaultTask {
 			Path rootPackageFile = getRootPackageFile().get().getAsFile().toPath();
 			Files.createDirectories(rootPackageFile.getParent());
 			Files.writeString(rootPackageFile, rootPackage + "\n", StandardCharsets.UTF_8);
+			Path codePackagesFile = getCodePackagesFile().get().getAsFile().toPath();
+			Files.createDirectories(codePackagesFile.getParent());
+			Files.writeString(codePackagesFile, codePackages(), StandardCharsets.UTF_8);
 			String resources = TypedSources.resources(rootPackage, getResourcesFolder().get().getAsFile().toPath(),
 					problems);
 			String urls = TypedSources.urls(rootPackage, getUrls().get());
@@ -118,6 +131,20 @@ public abstract class GenerateSources extends DefaultTask {
 		}
 		throw new GradleException("No class extends Plugin, so Oneiro cannot tell the plugin's root package for its"
 				+ " Resources and Urls classes; name it in the build: oneiro { rootPackage = \"com.example.herbs\" }.");
+	}
+
+	/** The packages the plugin's sources declare, one a line, in order. */
+	private String codePackages() throws IOException {
+		Set<String> packages = new TreeSet<>();
+		for (File source : getPluginSources().getFiles()) {
+			String found = packageOf(Files.readString(source.toPath(), StandardCharsets.UTF_8));
+			if (found != null) {
+				packages.add(found);
+			}
+		}
+		StringBuilder lines = new StringBuilder();
+		packages.forEach(name -> lines.append(name).append('\n'));
+		return lines.toString();
 	}
 
 	private static @Nullable String packageOf(String source) {

@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.bindings;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
@@ -13,7 +14,9 @@ import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
@@ -26,6 +29,7 @@ import javax.tools.ToolProvider;
 import org.adelheid.oneiro.plugin.LuaLibraries;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The bindings of the Lua a plugin uses: its own, from the fixtures in {@code src/test/plugin-lua}, {@code main}, which
@@ -40,6 +44,17 @@ class PluginLuaBindingsTest {
 	private static final Path LUA = Path.of("src", "test", "plugin-lua");
 	private static final Path LIBRARIES = Path.of("src", "test", "libraries");
 	private static final String ROOT = "com.example.herbs";
+	/** A module that declares no class for its table, which is named after its file. */
+	private static final String LEVELS = """
+			local Levels = {}
+
+			---@param penalty integer
+			---@return integer
+			function Levels.fromPenalty(penalty) return penalty // 2 end
+
+			return Levels
+			""";
+	private static Path rs3Jar;
 	private static BindingsGenerator.LuaResult result;
 	private static BindingsGenerator.LibraryResult main;
 	private static BindingsGenerator.LibraryResult dev;
@@ -47,10 +62,10 @@ class PluginLuaBindingsTest {
 	@BeforeAll
 	static void generate() throws IOException {
 		Path output = Path.of("build", "plugin-lua-bindings");
-		BindingsGenerator.Result rs3 = BindingsGenerator.generate(STUBS, output.resolve("rs3"),
-				BindingsGenerator.Language.JAVA);
-		result = BindingsGenerator.generateLua(STUBS, rs3.classesJar(), output, BindingsGenerator.Language.JAVA, ROOT,
-				List.of(new BindingsGenerator.Library("widgets", "org.adelheid.oneiro.lib.widgets",
+		rs3Jar = BindingsGenerator.generate(STUBS, output.resolve("rs3"), BindingsGenerator.Language.JAVA)
+				.classesJar();
+		result = BindingsGenerator.generateLua(STUBS, rs3Jar, output, BindingsGenerator.Language.JAVA, ROOT,
+				Set.of(), List.of(new BindingsGenerator.Library("widgets", "org.adelheid.oneiro.lib.widgets",
 						LIBRARIES.resolve("widgets"), "", null, LuaLibraries.Use.VENDORED)),
 				List.of(new BindingsGenerator.Library("gauges", "org.adelheid.oneiro.lib.gauges",
 						LIBRARIES.resolve("addon").resolve("library"), "", null, LuaLibraries.Use.REQUIRED)),
@@ -149,6 +164,110 @@ class PluginLuaBindingsTest {
 					.map(diagnostic -> diagnostic.getLineNumber() + ": " + diagnostic.getMessage(Locale.ROOT))
 					.collect(Collectors.joining("\n")));
 		}
+	}
+
+	/**
+	 * Modules of one name in two folders are two classes, and a dotted name nests in the class its start names,
+	 * wherever that is: {@code core.Levels.Options} in the module {@code core.Levels}, {@code Tally.Style} in the
+	 * {@code Tally} of another folder. A start that names no class is a class of the file's package.
+	 */
+	@Test
+	void eachPackageHasClassesOfItsOwn(@TempDir Path folder) throws IOException {
+		BindingsGenerator.LuaResult generated = generate(folder, Set.of(), Map.of(
+				"main/core/levels.lua", """
+						---@class core.Levels.Options
+						---@field step integer
+
+						---@class core.Levels
+						local Levels = {}
+
+						---@param options core.Levels.Options
+						---@return integer
+						function Levels.of(options) return options.step end
+
+						return Levels
+						""",
+				"main/ui/levels.lua", LEVELS,
+				"main/ui/tally.lua", """
+						---@class Tally
+						local Tally = {}
+
+						return Tally
+						""",
+				"main/core/style.lua", """
+						---@class Tally.Style
+						---@field size integer
+
+						---@class core.Shape
+						---@field sides integer
+
+						local Style = {}
+
+						---@param style Tally.Style
+						---@param shape core.Shape
+						function Style.apply(style, shape) end
+
+						return Style
+						"""));
+		assertEquals(List.of("com/example/herbs/core/Levels$Options.class", "com/example/herbs/core/Levels.class",
+				"com/example/herbs/core/Style.class", "com/example/herbs/core/core$Shape.class",
+				"com/example/herbs/core/core.class", "com/example/herbs/ui/Levels.class",
+				"com/example/herbs/ui/Tally$Style.class", "com/example/herbs/ui/Tally.class"),
+				classes(generated.main()).stream().filter(name -> !name.endsWith("/LuaOnly.class")).toList());
+	}
+
+	/**
+	 * Names Java cannot give the classes are refused before anything compiles, all at once, each with the file it
+	 * comes from: folders no package can be named as, a class with the name of a package that a folder of either
+	 * source set or the plugin's code makes, and a class both source sets have.
+	 */
+	@Test
+	void namesJavaCannotGiveAreRefused(@TempDir Path folder) {
+		IOException refused = assertThrows(IOException.class, () -> generate(folder,
+				Set.of("com.example.herbs.tools.timers"), Map.of(
+						"main/core.lua", """
+								---@class core
+								local core = {}
+
+								return core
+								""",
+						"main/core/levels.lua", LEVELS,
+						"main/tools.lua", """
+								---@class tools
+								local tools = {}
+
+								return tools
+								""",
+						"main/new/levels.lua", LEVELS,
+						"main/ui-parts/levels.lua", LEVELS,
+						"dev/core/levels.lua", LEVELS)));
+		Path main = folder.resolve("main");
+		assertEquals("The plugin's own Lua has names Java cannot give its bindings:"
+				+ "\n  - " + main.resolve("new") + ": the classes of its Lua would be in the package"
+				+ " com.example.herbs.new, which Java cannot name; rename the folder, such as to new_."
+				+ "\n  - " + main.resolve("ui-parts") + ": the classes of its Lua would be in the package"
+				+ " com.example.herbs.ui-parts, which Java cannot name; rename the folder, such as to ui_parts."
+				+ "\n  - " + main.resolve("core.lua") + ": the class core would be com.example.herbs.core, but the"
+				+ " folder " + main.resolve("core") + " makes that a package, and Java cannot have a class and a"
+				+ " package of one name; rename the class or the folder."
+				+ "\n  - " + main.resolve("tools.lua") + ": the class tools would be com.example.herbs.tools, but the"
+				+ " plugin's code makes that a package, and Java cannot have a class and a package of one name;"
+				+ " rename the class or that package."
+				+ "\n  - " + folder.resolve("dev").resolve("core").resolve("levels.lua") + ": the class Levels would"
+				+ " be com.example.herbs.core.Levels, as " + main.resolve("core").resolve("levels.lua")
+				+ " already is; rename one of them.", refused.getMessage());
+	}
+
+	/** Generates the bindings of the plugin's own Lua written into {@code folder}, each file at its path there. */
+	private static BindingsGenerator.LuaResult generate(Path folder, Set<String> codePackages,
+			Map<String, String> files) throws IOException {
+		for (Map.Entry<String, String> file : files.entrySet()) {
+			Path path = folder.resolve(file.getKey());
+			Files.createDirectories(path.getParent());
+			Files.writeString(path, file.getValue(), StandardCharsets.UTF_8);
+		}
+		return BindingsGenerator.generateLua(STUBS, rs3Jar, folder.resolve("build"), BindingsGenerator.Language.JAVA,
+				ROOT, codePackages, List.of(), List.of(), folder.resolve("main"), folder.resolve("dev"));
 	}
 
 	private static List<String> classes(BindingsGenerator.LibraryResult result) throws IOException {

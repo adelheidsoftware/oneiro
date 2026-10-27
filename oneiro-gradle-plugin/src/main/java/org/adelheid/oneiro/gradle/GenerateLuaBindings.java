@@ -30,7 +30,8 @@ import org.gradle.api.tasks.TaskAction;
  * file of the plugin's own is a class of the package of its folder below the root package, so that
  * {@code src/main/lua/core/levels.lua} is the class {@code <root>.core.Levels} and loads as
  * {@code require("src/core/levels")}. The stubs give the RS3 API's types, which the Lua may name, as the plugin's own
- * Lua may name its libraries'.
+ * Lua may name its libraries'. Names Java cannot give those classes, such as a class with the name of a package of
+ * the plugin's code, fail the task, with the file each comes from.
  */
 @CacheableTask
 public abstract class GenerateLuaBindings extends StubsTask {
@@ -44,6 +45,11 @@ public abstract class GenerateLuaBindings extends StubsTask {
 	@InputFile
 	@PathSensitive(PathSensitivity.NONE)
 	public abstract RegularFileProperty getRootPackageFile();
+
+	/** The file that holds the packages of the plugin's code, which {@code oneiroSources} finds. */
+	@InputFile
+	@PathSensitive(PathSensitivity.NONE)
+	public abstract RegularFileProperty getCodePackagesFile();
 
 	/** The libraries {@code oneiroLibraries} staged, each with its types and the build's overrides file for it. */
 	@InputDirectory
@@ -97,6 +103,7 @@ public abstract class GenerateLuaBindings extends StubsTask {
 			parameters.getOutput().set(output);
 			parameters.getLanguage().set(getLanguage());
 			parameters.getRootPackage().set(rootPackage);
+			parameters.getCodePackages().set(getCodePackagesFile());
 			parameters.getLibraries().set(getLibraries());
 			parameters.getMainLua().set(getMainLua());
 			parameters.getDevLua().set(getDevLua());

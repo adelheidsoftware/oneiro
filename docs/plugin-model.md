@@ -94,7 +94,7 @@ overrides Oneiro applies to them may no longer match.
 | `oneiroBindings` | Generates the RS3 bindings from the stubs, in a worker process, and compiles them; for a plugin written in Kotlin, a member that takes a hook has a form for each callback the hook takes, so that the callback can be a trailing lambda | `build/oneiro/bindings/rs3-bindings.jar`, and a sources jar for the IDE |
 | `oneiroLibraries` | Fetches the libraries the plugin vendors and stages them as they ship, with their licences, and checks that they may; and stages the types of the library plugins it depends on | `build/oneiro/libraries/` |
 | `oneiroLuaBindings` | Generates classes from the LuaCATS annotations of the libraries, of the library plugins' types and of the plugin's own Lua, `src/main/lua/` and `src/dev/lua/`, in a worker process, and compiles them; the main set's and its libraries' are on the main source set's classpath, the dev set's and its libraries' on the dev source set's alone | `build/oneiro/lua-bindings/`: `main-bindings.jar`, `dev-bindings.jar` and a jar per library under `libraries/`, each with a sources jar |
-| `oneiroSources` | Writes the typed `Resources` class from `src/main/resources/` and the `Urls` class from the manifest's URLs | `build/generated/sources/oneiro/java/main` |
+| `oneiroSources` | Writes the typed `Resources` class from `src/main/resources/` and the `Urls` class from the manifest's URLs, and lists the packages of the plugin's code, whose names the classes of its own Lua cannot take | `build/generated/sources/oneiro/java/main` |
 | `compileJava` | javac, with Oneiro as a javac plugin: once javac has analysed the sources without errors, Oneiro checks them and writes the Lua | `build/oneiro/lua/main/` |
 | `oneiroKotlin` | For a plugin written in Kotlin, after Kotlin's own `compileKotlin`: Oneiro's Kotlin front end checks the sources and writes the Lua, in a worker process | `build/oneiro/lua/main/` |
 | `pluginManifest` | Writes `plugin.json` from the `plugin { }` block, with every rule of the manifest checked, among them those on aliases, against the client's globals that the stubs declare | `build/oneiro/manifest/plugin.json` |
@@ -342,6 +342,16 @@ since the Lua's annotations say what it is. A class whose Lua would be one of th
 
 `src/dev/lua/` is the same for the dev source set: its files go under `dev/` in the development folder and never into
 the zip, its classes are on the dev source set's classpath alone, and its annotations may name the main set's types.
+
+Modules of one name in different folders are different classes, `<root>.core.Settings` and `<root>.ui.Settings`. A
+dotted `---@class` name nests in the class its first part names, `core.Levels.Options` in the module `core.Levels`, and
+is otherwise a class of its file's package. Some names Java cannot give a class, and `oneiroLuaBindings` fails with the
+file of each:
+
+- a folder whose name no package can have, such as `ui-parts` or `new`;
+- a class with the name of a package, such as `---@class core` beside the folder `core/`, or beside the plugin's code
+  in `<root>.core`, since Java has no class and package of one name;
+- a class that `src/main/lua/` and `src/dev/lua/` both have, since they share the root package.
 
 ## Vendored libraries
 

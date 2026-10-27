@@ -414,6 +414,33 @@ class OneiroPluginFunctionalTest {
 				+ " rename the class or that file."), output);
 	}
 
+	@Test
+	void aClassOfTheOwnLuaWithTheNameOfAPackageOfTheCodeFailsItsBindings() throws IOException {
+		plugin();
+		write("src/main/lua/helpers.lua", """
+				-- src/helpers.lua
+				-- Helpers kept in Lua, whose class takes the name of a package of the plugin's code.
+
+				---@class core
+				local core = {}
+
+				return core
+				""");
+		write("src/dev/java/com/example/herbs/core/timers/Cheats.java", """
+				package com.example.herbs.core.timers;
+
+				/** A class of the dev source set's, whose package makes com.example.herbs.core one too. */
+				public final class Cheats {
+
+					private Cheats() {
+					}
+				}
+				""");
+		String output = gradle("compileJava").buildAndFail().getOutput();
+		assertTrue(output.contains("helpers.lua: the class core would be com.example.herbs.core, but the plugin's code"
+				+ " makes that a package"), output);
+	}
+
 	/**
 	 * A library the plugin vendors from a checkout beside it, {@code tallies}, whose Lua is in its {@code src/} folder,
 	 * and one for the dev source set alone, {@code inspect}, whose Lua is at its root and declares no class, so that

@@ -313,7 +313,7 @@ class ConformanceTest {
 		Path output = Path.of("build", "case-bindings",
 				folder.getFileName() + "-" + language.name().toLowerCase(Locale.ROOT));
 		BindingsGenerator.LuaResult result = BindingsGenerator.generateLua(
-				Path.of(System.getProperty("oneiro.stubsFixture")), rs3Jar, output, language, ROOT_PACKAGE,
+				Path.of(System.getProperty("oneiro.stubsFixture")), rs3Jar, output, language, ROOT_PACKAGE, Set.of(),
 				dependencies, List.of(), lua, null);
 		assertEquals(List.of(), result.warnings(), "the bindings of the Lua " + folder.getFileName() + " uses");
 		List<Path> jars = new ArrayList<>(List.of(result.main().classesJar()));

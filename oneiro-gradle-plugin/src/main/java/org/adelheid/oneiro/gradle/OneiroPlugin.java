@@ -134,9 +134,11 @@ public final class OneiroPlugin implements Plugin<Project> {
 			task.getResourcesFolder().set(resources);
 			task.getUrls().set(extension.getPlugin().getUrls());
 			task.getRootPackage().set(extension.getRootPackage());
-			task.getPluginSources().from(sourceFiles(layout, "main", "java"), sourceFiles(layout, "main", "kt"));
+			task.getPluginSources().from(sourceFiles(layout, "main", "java"), sourceFiles(layout, "main", "kt"),
+					sourceFiles(layout, "dev", "java"), sourceFiles(layout, "dev", "kt"));
 			task.getOutputDirectory().set(layout.getBuildDirectory().dir("generated/sources/oneiro/java/main"));
 			task.getRootPackageFile().set(layout.getBuildDirectory().file("oneiro/root-package.txt"));
+			task.getCodePackagesFile().set(layout.getBuildDirectory().file("oneiro/code-packages.txt"));
 		});
 		main.getJava().srcDir(sources.flatMap(GenerateSources::getOutputDirectory));
 
@@ -175,6 +177,7 @@ public final class OneiroPlugin implements Plugin<Project> {
 					stubs.execute(task);
 					task.getRs3Jar().set(bindings.flatMap(GenerateBindings::getClassesJar));
 					task.getRootPackageFile().set(sources.flatMap(GenerateSources::getRootPackageFile));
+					task.getCodePackagesFile().set(sources.flatMap(GenerateSources::getCodePackagesFile));
 					task.getLibraries().set(stagedLibraries);
 					task.getLibrariesFolder().set(luaBindingsFolder.map(folder -> folder.dir("libraries")));
 					task.getLuaFiles().from(mainLuaSources.getAsFileTree(), devLuaSources.getAsFileTree());

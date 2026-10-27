@@ -115,6 +115,15 @@ All notable changes to Oneiro are listed here. The format follows
   a `Void` that could not be null, which no lambda could return.
 - The Javadoc of a class that only holds the fields its subclasses share now says so, rather than that the library
   hands out its values.
+- Two modules of your own Lua with one name in different folders, such as `core/settings.lua` and
+  `ui/settings.lua`, are now two classes, `<root>.core.Settings` and `<root>.ui.Settings`; before, their bindings did
+  not compile. A dotted `---@class` name now nests in the class its first part names, such as `core.Levels.Options`
+  in the module `core.Levels`, and is otherwise a class of its file's package.
+- Names Java cannot give the classes of your own Lua now fail `oneiroLuaBindings` with the file each comes from,
+  instead of a compile error in the generated bindings: a folder no package can be named as (`ui-parts`), a class
+  with the name of a package that a folder or your code makes (`---@class core` beside the folder `core/`), and a
+  class both `src/main/lua/` and `src/dev/lua/` have. See
+  [The plugin's own Lua](docs/plugin-model.md#the-plugins-own-lua).
 
 ## [0.2.0] - 2026-10-25
 
