@@ -154,4 +154,10 @@ subprojects {
 			}
 		}
 	}
+	// The repository is in this build's own folder, which its clean deletes, so in `clean build` that comes first
+	tasks.withType<PublishToMavenRepository>().configureEach {
+		if (name.endsWith("ToFunctionalTestRepository")) {
+			mustRunAfter(":clean")
+		}
+	}
 }

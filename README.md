@@ -134,7 +134,7 @@ In a new folder named `coin-watch`, create the Gradle wrapper with `gradle wrapp
 ```kotlin
 plugins {
     // For a plugin written in Kotlin, add kotlin("jvm") version "2.4.21"
-    id("org.adelheid.oneiro") version "0.2.0"
+    id("org.adelheid.oneiro") version "0.3.0"
 }
 
 version = "1.0.0"
