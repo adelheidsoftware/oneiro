@@ -50,13 +50,19 @@ public sealed interface Statement {
 		}
 	}
 
-	/** {@code if ... then ... elseif ... then ... else ... end}. */
+	/**
+	 * {@code if ... then ... elseif ... then ... else ... end}. An {@code else} with neither statements nor comments is
+	 * left out, since it does nothing.
+	 */
 	record If(List<Branch> branches, @Nullable Block orElse) implements Statement {
 
 		public If {
 			branches = List.copyOf(branches);
 			if (branches.isEmpty()) {
 				throw new IllegalArgumentException("An if statement has at least one branch.");
+			}
+			if (orElse != null && orElse.isEmpty()) {
+				orElse = null;
 			}
 		}
 

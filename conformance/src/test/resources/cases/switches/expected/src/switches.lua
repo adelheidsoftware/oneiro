@@ -131,4 +131,13 @@ function Switches.bonus(level)
     return bonus
 end
 
+-- A default that does nothing
+function Switches.bump(level)
+    local bonus = 0
+    if level == 1 then
+        bonus = 1
+    end
+    return bonus
+end
+
 return Switches

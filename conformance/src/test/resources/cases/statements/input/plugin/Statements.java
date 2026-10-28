@@ -82,4 +82,14 @@ public final class Statements {
 	public static @Nullable String size(int n, @Nullable String small) {
 		return n < 10 ? small : n < 100 ? null : "large";
 	}
+
+	// An else with nothing in it
+	public static int capped(int value) {
+		int result = value;
+		if (value > 10) {
+			result = 10;
+		} else {
+		}
+		return result;
+	}
 }

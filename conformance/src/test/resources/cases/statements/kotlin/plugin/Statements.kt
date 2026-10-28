@@ -78,4 +78,14 @@ object Statements {
 	fun size(n: Int, small: String?): String? {
 		return if (n < 10) small else if (n < 100) null else "large"
 	}
+
+	// An else with nothing in it
+	fun capped(value: Int): Int {
+		var result = value
+		if (value > 10) {
+			result = 10
+		} else {
+		}
+		return result
+	}
 }

@@ -71,6 +71,36 @@ local labels = someFunction(
     beta,
     { text = "a fairly long string value for this table field", colour = Theme.MUTED, size = 12 }
 )
+shown:show(Section.SESSION, {
+    "a first long string value for the section's lines",
+    "a second long string value for the section's lines",
+    "a third value",
+})
+someFunction(alpha, {
+    "a first long string value for the section's lines",
+    "a second long string value for the section's lines",
+    "a third value",
+}, beta)
+outer(
+    x,
+    inner(y, {
+        "a first long string value for the section's lines",
+        "a second long string value for the section's lines",
+        "a third value",
+    })
+)
+someVeryLongFunctionNameIndeed(
+    argumentNumberOne,
+    argumentNumberTwo,
+    argumentNumberThree,
+    argumentNumberFour,
+    argumentNumberFive,
+    {
+        "a first long string value for the section's lines",
+        "a second long string value for the section's lines",
+        "a third value",
+    }
+)
 
 local function check(
     parameterNumberOne,

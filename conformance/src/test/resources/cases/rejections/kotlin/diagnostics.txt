@@ -78,23 +78,19 @@ plugin/Gaps.kt:116: error: In Lua a chain of collection functions is a loop, whi
 		return names.indexOf("") + names.count { it.isNotEmpty() }
 		                           ^
 
-plugin/Gaps.kt:120: error: A chain's loop sees one element at a time, so it sorts only what it collects; sort at the end of the chain, or sort the list afterwards.
-		return names.sorted().filter { it.isNotEmpty() }
-		       ^
-
-plugin/Gaps.kt:124: error: Lua's for loop walks tables, not iterator objects; give the class a function that returns its list, and loop over that.
+plugin/Gaps.kt:120: error: Lua's for loop walks tables, not iterator objects; give the class a function that returns its list, and loop over that.
 	abstract class Basket : Iterable<String>
 	^
 
-plugin/Gaps.kt:136: error: A value of Step is a Lua function, which carries no methods; make describe() a function outside the interface that takes the Step.
+plugin/Gaps.kt:132: error: A value of Step is a Lua function, which carries no methods; make describe() a function outside the interface that takes the Step.
 		return step.describe()
 		       ^
 
-plugin/Gaps.kt:140: error: Lua has none of ArrayList's code to inherit; keep one in a property instead of extending it.
+plugin/Gaps.kt:136: error: Lua has none of ArrayList's code to inherit; keep one in a property instead of extending it.
 	class Names : ArrayList<String>()
 	^
 
-plugin/Gaps.kt:143: error: Lua has no regular expressions; use LuaString.match, find, gsub or gmatch with a Lua pattern.
+plugin/Gaps.kt:139: error: Lua has no regular expressions; use LuaString.match, find, gsub or gmatch with a Lua pattern.
 		return text.matches(Regex("""\d+"""))
 		       ^
 

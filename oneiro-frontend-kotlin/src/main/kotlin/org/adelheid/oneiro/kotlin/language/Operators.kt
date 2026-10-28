@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtPrefixExpression
+import org.jetbrains.kotlin.psi.KtPsiUtil
 import org.jetbrains.kotlin.psi.KtThrowExpression
 
 /**
@@ -48,11 +49,11 @@ internal class Operators(private val body: BodyLowering) {
 		val right = binary.right ?: throw Rejection(binary, EMPTY)
 		val operator = when (binary.operationToken) {
 			KtTokens.EQEQ -> {
-				checkEquality(binary, left)
+				checkEquality(binary, left, right)
 				BinaryOperator.EQUAL
 			}
 			KtTokens.EXCLEQ -> {
-				checkEquality(binary, left)
+				checkEquality(binary, left, right)
 				BinaryOperator.NOT_EQUAL
 			}
 			KtTokens.EQEQEQ -> BinaryOperator.EQUAL
@@ -279,26 +280,33 @@ internal class Operators(private val body: BodyLowering) {
 	}
 
 	/**
-	 * Kotlin's `==` calls `equals`, which a pair, a data class, or a class that declares `equals`, makes compare
-	 * values; Lua's compares tables by identity, as Kotlin's `===` does.
+	 * Kotlin's `==` calls `equals`, which a pair, a data class, or a class that declares `equals`, on either side,
+	 * makes compare values; Lua's compares tables by identity, as Kotlin's `===` does. A comparison with `null` is the
+	 * same in both.
 	 */
-	private fun checkEquality(binary: KtBinaryExpression, left: KtExpression): Unit = with(unit.session) {
-		if (left.expressionType?.let(types::isPair) == true) {
-			throw Rejection(binary, "Kotlin's == compares pairs by their parts, but Lua's compares tables by identity;"
-				+ " compare their parts instead, or use === for identity.")
+	private fun checkEquality(binary: KtBinaryExpression, left: KtExpression, right: KtExpression): Unit =
+		with(unit.session) {
+			if (KtPsiUtil.isNullConstant(left) || KtPsiUtil.isNullConstant(right)) {
+				return
+			}
+			for (side in listOf(left, right)) {
+				if (side.expressionType?.let(types::isPair) == true) {
+					throw Rejection(binary, "Kotlin's == compares pairs by their parts, but Lua's compares tables by"
+						+ " identity; compare their parts instead, or use === for identity.")
+				}
+				val type = side.expressionType?.expandedSymbol as? KaNamedClassSymbol ?: continue
+				if (!unit.isPluginType(type)) {
+					continue
+				}
+				val declaresEquals = type.declaredMemberScope.callables.any {
+					it.origin == KaSymbolOrigin.SOURCE && it.callableId?.callableName?.asString() == "equals"
+				}
+				if (type.isData || declaresEquals) {
+					throw Rejection(binary, "Kotlin's == compares these objects by equals, but Lua's compares tables by"
+						+ " identity; compare their properties instead, or use === for identity.")
+				}
+			}
 		}
-		val type = left.expressionType?.expandedSymbol as? KaNamedClassSymbol ?: return
-		if (!unit.isPluginType(type)) {
-			return
-		}
-		val declaresEquals = type.declaredMemberScope.callables.any {
-			it.origin == KaSymbolOrigin.SOURCE && it.callableId?.callableName?.asString() == "equals"
-		}
-		if (type.isData || declaresEquals) {
-			throw Rejection(binary, "Kotlin's == compares these objects by equals, but Lua's compares tables by"
-				+ " identity; compare their properties instead, or use === for identity.")
-		}
-	}
 
 	/** `i + 1` or `1 + i` where `i` counts from 1 in Lua: the variable itself. */
 	private fun oneBasedPlusOne(left: KtExpression, right: KtExpression): Expression? {

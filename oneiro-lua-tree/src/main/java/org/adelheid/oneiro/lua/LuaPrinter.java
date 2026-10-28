@@ -365,8 +365,9 @@ public final class LuaPrinter {
 	 * A call's arguments, as StyLua writes them. A table that is the only argument opens on the call's line and closes
 	 * next to the parenthesis. When an argument cannot be on one line, a function with a body or a table holding one
 	 * or a comment, all the arguments stay on the call's line and that one breaks inside, as in
-	 * {@code pcall(function() ... end)}, if the line up to its first break fits. Otherwise the arguments go one per
-	 * line when they do not fit.
+	 * {@code pcall(function() ... end)}, if the line up to its first break fits. So does a table too wide for a line
+	 * of its own, where the call does not fit on one line. Otherwise the arguments go one per line when they do not
+	 * fit.
 	 */
 	private Doc arguments(List<Expression> arguments) {
 		if (arguments.isEmpty()) {
@@ -377,12 +378,26 @@ public final class LuaPrinter {
 			return hugged(docs);
 		}
 		boolean hug = false;
+		// The tables that could be flat, and the arguments with those tables broken where they are
+		List<Doc> tables = new ArrayList<>();
+		List<Doc> brokenTables = new ArrayList<>();
 		for (int index = 0; index < arguments.size(); index++) {
 			Expression argument = arguments.get(index);
-			hug |= (argument instanceof Expression.FunctionExpression || argument instanceof Expression.Table)
-					&& Doc.breaks(docs.get(index));
+			Doc doc = docs.get(index);
+			boolean breaks = Doc.breaks(doc);
+			hug |= breaks
+					&& (argument instanceof Expression.FunctionExpression || argument instanceof Expression.Table);
+			if (argument instanceof Expression.Table && !breaks && doc instanceof Doc.Group group) {
+				tables.add(index < arguments.size() - 1 ? concat(doc, text(",")) : doc);
+				brokenTables.add(group.content());
+			} else {
+				brokenTables.add(doc);
+			}
 		}
-		return hug ? new Doc.Hug(hugged(docs), parenthesized(docs)) : parenthesized(docs);
+		if (hug) {
+			return new Doc.Hug(hugged(docs), parenthesized(docs), List.of());
+		}
+		return tables.isEmpty() ? parenthesized(docs) : new Doc.Hug(hugged(brokenTables), parenthesized(docs), tables);
 	}
 
 	/** {@code (a, b)} with no line breaks of its own, the arguments breaking inside where they must. */

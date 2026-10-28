@@ -132,4 +132,15 @@ public final class Switches {
 		}
 		return bonus;
 	}
+
+	// A default that does nothing
+	public static int bump(int level) {
+		int bonus = 0;
+		switch (level) {
+			case 1 -> bonus = 1;
+			default -> {
+			}
+		}
+		return bonus;
+	}
 }

@@ -1,3 +1,11 @@
+plugin/Equality.kt:10: error: Kotlin's == compares these objects by equals, but Lua's compares tables by identity; compare their properties instead, or use === for identity.
+	fun same(a: Tile, b: Tile): Boolean = a == b
+	                                      ^
+
+plugin/Equality.kt:13: error: Kotlin's == compares these objects by equals, but Lua's compares tables by identity; compare their properties instead, or use === for identity.
+	fun isTile(value: Any, tile: Tile): Boolean = value == tile
+	                                              ^
+
 plugin/Refused.kt:10: error: Calling kotlin.collections.zipWithNext is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
 		private val pairs = names.zipWithNext()
 		                    ^

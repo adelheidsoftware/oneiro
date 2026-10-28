@@ -100,4 +100,41 @@ function Conditions.calm(ready, mood)
     return both
 end
 
+-- The drop's count, or none when there is no drop: a data class compared with null.
+---@param drop table?
+---@return integer
+function Conditions.countOf(drop)
+    if drop ~= nil then
+        return drop.count
+    end
+    return 0
+end
+
+-- Whether there is no drop, with null on the left.
+---@param drop table?
+---@return boolean
+function Conditions.missing(drop)
+    return nil == drop
+end
+
+-- Whether there is a pair, compared with null.
+---@param pair table?
+---@return boolean
+function Conditions.paired(pair)
+    return pair ~= nil
+end
+
+-- Whether a level is a skill's, from 1 to 99.
+---@param level integer
+---@return boolean
+function Conditions.isLevel(level)
+    return level >= 1 and level <= 99
+end
+
+-- Whether five is a level, a literal compared with both ends.
+---@return boolean
+function Conditions.fiveIsLevel()
+    return 5 >= 1 and 5 <= 99
+end
+
 return Conditions

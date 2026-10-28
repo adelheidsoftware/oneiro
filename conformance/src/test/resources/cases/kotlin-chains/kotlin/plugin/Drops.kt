@@ -146,6 +146,19 @@ object Drops {
 		return drop.price > price
 	}
 
+	/** The two most valuable drops: the drops sorted, then the first two taken. */
+	fun mostValuable(drops: List<Drop>): List<Drop> = drops.sortedByDescending { it.price }.take(2)
+
+	/** The items of the stacks, from the smallest up. */
+	fun stackItems(drops: List<Drop>): List<String> =
+		drops.filter { it.count > 1 }.sortedBy { it.count }.map { it.item }
+
+	/** The two cheapest drops, by a comparator, kept in a local. */
+	fun cheapest(drops: List<Drop>): List<Drop> {
+		val cheap = drops.sortedWith(compareBy { it.price }).take(2)
+		return cheap
+	}
+
 	/** Logs the items worth more than the price on one line, looking at each drop once. */
 	fun logItems(drops: List<Drop>, price: Double) {
 		log(drops.filter { worthMore(it, price) }.map { it.item }.joinToString(","))

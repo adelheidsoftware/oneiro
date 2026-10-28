@@ -97,4 +97,13 @@ function Statements.size(n, small)
     end
 end
 
+-- An else with nothing in it
+function Statements.capped(value)
+    local result = value
+    if value > 10 then
+        result = 10
+    end
+    return result
+end
+
 return Statements

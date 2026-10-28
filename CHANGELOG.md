@@ -10,6 +10,10 @@ All notable changes to Oneiro are listed here. The format follows
 
 - Kotlin code of the dev source set can call the main set's top-level functions and properties,
   `Levels.clampLevel(it)`, which before was not supported.
+- A sort with more steps after it in a Kotlin chain, `drops.sortedByDescending { it.price }.take(2)`: the sorted
+  list is a local of its own, `sorted`, which a second loop walks for the steps after it.
+- An annotation on a Kotlin expression, `val names = @Suppress("UNCHECKED_CAST") (value as List<String>)`,
+  which the Lua leaves out.
 
 ### Changed
 
@@ -19,6 +23,19 @@ All notable changes to Oneiro are listed here. The format follows
 
 ### Fixed
 
+- A call whose table argument is too wide for a line of its own now opens the table on the call's line,
+  `shown:show(Section.SESSION, {`, its entries indented once, as StyLua lays such a call out. Before, each argument
+  went on a line of its own, which StyLua would reformat.
+- `./gradlew build` now refreshes the development folder, `build/oneiro/dev-plugin/`, of a plugin with a dev source
+  set, so that after `linkDevPlugin` each build updates what the client loads, as the docs said. Before, only
+  `assembleDevPlugin` wrote it.
+- An `else` with nothing in it, such as Kotlin's `else -> {}` or Java's `else {}`, now leaves no `else` in the Lua.
+  One that holds a comment keeps it.
+- A literal where Lua reads a value twice, as in Kotlin's `5 in 1..9`, now compiles, `5 >= 1 and 5 <= 9`. Before,
+  it was refused, as a call would be, which might give a different value the second time.
+- A Kotlin data class or pair compared with `null`, `if (saved != null)`, now compiles to `saved ~= nil`. Before, it
+  was refused as though it compared two objects by `equals`; and `==` with a data class on its right side only, such
+  as `value == tile`, was taken for identity, where it is now refused as with one on its left.
 - A local Oneiro makes up in Kotlin, such as a chain's `sum` or `list`, no longer hides a name the code around it
   reads. Before, `values.sumOf { it * 2 } + sum(1, 2)` beside a private function `sum` became
   `return sum + sum(1, 2)`, `values.count { it < keys.size }` called the count it was making, and a chain inside a

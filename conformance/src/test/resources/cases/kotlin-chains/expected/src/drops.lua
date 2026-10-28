@@ -381,6 +381,66 @@ function Drops.worthMore(drop, price)
     return drop.price > price
 end
 
+-- The two most valuable drops: the drops sorted, then the first two taken.
+---@param drops table[]
+---@return table[]
+function Drops.mostValuable(drops)
+    local sorted = table.move(drops, 1, #drops, 1, {})
+    table.sort(sorted, function(a, b)
+        return b.price < a.price
+    end)
+    local taken = 0
+    local list = {}
+    for _, item in ipairs(sorted) do
+        if taken == 2 then
+            break
+        end
+        taken = taken + 1
+        list[#list + 1] = item
+    end
+    return list
+end
+
+-- The items of the stacks, from the smallest up.
+---@param drops table[]
+---@return string[]
+function Drops.stackItems(drops)
+    local sorted = {}
+    for _, it in ipairs(drops) do
+        if it.count > 1 then
+            sorted[#sorted + 1] = it
+        end
+    end
+    table.sort(sorted, function(a, b)
+        return a.count < b.count
+    end)
+    local list = {}
+    for _, it in ipairs(sorted) do
+        list[#list + 1] = it.item
+    end
+    return list
+end
+
+-- The two cheapest drops, by a comparator, kept in a local.
+---@param drops table[]
+---@return table[]
+function Drops.cheapest(drops)
+    local sorted = table.move(drops, 1, #drops, 1, {})
+    table.sort(sorted, function(a, b)
+        return a.price < b.price
+    end)
+    local taken = 0
+    local cheap = {}
+    for _, item in ipairs(sorted) do
+        if taken == 2 then
+            break
+        end
+        taken = taken + 1
+        cheap[#cheap + 1] = item
+    end
+    return cheap
+end
+
 -- Logs the items worth more than the price on one line, looking at each drop once.
 ---@param drops table[]
 ---@param price number

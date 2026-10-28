@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.gradle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -9,8 +10,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import org.gradle.testkit.runner.BuildResult;
@@ -195,7 +198,7 @@ class OneiroPluginFunctionalTest {
 	@Test
 	void buildsThePluginAsItShips() throws IOException {
 		plugin();
-		BuildResult result = gradle("build", "assembleDevPlugin").build();
+		BuildResult result = gradle("build").build();
 		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":checkPlugin"));
 		// Moderation reviews the chat, and the compiler says so where the plugin subscribes to it
 		String warning = "HerbPlugin.java:28: warning: Subscribing to ChatMessage uses the chat,";
@@ -238,6 +241,19 @@ class OneiroPluginFunctionalTest {
 	}
 
 	@Test
+	void buildMakesNoDevelopmentFolderWithoutADevSourceSet() throws IOException {
+		plugin();
+		try (Stream<Path> files = Files.walk(project.resolve("src/dev"))) {
+			for (Path file : files.sorted(Comparator.reverseOrder()).toList()) {
+				Files.delete(file);
+			}
+		}
+		gradle("build").build();
+		assertTrue(Files.isDirectory(project.resolve("build/oneiro/plugin")));
+		assertFalse(Files.exists(project.resolve("build/oneiro/dev-plugin")));
+	}
+
+	@Test
 	void theDevSetReadsTheMainSetsSources() throws IOException {
 		plugin();
 		write("src/main/java/com/example/herbs/Mode.java", """
@@ -270,7 +286,7 @@ class OneiroPluginFunctionalTest {
 					}
 				}
 				""");
-		gradle("build", "assembleDevPlugin").build();
+		gradle("build").build();
 		Path cheats = project.resolve("build/oneiro/dev-plugin/dev/main.lua");
 		// An object enum of the main set's, whose constants keep their names, as the main set's Lua makes them
 		String lua = Files.readString(cheats);
@@ -286,7 +302,7 @@ class OneiroPluginFunctionalTest {
 					FAST, SAFE
 				}
 				""");
-		gradle("assembleDevPlugin").build();
+		gradle("build").build();
 		lua = Files.readString(cheats);
 		assertTrue(lua.contains("log(\"mode\", Mode.FAST)"), lua);
 	}
@@ -411,7 +427,7 @@ class OneiroPluginFunctionalTest {
 					}
 				}
 				""");
-		BuildResult result = gradle("build", "assembleDevPlugin").build();
+		BuildResult result = gradle("build").build();
 		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":checkPlugin"));
 		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":testLua"));
 
@@ -606,7 +622,7 @@ class OneiroPluginFunctionalTest {
 					}
 				}
 				""");
-		BuildResult result = gradle("build", "assembleDevPlugin").build();
+		BuildResult result = gradle("build").build();
 		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":checkPlugin"));
 		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":testLua"));
 
@@ -833,7 +849,7 @@ class OneiroPluginFunctionalTest {
 					}
 				}
 				""");
-		gradle("build", "assembleDevPlugin").build();
+		gradle("build").build();
 		Path cheats = project.resolve("build/oneiro/dev-plugin/dev/main.lua");
 		// The main set's enum, read from its sources, which its compiled classes do not hold
 		String lua = Files.readString(cheats);
@@ -847,7 +863,7 @@ class OneiroPluginFunctionalTest {
 				/** How the tracker counts. */
 				enum class Mode { FAST, SAFE, IDLE }
 				""");
-		gradle("assembleDevPlugin").build();
+		gradle("build").build();
 		lua = Files.readString(cheats);
 		assertTrue(lua.contains("log(\"modes\", #{ Mode.FAST, Mode.SAFE, Mode.IDLE })"), lua);
 	}

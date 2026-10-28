@@ -113,4 +113,14 @@ object Switches {
 		}
 		return bonus
 	}
+
+	// An else that does nothing
+	fun bump(level: Int): Int {
+		var bonus = 0
+		when (level) {
+			1 -> bonus = 1
+			else -> {}
+		}
+		return bonus
+	}
 }

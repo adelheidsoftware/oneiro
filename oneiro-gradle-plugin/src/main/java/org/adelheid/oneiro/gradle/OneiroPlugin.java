@@ -290,6 +290,9 @@ public final class OneiroPlugin implements Plugin<Project> {
 		// the build's dependencies decide once it is evaluated
 		Provider<TaskProvider<Sync>> linked = project.provider(
 				() -> hasDev || extension.getPlugin().developsDependencies() ? assembleDevPlugin : assemblePlugin);
+		// Each build writes the folder linkDevPlugin links, so that the client loads it after prl; the zip is still
+		// made from the shipped folder alone
+		tasks.named("assemble", assemble -> assemble.dependsOn(linked));
 		tasks.register("linkDevPlugin", LinkDevPlugin.class, task -> {
 			task.setGroup(GROUP);
 			task.setDescription("Links the plugin into the client's dev_plugins folder under its id.");

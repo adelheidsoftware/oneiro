@@ -135,6 +135,15 @@ class LuaPrinterTest {
 		Expression tableLast = call("someFunction", name("alpha"), name("beta"),
 				table(named("text", string("a fairly long string value for this table field")),
 						named("colour", field(name("Theme"), "MUTED")), named("size", number("12"))));
+		// A table too wide for a line of its own opens on the call's line, where that line fits, as StyLua settles it
+		Expression lines = list(string("a first long string value for the section's lines"),
+				string("a second long string value for the section's lines"), string("a third value"));
+		Expression hugsLast = method(name("shown"), "show", field(name("Section"), "SESSION"), lines);
+		Expression hugsInTheMiddle = call("someFunction", name("alpha"), lines, name("beta"));
+		Expression hugsInner = call("outer", name("x"), call("inner", name("y"), lines));
+		Expression tooLongToHugATable = call("someVeryLongFunctionNameIndeed", name("argumentNumberOne"),
+				name("argumentNumberTwo"), name("argumentNumberThree"), name("argumentNumberFour"),
+				name("argumentNumberFive"), lines);
 		Statement check = new Statement.LocalFunction("check", FunctionBody.of(
 				List.of("parameterNumberOne", "parameterNumberTwo", "parameterNumberThree", "parameterNumberFour",
 						"parameterFiveSixSeven"),
@@ -179,6 +188,10 @@ class LuaPrinterTest {
 						entry(run(tooLongToHug)),
 						entry(run(functionFirst)),
 						entry(local("labels", tableLast)),
+						entry(run(hugsLast)),
+						entry(run(hugsInTheMiddle)),
+						entry(run(hugsInner)),
+						entry(run(tooLongToHugATable)),
 						entry(check, blank())));
 
 		assertEquals(expected("layout.lua"), LuaPrinter.print(chunk).text());

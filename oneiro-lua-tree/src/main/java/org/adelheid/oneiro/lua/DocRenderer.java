@@ -62,13 +62,28 @@ final class DocRenderer {
 				case Doc.Concat concat -> pushParts(stack, command, concat.parts());
 				case Doc.Hang hang -> hang(command, hang, stack, output);
 				case Doc.Hug hug -> {
-					boolean hugged = firstLineFits(new Command(command.indent(), false, hug.hugged()), output.column());
+					boolean hugged = (hug.tables().isEmpty() || breaksATable(command, hug, stack, output.column()))
+							&& firstLineFits(new Command(command.indent(), false, hug.hugged()), output.column());
 					stack.push(new Command(command.indent(), command.flat(), hugged ? hug.hugged() : hug.expanded()));
 				}
 				case Doc.Mark mark -> output.mark(mark.origin());
 			}
 		}
 		return output.finish();
+	}
+
+	/**
+	 * For a {@link Doc.Hug} of tables that could be flat: whether it breaks one where it is, as StyLua settles such a
+	 * call, because the call does not fit on its line and one of the tables does not fit flat on a line of its own,
+	 * one level deeper, either.
+	 */
+	private boolean breaksATable(Command command, Doc.Hug hug, Deque<Command> rest, int column) {
+		if (command.flat() || fits(new Command(command.indent(), true, hug.expanded()), rest, column)) {
+			return false;
+		}
+		int deeper = command.indent() + 1;
+		return hug.tables().stream().anyMatch(
+				table -> !fits(new Command(deeper, true, table), new ArrayDeque<>(), deeper * INDENT.length()));
 	}
 
 	/**

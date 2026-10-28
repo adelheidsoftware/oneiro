@@ -62,6 +62,7 @@ import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.psi.KtAnonymousInitializer
+import org.jetbrains.kotlin.psi.KtAnnotatedExpression
 import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
@@ -284,6 +285,8 @@ internal class BodyLowering(
 		is KtDestructuringDeclaration -> destructured(statement)
 		is KtClass -> objects.localClass(statement)
 		is KtLabeledExpression -> statement(statement.baseExpression ?: throw Rejection(statement, EMPTY))
+		// An annotation, such as @Suppress, changes nothing in the Lua
+		is KtAnnotatedExpression -> statement(statement.baseExpression ?: throw Rejection(statement, EMPTY))
 		is KtIfExpression -> listOf(branches.ifStatement(statement))
 		is KtWhenExpression -> branches.whenStatement(statement)
 		is KtReturnExpression -> returnStatement(statement)
@@ -335,6 +338,9 @@ internal class BodyLowering(
 
 	/** The statements that return a value: one from `if` or `when` in each branch, and one that jumps as it is. */
 	fun returned(value: KtExpression): List<Statement> {
+		if (value is KtAnnotatedExpression) {
+			return returned(value.baseExpression ?: throw Rejection(value, EMPTY))
+		}
 		if (Branches.jumps(value)) {
 			return statement(value)
 		}
@@ -385,8 +391,11 @@ internal class BodyLowering(
 	 * The statements that hand a value to the sink: an `if` or `when` hands each branch's on, and code that jumps runs
 	 * as it is.
 	 */
-	fun handedOn(value: KtExpression, sink: (Expression) -> Statement): List<Statement> =
-		if (Branches.jumps(value)) statement(value) else delivered(value, sink) ?: listOf(sink(expression(value)))
+	fun handedOn(value: KtExpression, sink: (Expression) -> Statement): List<Statement> = when {
+		value is KtAnnotatedExpression -> handedOn(value.baseExpression ?: throw Rejection(value, EMPTY), sink)
+		Branches.jumps(value) -> statement(value)
+		else -> delivered(value, sink) ?: listOf(sink(expression(value)))
+	}
 
 	/** Whether an expression is `run { ... }` with no receiver, a block of code with locals of its own. */
 	private fun isRun(expression: KtExpression): Boolean = with(unit.session) {
@@ -530,6 +539,9 @@ internal class BodyLowering(
 	 * function or a builder gives with statements of its own.
 	 */
 	fun localValue(name: String, initializer: KtExpression): List<Statement> {
+		if (initializer is KtAnnotatedExpression) {
+			return localValue(name, initializer.baseExpression ?: throw Rejection(initializer, EMPTY))
+		}
 		val local = Expression.name(name)
 		chains.chain(initializer)?.let { return chains.lower(it, CollectionLoops.Destination.Local(name)) }
 		if (preconditions.isNotNull(initializer)) {
@@ -666,6 +678,7 @@ internal class BodyLowering(
 		is KtThisExpression -> self(expression)
 		is KtSuperExpression -> self(expression)
 		is KtParenthesizedExpression -> expression(expression.expression ?: throw Rejection(expression, EMPTY))
+		is KtAnnotatedExpression -> expression(expression.baseExpression ?: throw Rejection(expression, EMPTY))
 		is KtPrefixExpression -> operators.prefix(expression)
 		is KtBinaryExpression -> operators.binary(expression)
 		is KtArrayAccessExpression -> index(expression)
@@ -1729,9 +1742,14 @@ internal class BodyLowering(
 		return Expression.call(Expression.field(Expression.name("table"), "unpack"), expression(value))
 	}
 
-	/** Whether reading an expression again gives the same value and does nothing else: a name, or a property read. */
+	/**
+	 * Whether reading an expression again gives the same value and does nothing else: a name, a property read, or a
+	 * literal.
+	 */
 	fun isStable(expression: KtExpression): Boolean = when (expression) {
-		is KtNameReferenceExpression, is KtThisExpression -> true
+		is KtNameReferenceExpression, is KtThisExpression, is KtConstantExpression -> true
+		is KtStringTemplateExpression -> !expression.hasInterpolation()
+		is KtParenthesizedExpression -> expression.expression?.let(::isStable) == true
 		is KtDotQualifiedExpression -> expression.selectorExpression is KtNameReferenceExpression &&
 			isStable(expression.receiverExpression)
 		else -> false

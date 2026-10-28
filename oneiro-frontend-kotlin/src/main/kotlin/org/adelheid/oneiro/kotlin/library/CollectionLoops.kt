@@ -163,9 +163,10 @@ internal class CollectionLoops(private val body: BodyLowering) {
 
 	/**
 	 * The name of a local that holds a chain's result, after the call that gives it, as the loop's own locals are
-	 * named: `count`, `sum`, `any`, `first`, a `list` or a `map`.
+	 * named: `count`, `sum`, `any`, `first`, `sorted`, a `list` or a `map`.
 	 */
 	fun resultName(chain: Chain): String = when (val name = chain.terminal.name) {
+		in SORTS -> "sorted"
 		"count", "any", "all", "none", "first", "last", "single", "average" -> name
 		"sum", "sumOf" -> "sum"
 		"firstOrNull", "find" -> "first"
@@ -343,10 +344,6 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		/** A list's or a set's elements, a range's integers, or a map's keys or values, which walk the map itself. */
 		private fun source(source: Receiver): Source {
 			val written = written(source)
-			if (written != null && operation(written)?.name in SORTS) {
-				throw Rejection(written, "A chain's loop sees one element at a time, so it sorts only what it collects;"
-					+ " sort at the end of the chain, or sort the list afterwards.")
-			}
 			written?.let { CountingRange.of(it) }?.let { range ->
 				return Source("i") { item, loop -> body.loops.numericFor(item, range) { loop } }
 			}

@@ -33,4 +33,24 @@ object Conditions {
 		1 -> true
 		else -> false
 	}
+
+	/** The drop's count, or none when there is no drop: a data class compared with null. */
+	fun countOf(drop: Drop?): Int {
+		if (drop != null) {
+			return drop.count
+		}
+		return 0
+	}
+
+	/** Whether there is no drop, with null on the left. */
+	fun missing(drop: Drop?): Boolean = null == drop
+
+	/** Whether there is a pair, compared with null. */
+	fun paired(pair: Pair<String, Int>?): Boolean = pair != null
+
+	/** Whether a level is a skill's, from 1 to 99. */
+	fun isLevel(level: Int): Boolean = level in 1..99
+
+	/** Whether five is a level, a literal compared with both ends. */
+	fun fiveIsLevel(): Boolean = 5 in 1..99
 }

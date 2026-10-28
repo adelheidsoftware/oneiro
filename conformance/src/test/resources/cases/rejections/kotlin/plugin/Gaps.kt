@@ -116,10 +116,6 @@ object Gaps {
 		return names.indexOf("") + names.count { it.isNotEmpty() }
 	}
 
-	fun sortedFirst(names: List<String>): List<String> {
-		return names.sorted().filter { it.isNotEmpty() }
-	}
-
 	/** Herbs that a for loop could walk. */
 	abstract class Basket : Iterable<String>
 

@@ -66,9 +66,18 @@ sealed interface Doc {
 	/**
 	 * StyLua's layout for a call with an argument that cannot be on one line, such as a function with a body. When the
 	 * line up to the first break fits, the call is {@code hugged}: every argument stays on the call's line and that
-	 * argument breaks inside. Otherwise it is {@code expanded}, one argument per line.
+	 * argument breaks inside. Otherwise it is {@code expanded}, one argument per line. A call whose arguments could all
+	 * be flat, but for tables that may be too wide, is hugged, its tables broken, only where the call does not fit on
+	 * its line and one of those tables does not fit flat on a line of its own either, as StyLua settles such a call.
+	 *
+	 * @param tables the tables a hug breaks though they could be flat, each with the comma after it in the expanded
+	 *     call; none where an argument breaks in every layout
 	 */
-	record Hug(Doc hugged, Doc expanded) implements Doc {
+	record Hug(Doc hugged, Doc expanded, List<Doc> tables) implements Doc {
+
+		public Hug {
+			tables = List.copyOf(tables);
+		}
 	}
 
 	/** Takes no space; the lines printed after it come from {@code origin}, or from no source line when null. */
