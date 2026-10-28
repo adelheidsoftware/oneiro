@@ -6,6 +6,12 @@ All notable changes to Oneiro are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The RS3 API's types are rs3-api-types at `9f151d0`**, which a build without a `stubs { }` block is told to use.
+  It notes that a `ui.InputField` keeps its `content` only once it has a style sheet: without one, the client reads
+  `""` back, though the field is not restricted.
+
 ## [0.4.0] - 2026-10-28
 
 ### Added
