@@ -510,7 +510,9 @@ internal class FileLowering(
 			}
 			val owner = PsiTreeUtil.getParentOfType(declaration, KtClassOrObject::class.java)
 			val ownerIsEntry = owner == entry || owner?.parent?.parent == entry && entry != null
-			val local = declaration.isPrivateInLua() || declaration.parent is KtFile || ownerIsEntry
+			// A class's property is a field of its objects, self.lines, whatever its visibility, not a local
+			val field = declaration is KtProperty && owner is KtClass && !ownerIsEntry
+			val local = !field && (declaration.isPrivateInLua() || declaration.parent is KtFile || ownerIsEntry)
 			if (local && declaration.parent.let { it is KtClassBody || it is KtFile }) {
 				used += names.luaName(declaration.name ?: continue)
 				continue

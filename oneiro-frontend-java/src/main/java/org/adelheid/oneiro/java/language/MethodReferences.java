@@ -101,7 +101,7 @@ public final class MethodReferences {
 		Expression receiver;
 		List<String> all = new ArrayList<>();
 		if (unbound) {
-			String object = unit.freshLocal(decapitalized(owner), reference);
+			String object = body.inventInner(decapitalized(owner), reference);
 			all.add(object);
 			receiver = name(object);
 		} else {
@@ -233,14 +233,12 @@ public final class MethodReferences {
 		throw unsupported(reference);
 	}
 
-	/** The object a bound reference calls its method on, which must read the same each time the function runs. */
+	/**
+	 * The object a bound reference calls its method on, which Java reads once, where the reference is, and the
+	 * function reads each time it runs: read once, before; see {@link BodyLowering#reused}.
+	 */
 	private Expression boundReceiver(MemberReferenceTree reference) {
-		ExpressionTree qualifier = reference.getQualifierExpression();
-		if (!(qualifier instanceof IdentifierTree) && !(qualifier instanceof MemberSelectTree)) {
-			throw new Rejection(qualifier, "Java reads this value once, where the reference is, but Lua's function"
-					+ " would read it each time it runs; store it in a local first.");
-		}
-		return body.expression(qualifier);
+		return body.reused(reference.getQualifierExpression(), "Lua's function reads this value each time it runs");
 	}
 
 	/**
@@ -257,7 +255,7 @@ public final class MethodReferences {
 				.map(parameter -> {
 					String own = unit.names.luaName(parameter.getSimpleName().toString());
 					if (own.equals(qualifier)) {
-						return unit.freshLocal(own + "Value", where);
+						return body.inventInner(own + "Value", where);
 					}
 					return own.equals(called) ? own + "_" : own;
 				})

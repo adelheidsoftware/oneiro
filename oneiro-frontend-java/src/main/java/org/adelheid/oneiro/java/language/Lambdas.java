@@ -6,6 +6,7 @@ import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.ReturnTree;
+import com.sun.source.tree.StatementTree;
 import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
 import java.util.ArrayList;
@@ -71,8 +72,8 @@ public final class Lambdas {
 			code = inner.block(block);
 		} else {
 			ExpressionTree expression = (ExpressionTree) lambda.getBody();
-			code = BodyLowering.blockOf(
-					unit.returnsVoid(lambda) ? inner.expressionStatement(expression) : inner.returned(expression));
+			code = BodyLowering.blockOf(inner.statementsOf(expression, () -> unit.returnsVoid(lambda)
+					? inner.expressionStatement(expression) : inner.returned(expression)));
 		}
 		// The return null; that a function returning Void needs in Java is what a Lua function does by ending
 		if (types.returnsVoidObject(unit.type(lambda))) {
@@ -124,7 +125,8 @@ public final class Lambdas {
 		}
 		ExpressionTree expression = (ExpressionTree) lambda.getBody();
 		Block asStatement = unit.returnsVoid(lambda)
-				? BodyLowering.blockOf(body.expressionStatement(expression)) : Block.of();
+				? BodyLowering.blockOf(body.statementsOf(expression, () -> body.expressionStatement(expression)))
+				: Block.of();
 		return new InlinedLambda(parameters, asStatement, expression);
 	}
 
@@ -140,9 +142,24 @@ public final class Lambdas {
 
 	/** Whether a block lambda returns anywhere but at its end, outside the lambdas and classes inside it. */
 	public static boolean returnsEarly(LambdaExpressionTree lambda) {
-		if (!(lambda.getBody() instanceof BlockTree block)) {
-			return false;
+		return lambda.getBody() instanceof BlockTree block && returnsIn(block);
+	}
+
+	/**
+	 * The return a block lambda ends with, where it returns a value and returns nowhere else, outside the lambdas and
+	 * classes inside it; null for an expression lambda and any other block.
+	 */
+	public static @Nullable ReturnTree returnAtEnd(LambdaExpressionTree lambda) {
+		if (!(lambda.getBody() instanceof BlockTree block) || block.getStatements().isEmpty()
+				|| !(block.getStatements().getLast() instanceof ReturnTree end) || end.getExpression() == null) {
+			return null;
 		}
+		List<? extends StatementTree> statements = block.getStatements();
+		return statements.subList(0, statements.size() - 1).stream().anyMatch(Lambdas::returnsIn) ? null : end;
+	}
+
+	/** Whether code returns, outside the lambdas and classes inside it. */
+	private static boolean returnsIn(Tree code) {
 		return new TreeSearch() {
 			@Override
 			public Boolean visitReturn(ReturnTree node, Void unused) {
@@ -158,7 +175,7 @@ public final class Lambdas {
 			public Boolean visitClass(ClassTree node, Void unused) {
 				return false;
 			}
-		}.foundIn(block);
+		}.foundIn(code);
 	}
 
 	/** The event whose payload the parameter is, when that event passes nothing; null for any other parameter. */

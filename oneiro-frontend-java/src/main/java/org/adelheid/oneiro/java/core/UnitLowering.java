@@ -104,6 +104,8 @@ public final class UnitLowering {
 	// The Lua globals the module reads, such as Player or config, which a local of the same name would hide
 	private final Set<String> globals = new HashSet<>();
 	private final @Nullable Set<Helper> helpersInUse;
+	// The Lua globals a first lowering found the module reads, which no made-up local takes; see freshLocal
+	private final Set<String> globalsInUse;
 	// The local name of each required module and its require path, in order of first use
 	final Map<String, String> requires = new LinkedHashMap<>();
 	// The require paths of modules that would share a local, by that local
@@ -143,10 +145,13 @@ public final class UnitLowering {
 	/**
 	 * @param names the Lua names for Java locals, which avoid the helpers and globals a first lowering found
 	 * @param helpersInUse the helpers a first lowering of the file used, or null during that first lowering
+	 * @param globalsInUse the Lua globals a first lowering of the file read, or none during that first lowering
 	 */
 	public UnitLowering(CompilationUnitTree compilationUnit, DocTrees trees, Elements elements, JavaTypes types,
-			LocalNames names, JavaFrontend.Options options, @Nullable Set<Helper> helpersInUse) {
+			LocalNames names, JavaFrontend.Options options, @Nullable Set<Helper> helpersInUse,
+			Set<String> globalsInUse) {
 		this.helpersInUse = helpersInUse == null ? null : EnumSet.copyOf(helpersInUse);
+		this.globalsInUse = Set.copyOf(globalsInUse);
 		this.compilationUnit = compilationUnit;
 		this.trees = trees;
 		this.elements = elements;
@@ -1081,10 +1086,13 @@ public final class UnitLowering {
 
 	/**
 	 * A name for a local that the Lua needs and the Java does not have, such as a switch's selector: the preferred
-	 * name, or that name with a number when the surrounding method or the file's locals already use it.
+	 * name, or that name with a number, from 2, when the surrounding method, the file's locals, a global the module
+	 * reads or one of the others already use it.
 	 */
-	public String freshLocal(String preferred, Tree where) {
+	public String freshLocal(String preferred, Tree where, Set<String> others) {
 		Set<String> taken = new HashSet<>(fileLocals());
+		taken.addAll(globalsInUse);
+		taken.addAll(others);
 		new TreePathScanner<Void, Void>() {
 			@Override
 			public Void visitIdentifier(IdentifierTree node, Void unused) {

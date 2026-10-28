@@ -69,6 +69,9 @@ public final class Operators {
 				return body.expression(counted);
 			}
 		}
+		if (operation.getKind() == Tree.Kind.CONDITIONAL_AND || operation.getKind() == Tree.Kind.CONDITIONAL_OR) {
+			return body.shortCircuit(operation);
+		}
 		Expression left = body.expression(operation.getLeftOperand());
 		return operation(operation.getKind(), operation.getLeftOperand(), left, operation.getRightOperand(),
 				unit.type(operation.getLeftOperand()), operation);
@@ -111,17 +114,17 @@ public final class Operators {
 			case GREATER_THAN_EQUAL -> binary(left, BinaryOperator.GREATER_EQUAL, right);
 			case EQUAL_TO -> binary(left, BinaryOperator.EQUAL, right);
 			case NOT_EQUAL_TO -> binary(left, BinaryOperator.NOT_EQUAL, right);
-			case CONDITIONAL_AND -> binary(left, BinaryOperator.AND, right);
-			case CONDITIONAL_OR -> binary(left, BinaryOperator.OR, right);
 			case AND, OR -> {
 				if (!logical) {
 					yield binary(left, kind == Tree.Kind.AND ? BinaryOperator.BIT_AND : BinaryOperator.BIT_OR, right);
 				}
-				if (SourceFacts.containsCall(rightTree)) {
-					throw new Rejection(where, "Java evaluates both sides of & and |, but Lua's and/or skip the right"
-							+ " side when the left decides; evaluate the right side into a local first.");
-				}
-				yield binary(left, kind == Tree.Kind.AND ? BinaryOperator.AND : BinaryOperator.OR, right);
+				// Java's & and | run their right side even when the left decides, and Lua's and/or do not, so a right
+				// side that calls anything runs first, into a local
+				Expression evaluated = SourceFacts.containsCall(rightTree)
+						? body.reused(right, rightTree, "Java runs the right side of & and | either way",
+								body.valueName(rightTree))
+						: right;
+				yield binary(left, kind == Tree.Kind.AND ? BinaryOperator.AND : BinaryOperator.OR, evaluated);
 			}
 			case XOR -> logical
 					? binary(left, BinaryOperator.NOT_EQUAL, right)
@@ -193,13 +196,12 @@ public final class Operators {
 
 	/**
 	 * {@code c ? a : b} as {@code c and a or b}, which Lua evaluates the same way only when {@code a} can be neither
-	 * false nor nil. Other conditionals are lowered to an if statement where they are a statement's value; anywhere
-	 * else they are rejected.
+	 * false nor nil, and neither branch needs statements. Other conditionals are lowered to an if statement, where
+	 * they are a statement's value, or into a local before the statement; see {@link BodyLowering#hoistedValue}.
 	 */
 	public Expression conditional(ConditionalExpressionTree conditional) {
 		if (!safeAsAndOr(conditional)) {
-			throw new Rejection(conditional, "In Lua this conditional would need its true branch never to be false or"
-					+ " nil; assign the conditional to a local first.");
+			return body.hoistedValue(conditional);
 		}
 		return binary(
 				binary(body.condition(conditional.getCondition()), BinaryOperator.AND,
@@ -208,8 +210,15 @@ public final class Operators {
 				body.expression(conditional.getFalseExpression()));
 	}
 
+	/**
+	 * Whether Lua's {@code c and a or b} gives what Java's conditional gives: when {@code a} is never false or nil, and
+	 * neither branch needs statements, which would run whichever branch the conditional takes.
+	 */
 	public boolean safeAsAndOr(ConditionalExpressionTree conditional) {
 		ExpressionTree whenTrue = conditional.getTrueExpression();
+		if (body.needsStatementsWithin(whenTrue) || body.needsStatementsWithin(conditional.getFalseExpression())) {
+			return false;
+		}
 		TypeMirror type = unit.type(whenTrue);
 		if (type.getKind().isPrimitive()) {
 			return type.getKind() != TypeKind.BOOLEAN;

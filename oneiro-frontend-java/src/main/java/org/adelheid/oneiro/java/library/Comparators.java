@@ -52,7 +52,7 @@ public final class Comparators {
 		List<String> compared = own != null
 				? List.of(unit.codeLocalName(unit.element(own.get(0)), own.get(0)),
 						unit.codeLocalName(unit.element(own.get(1)), own.get(1)))
-				: List.of(unit.freshLocal("a", comparator), unit.freshLocal("b", comparator));
+				: List.of(body.inventInner("a", comparator), body.inventInner("b", comparator));
 		return MethodReferences.function(compared, comesBefore(comparator, compared.get(0), compared.get(1)), false);
 	}
 

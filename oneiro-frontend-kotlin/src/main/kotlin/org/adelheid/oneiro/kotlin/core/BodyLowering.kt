@@ -642,30 +642,57 @@ internal class BodyLowering(
 	private fun assignment(assignment: KtBinaryExpression): List<Statement> {
 		val targetTree = assignment.left ?: throw Rejection(assignment, EMPTY)
 		val valueTree = assignment.right ?: throw Rejection(assignment, EMPTY)
-		val target = assignmentTarget(targetTree)
 		if (assignment.operationToken == KtTokens.EQ) {
-			delivered(valueTree) { Statement.assignment(target, it) }?.let { return it }
+			val target = assignmentTarget(targetTree)
+			return delivered(valueTree) { Statement.assignment(target, it) }
+				?: listOf(Statement.assignment(target, expression(valueTree)))
 		}
-		// x /= y and x %= y round as Kotlin's / and % do
+		val target = readTarget(targetTree)
 		val targetType = with(unit.session) { targetTree.expressionType }
 		if (targetType != null && types.isString(targetType) && assignment.operationToken == KtTokens.PLUSEQ) {
 			// text += value appends the value as text
 			return listOf(Statement.assignment(target, Expression.binary(target, BinaryOperator.CONCAT,
 				strings.concatOperand(valueTree))))
 		}
+		// x /= y and x %= y round as Kotlin's / and % do
 		when (assignment.operationToken) {
-			KtTokens.DIVEQ -> return listOf(Statement.assignment(target, operators.division(targetTree, valueTree)))
-			KtTokens.PERCEQ -> return listOf(Statement.assignment(target, operators.remainder(targetTree, valueTree)))
+			KtTokens.DIVEQ ->
+				return listOf(Statement.assignment(target, operators.division(targetTree, valueTree, target)))
+			KtTokens.PERCEQ ->
+				return listOf(Statement.assignment(target, operators.remainder(targetTree, valueTree, target)))
 		}
 		val value = expression(valueTree)
 		val operator = when (assignment.operationToken) {
-			KtTokens.EQ -> return listOf(Statement.assignment(target, value))
 			KtTokens.PLUSEQ -> BinaryOperator.ADD
 			KtTokens.MINUSEQ -> BinaryOperator.SUBTRACT
 			KtTokens.MULTEQ -> BinaryOperator.MULTIPLY
 			else -> throw Rejection.notYet(assignment, "The operator ${assignment.operationReference.text}")
 		}
 		return listOf(Statement.assignment(target, Expression.binary(target, operator, value)))
+	}
+
+	/**
+	 * The target of an assignment that reads it as well, `target = target + value`, with the parts Lua would work out
+	 * twice, such as a call's value or a position, read once, into locals before the statement; see [reused].
+	 */
+	private fun readTarget(targetTree: KtExpression): Expression {
+		val target = assignmentTarget(targetTree)
+		val written = KtPsiUtil.safeDeparenthesize(targetTree)
+		return when {
+			target is Expression.Index && written is KtArrayAccessExpression -> {
+				val holder = written.arrayExpression ?: throw Rejection(written, EMPTY)
+				val key = written.indexExpressions.single()
+				// A position of a list or an array is one higher in Lua, so its local is the position Lua reads
+				val position = with(unit.session) { holder.expressionType }?.let(types::isMap) != true
+				Expression.Index(reused(target.target(), holder, READ_TARGET, valueName(holder)),
+					reused(target.key(), key, READ_TARGET, if (position) "index" else valueName(key)))
+			}
+			target is Expression.Field && written is KtDotQualifiedExpression -> {
+				val holder = written.receiverExpression
+				Expression.Field(reused(target.target(), holder, READ_TARGET, valueName(holder)), target.name())
+			}
+			else -> target
+		}
 	}
 
 	/** What an assignment assigns to, which must be no property of settings, and no field of a copy. */
@@ -715,7 +742,7 @@ internal class BodyLowering(
 	/** `x++` and `x--` as statements: `x = x + 1`, and for a char the next or the previous one. */
 	private fun step(base: KtExpression?, up: Boolean, where: KtElement): Statement {
 		val variable = base ?: throw Rejection(where, EMPTY)
-		val target = expression(variable)
+		val target = readTarget(variable)
 		if (chars.isChar(variable)) {
 			return Statement.assignment(target, chars.stepped(target, up))
 		}
@@ -1975,6 +2002,9 @@ internal class BodyLowering(
 
 		/** Why the Lua of `?.` reads its receiver twice, for a message. */
 		private const val NIL_TEST = "Lua reads this value twice to test it for nil"
+
+		/** Why the Lua of an assignment that reads its target works the target's parts out twice, for a message. */
+		private const val READ_TARGET = "Lua works this value out twice, to read the target and to assign it"
 
 		/** The longest call a message shows as written. */
 		private const val SHOWN_CALL = 40

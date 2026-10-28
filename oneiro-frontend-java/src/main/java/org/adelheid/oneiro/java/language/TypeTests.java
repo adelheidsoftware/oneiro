@@ -16,7 +16,6 @@ import javax.lang.model.type.TypeMirror;
 import org.adelheid.oneiro.java.core.BodyLowering;
 import org.adelheid.oneiro.java.core.JavaTypes;
 import org.adelheid.oneiro.java.core.Rejection;
-import org.adelheid.oneiro.java.core.SourceFacts;
 import org.adelheid.oneiro.java.core.UnitLowering;
 import org.adelheid.oneiro.lowering.translation.Helper;
 import org.adelheid.oneiro.lua.BinaryOperator;
@@ -39,21 +38,17 @@ public final class TypeTests {
 	}
 
 	/**
-	 * {@code x instanceof T}, and with a pattern, {@code x instanceof T t}, whose variable stands for {@code x}, which
-	 * must read the same each time.
+	 * {@code x instanceof T}, and with a pattern, {@code x instanceof T t}, whose variable stands for {@code x}, read
+	 * once; see {@link BodyLowering#reused}.
 	 */
 	public Expression instanceOf(InstanceOfTree instance) {
 		ExpressionTree operand = instance.getExpression();
-		Expression value = body.expression(operand);
 		Tree pattern = instance.getPattern();
 		if (pattern == null) {
-			return typeTest(value, unit.type(instance.getType()), instance);
+			return typeTest(body.expression(operand), unit.type(instance.getType()), instance);
 		}
 		VariableTree variable = patternVariable(pattern);
-		if (SourceFacts.containsCall(operand)) {
-			throw new Rejection(operand, "The pattern's variable stands for this value, which Lua would read again each"
-					+ " time; store it in a local first.");
-		}
+		Expression value = body.reused(operand, "The pattern's variable reads this value again each time");
 		body.declare(variable);
 		body.alias(variable, value);
 		return typeTest(value, unit.type(variable), instance);

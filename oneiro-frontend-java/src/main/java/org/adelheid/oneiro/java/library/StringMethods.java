@@ -130,12 +130,13 @@ final class StringMethods {
 
 	/**
 	 * The character at a Java index, as a one-character string: {@code text:sub(i + 1, i + 1)}. The index appears
-	 * twice, so its Lua may not call anything; {@code s.length() - 1} is {@code #s}, which is no call.
+	 * twice, so one that calls anything goes into a local first, {@code position}; see {@link BodyLowering#reused}.
+	 * {@code s.length() - 1} is {@code #s}, which is no call.
 	 */
 	Expression characterAt(Expression text, ExpressionTree position) {
 		Expression index = body.operators().index(position);
 		if (callsAnything(index)) {
-			throw new Rejection(position, "Lua would evaluate this index twice; store it in a local first.");
+			index = body.reused(index, position, "Lua reads this position twice", "position");
 		}
 		return methodCall(text, "sub", index, index);
 	}

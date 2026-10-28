@@ -135,7 +135,7 @@ public final class ApiCalls {
 		List<String> all = new ArrayList<>();
 		Expression target = receiver;
 		if (target == null) {
-			String object = unit().freshLocal(MethodReferences.decapitalized(owner), reference);
+			String object = body.inventInner(MethodReferences.decapitalized(owner), reference);
 			all.add(object);
 			target = name(object);
 		}

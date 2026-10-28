@@ -22,9 +22,9 @@ plugin/Gaps.java:63: error: Lua has no switch to leave early, and a break there 
 					break;
 					^
 
-plugin/Gaps.java:74: error: In Lua a switch is a statement; assign the switch to a local, or return it, instead of using it inside an expression.
-		return 1 + switch (value) {
-		           ^
+plugin/Gaps.java:74: error: In Lua this switch is a statement, which can run before the code around it only where nothing would see the difference, but it runs each time the loop tests its condition; give its value to a local of its own first, var x = ...
+		while (switch (value) {
+		       ^
 
 plugin/Gaps.java:81: error: Lua has no runtime type information to match getClass().
 		return value.getClass().getSimpleName();
@@ -34,13 +34,13 @@ plugin/Gaps.java:85: error: Lua has no regular expressions, so split takes only 
 		return text.split("\\s+").length;
 		       ^
 
-plugin/Gaps.java:89: error: Java evaluates both sides of & and |, but Lua's and/or skip the right side when the left decides; evaluate the right side into a local first.
-		return ready & values.isEmpty();
-		       ^
+plugin/Gaps.java:89: error: Java runs the right side of & and | either way, so it goes into a local first, which can run before the code around it only where nothing would see the difference, but it comes after values.contains(0), which would then run later; store it in a local first.
+		return values.contains(0) & values.contains(1);
+		                            ^
 
-plugin/Gaps.java:93: error: In Lua this conditional would need its true branch never to be false or nil; assign the conditional to a local first.
-		return (flag ? name : "none").length();
-		        ^
+plugin/Gaps.java:93: error: In Lua this conditional is a statement, which can run before the code around it only where nothing would see the difference, but it comes after words("a b"), which would then run later; give its value to a local of its own first, var x = ...
+		return words("a b") + (flag ? name : "none").length();
+		                       ^
 
 plugin/Gaps.java:97: error: In Lua set is a statement, not a value; call it on its own line.
 		int old = values.set(0, 1);
@@ -90,9 +90,9 @@ plugin/Gaps.java:154: error: A Lua string holds bytes, not code points; (int) te
 		return text.codePointAt(0);
 		       ^
 
-plugin/Gaps.java:158: error: Lua would evaluate this index twice; store it in a local first.
-		return text.charAt(text.indexOf(" ") + 1);
-		                   ^
+plugin/Gaps.java:158: error: Lua reads this position twice, so it goes into a local first, which can run before the code around it only where nothing would see the difference, but it comes after text.trim(), which would then run later; store it in a local first.
+		return text.trim().charAt(text.indexOf(" ") + 1);
+		                          ^
 
 plugin/Gaps.java:163: error: Each char would reach this loop as a one-character string, not as its number; loop with a char variable and convert it with (int) where the number is needed.
 		for (int code : letters) {
@@ -106,17 +106,17 @@ plugin/Gaps.java:174: error: In Lua an Optional is its value or nil, with no box
 		return name.map(String::length).orElse(0);
 		       ^
 
-plugin/Gaps.java:178: error: Oneiro makes one loop of a stream: a list, set, array, map view, Stream.of or IntStream.range, then filter and map, then forEach, toList, collect to a list, set or joined string, count, sum, min, max, findFirst, anyMatch, allMatch or noneMatch; write a for loop for distinct.
+plugin/Gaps.java:178: error: Oneiro makes one loop of a stream: a list, set, array, map view, Stream.of or IntStream.range, then filter, map, sorted, limit and skip, then forEach, toList, collect to a list, set or joined string, count, sum, min, max, findFirst, anyMatch, allMatch or noneMatch; write a for loop for distinct.
 		return names.stream().distinct().toList();
 		       ^
 
-plugin/Gaps.java:182: error: In Lua a stream is a loop, which runs as statements; make the stream the whole value of a local, an assignment or a return, or a forEach statement of its own.
-		return 1 + names.stream().count();
-		           ^
-
-plugin/Gaps.java:186: error: A stream's loop sees one element at a time, so it sorts only what it collects; sort just before toList(), or sort the list afterwards.
-		return names.stream().sorted().filter(name -> !name.isEmpty()).toList();
+plugin/Gaps.java:182: error: In Lua a stream is a loop, which needs all its steps in one place; end the stream where it starts, with a step such as toList() or count(), instead of keeping or passing the stream itself.
+		return names.stream();
 		       ^
+
+plugin/Gaps.java:186: error: The pattern's variable would stand for a local that lives only while Lua works out the right side of this &&; test the value in an if of its own first.
+		return ready && values.stream().findFirst().orElse(null) instanceof String text ? text.length() : 0;
+		                ^
 
 plugin/Gaps.java:190: error: Lua's for loop walks tables, not iterator objects; give the class a method that returns its list, and loop over that.
 	public abstract static class Basket implements Iterable<String> {

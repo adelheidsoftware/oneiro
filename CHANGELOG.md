@@ -28,6 +28,21 @@ All notable changes to Oneiro are listed here. The format follows
 - A lambda of several statements in a Kotlin chain, `mapIndexed { index, drop -> val number = index + 1; ... }`: its
   statements run in the loop's body before its value. A value in a chain's lambda that needs statements of its own,
   such as another chain, runs them there too.
+- Java values that Lua makes with statements now run before the statement they are in, into a local, as in Kotlin: a
+  switch or a conditional inside an expression, `log("The monster is " + switch (mood) { ... })`, and a stream,
+  `log((int) names.stream().filter(...).count() + " empty")`. A stream on the right of `&&` or `||` runs inside an
+  `if` that only Java's right side would reach, `local both = wanted ~= ""` and `if both then ... end`. Before, each
+  was refused.
+- A Java value that Lua reads twice and that a second read could change, such as a call's, is now read once into a
+  local before the statement, as in Kotlin: `text.charAt(middle(text) + 1)`, `counts[middle(text)] += 1`,
+  `setting(name) instanceof String text`, `labeller(tag)::label`, `lines.addAll(detailed(entries))`, and a right side
+  of `&` with a call, `ready & isLong(name)`. Before, each was refused, with "store it in a local first".
+- `limit(n)` and `skip(n)` in a Java stream, which count in the loop, `local taken = 0` with
+  `if taken == n then break end`, and a `sorted` with more steps after it, `sorted(byPrice).limit(2)`, whose sorted
+  list is a local of its own, which a second loop walks for the steps after it.
+- A lambda of several statements in a Java stream, `filter(drop -> { int worth = ...; return worth > 150; })`: its
+  statements run in the loop's body before its value, which it returns at its end. A value in a stream's lambda that
+  needs statements of its own, such as another stream, runs them there too.
 
 ### Changed
 
@@ -51,6 +66,14 @@ All notable changes to Oneiro are listed here. The format follows
 - A Kotlin map or set whose order nothing can see is a plain table, `{}` or `{ guam = 10 }`, rather than one the helper
   `orderedTable()` makes: the value of a `val`, a local or a private property, that the code only reads, sets, tests
   and removes keys of, counts and tests for emptiness.
+- A Java stream that sorts a list with nothing before the sort, `harvests.stream().sorted(...).toList()`, copies the
+  list with `table.move(harvests, 1, #harvests, 1, {})` before sorting it, as Kotlin's `sortedBy` does, rather than in
+  a loop.
+- A list or a set a Java stream builds is named after the parameter of the plugin's or the client's method it is
+  handed to, or after the field it becomes, `texts` or `lines`, where that name is free, rather than `list`, as in
+  Kotlin. A field assigned a stream's list takes the finished list, `self.lines = lines`.
+- A stream kept or passed on as a Java stream, `return names.stream();`, now says what to do: "end the stream where it
+  starts, with a step such as toList() or count(), instead of keeping or passing the stream itself."
 
 ### Fixed
 
@@ -73,6 +96,9 @@ All notable changes to Oneiro are listed here. The format follows
 - A Kotlin data class or pair compared with `null`, `if (saved != null)`, now compiles to `saved ~= nil`. Before, it
   was refused as though it compared two objects by `equals`; and `==` with a data class on its right side only, such
   as `value == tile`, was taken for identity, where it is now refused as with one on its left.
+- Each name Oneiro makes up for a local in Java is now taken once in a function, as in Kotlin, and none takes the
+  name of a global the module reads: a switch's selector named after `Kinds.log()` beside a call of `log` is `log2`.
+  Before, the selector became `local log`, and the `log(...)` after it called the text.
 - A local Oneiro makes up in Kotlin, such as a chain's `sum` or `list`, no longer hides a name the code around it
   reads. Before, `values.sumOf { it * 2 } + sum(1, 2)` beside a private function `sum` became
   `return sum + sum(1, 2)`, `values.count { it < keys.size }` called the count it was making, and a chain inside a

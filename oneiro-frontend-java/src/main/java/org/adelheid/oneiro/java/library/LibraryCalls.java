@@ -60,8 +60,9 @@ public final class LibraryCalls {
 			+ " collection itself, or use removeIf to remove while walking.";
 	static final String NO_CHAR_STREAM = "A Lua string has no stream of its characters; loop over"
 			+ " text.toCharArray(), which walks the text itself.";
-	static final String STREAM_IN_STATEMENT = "In Lua a stream is a loop, which runs as statements; make the"
-			+ " stream the whole value of a local, an assignment or a return, or a forEach statement of its own.";
+	static final String STREAM_HELD = "In Lua a stream is a loop, which needs all its steps in one place; end the"
+			+ " stream where it starts, with a step such as toList() or count(), instead of keeping or passing the"
+			+ " stream itself.";
 	final BodyLowering body;
 	private final StringMethods stringMethods;
 	private final NumberMethods numberMethods;
@@ -296,8 +297,8 @@ public final class LibraryCalls {
 			return List.of(new Statement.GenericFor(names, List.of(iterator), inlined.body()));
 		}
 		List<String> values = types().isMap(receiverType)
-				? List.of(unit().freshLocal("key", function), unit().freshLocal("value", function))
-				: List.of(unit().freshLocal("item", function));
+				? List.of(body.inventInner("key", function), body.inventInner("value", function))
+				: List.of(body.inventInner("item", function));
 		names.addAll(values);
 		List<Expression> arguments = values.stream().map(value -> (Expression) name(value)).toList();
 		Expression action = body.expression(function);
@@ -327,8 +328,8 @@ public final class LibraryCalls {
 		Expression action = inlined == null ? callable(test, lowered) : null;
 		if (types().isList(receiverType) || types().isDeque(receiverType)) {
 			Expression list = stableReceiver(receiver);
-			String index = unit().freshLocal("i", receiver);
-			String item = inlined != null ? inlined.parameters().getFirst() : unit().freshLocal("item", receiver);
+			String index = body.inventInner("i", receiver);
+			String item = inlined != null ? inlined.parameters().getFirst() : body.inventInner("item", receiver);
 			Expression condition = condition(inlined, action, item);
 			Statement remove = new Statement.CallStatement(call(field(name("table"), "remove"), list, name(index)));
 			Block loopBody = Block.of(
@@ -343,17 +344,17 @@ public final class LibraryCalls {
 		String item;
 		if (types().isSet(receiverType) && !(receiver instanceof MethodInvocationTree)) {
 			table = body.expression(receiver);
-			item = inlined != null ? inlined.parameters().getFirst() : unit().freshLocal("item", receiver);
+			item = inlined != null ? inlined.parameters().getFirst() : body.inventInner("item", receiver);
 			names = List.of(item);
 		} else if (receiver instanceof MethodInvocationTree view && view.getArguments().isEmpty()
 				&& view.getMethodSelect() instanceof MemberSelectTree select
 				&& types().isMap(unit().type(select.getExpression()))
 				&& (select.getIdentifier().contentEquals("keySet") || select.getIdentifier().contentEquals("values"))) {
 			table = body.expression(select.getExpression());
-			item = inlined != null ? inlined.parameters().getFirst() : unit().freshLocal("item", receiver);
+			item = inlined != null ? inlined.parameters().getFirst() : body.inventInner("item", receiver);
 			names = select.getIdentifier().contentEquals("keySet")
 					? List.of(item)
-					: List.of(unit().freshLocal("key", receiver), item);
+					: List.of(body.inventInner("key", receiver), item);
 		} else {
 			return null;
 		}
@@ -583,13 +584,10 @@ public final class LibraryCalls {
 			throw new Rejection(call, LuaPatterns.NO_REGEX);
 		}
 		if (types().isStream(unit().type(call)) && !name.equals("chars") && !name.equals("codePoints")) {
-			throw new Rejection(call, STREAM_IN_STATEMENT);
+			throw new Rejection(call, STREAM_HELD);
 		}
 		if (!isStatic && receiver != null) {
 			TypeMirror receiverType = unit().type(receiver);
-			if (types().isStream(receiverType)) {
-				throw new Rejection(call, STREAM_IN_STATEMENT);
-			}
 			if (types().isApiType(receiverType) && ((DeclaredType) receiverType).asElement() instanceof TypeElement api
 					&& api.getKind() == ElementKind.ENUM) {
 				return apiEnumMethod(call, name, receiver, api, arguments);
@@ -952,12 +950,11 @@ public final class LibraryCalls {
 		return name.equals("java.lang.Integer") || name.equals("java.lang.Long") || name.equals("java.lang.Double");
 	}
 
-	/** A receiver used twice in the Lua, as in {@code list[#list + 1] = x}, which therefore must not contain a call. */
+	/**
+	 * A receiver the Lua reads twice, as in {@code list[#list + 1] = x}, read once; see {@link BodyLowering#reused}.
+	 */
 	Expression stableReceiver(ExpressionTree receiver) {
-		if (receiver instanceof MethodInvocationTree || receiver instanceof NewClassTree) {
-			throw new Rejection(receiver, "Lua needs this value twice; store it in a local first.");
-		}
-		return body.expression(receiver);
+		return body.reused(receiver, "Lua reads this value twice");
 	}
 
 	static Expression length(Expression table) {

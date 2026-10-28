@@ -71,10 +71,10 @@ public final class Gaps {
 	}
 
 	public static int inside(int value) {
-		return 1 + switch (value) {
-			case 1 -> 10;
-			default -> 20;
-		};
+		while (switch (value) {
+			case 1 -> 10; default -> 20;
+		} > 15) value--;
+		return value;
 	}
 
 	public static String kind(Object value) {
@@ -86,11 +86,11 @@ public final class Gaps {
 	}
 
 	public static boolean both(boolean ready, List<Integer> values) {
-		return ready & values.isEmpty();
+		return values.contains(0) & values.contains(1);
 	}
 
 	public static int shown(boolean flag, @Nullable String name) {
-		return (flag ? name : "none").length();
+		return words("a b") + (flag ? name : "none").length();
 	}
 
 	public static int replaced(List<Integer> values) {
@@ -155,7 +155,7 @@ public final class Gaps {
 	}
 
 	public static char afterBlank(String text) {
-		return text.charAt(text.indexOf(" ") + 1);
+		return text.trim().charAt(text.indexOf(" ") + 1);
 	}
 
 	public static int codes(char[] letters) {
@@ -178,12 +178,12 @@ public final class Gaps {
 		return names.stream().distinct().toList();
 	}
 
-	public static long counted(List<String> names) {
-		return 1 + names.stream().count();
+	public static java.util.stream.Stream<String> counted(List<String> names) {
+		return names.stream();
 	}
 
-	public static List<String> sortedFirst(List<String> names) {
-		return names.stream().sorted().filter(name -> !name.isEmpty()).toList();
+	public static int patterned(boolean ready, List<Object> values) {
+		return ready && values.stream().findFirst().orElse(null) instanceof String text ? text.length() : 0;
 	}
 
 	/** Herbs that a for loop could walk. */

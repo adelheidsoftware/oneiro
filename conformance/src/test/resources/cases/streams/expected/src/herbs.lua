@@ -119,10 +119,7 @@ end
 ---@param harvests table[]
 ---@return table[]
 function Herbs.ranked(harvests)
-    local list = {}
-    for _, item in ipairs(harvests) do
-        list[#list + 1] = item
-    end
+    local list = table.move(harvests, 1, #harvests, 1, {})
     table.sort(list, function(a, b)
         return b.count < a.count
     end)

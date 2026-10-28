@@ -360,11 +360,10 @@ public final class Loops {
 	private String entryLocal(VariableTree entry, String preferred) {
 		Set<String> enclosing = new HashSet<>();
 		body.entries.values().forEach(enclosing::addAll);
-		String local = unit.freshLocal(preferred, entry);
-		if (local.equals(unit.names.luaName(preferred)) && !enclosing.contains(local)) {
-			return local;
+		if (body.isFree(preferred, entry, enclosing)) {
+			return body.inventInner(preferred, entry, enclosing);
 		}
 		String prefixed = entry.getName() + preferred.substring(0, 1).toUpperCase(Locale.ROOT) + preferred.substring(1);
-		return unit.freshLocal(prefixed, entry);
+		return body.inventInner(prefixed, entry, enclosing);
 	}
 }

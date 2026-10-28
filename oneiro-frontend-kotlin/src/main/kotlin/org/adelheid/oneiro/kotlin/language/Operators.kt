@@ -185,8 +185,7 @@ internal class Operators(private val body: BodyLowering) {
 	 * Integer `/` keeps Kotlin's rounding toward zero, through a helper, unless both operands are known never to be
 	 * negative, where Lua's `//` agrees; other numbers divide as they are.
 	 */
-	fun division(left: KtExpression, right: KtExpression): Expression {
-		val dividend = body.expression(left)
+	fun division(left: KtExpression, right: KtExpression, dividend: Expression = body.expression(left)): Expression {
 		val divisor = body.expression(right)
 		if (!integral(left, right)) {
 			return Expression.binary(dividend, BinaryOperator.DIVIDE, divisor)
@@ -202,8 +201,7 @@ internal class Operators(private val body: BodyLowering) {
 	 * `%` keeps the sign of the dividend, as Lua's `math.fmod` does; Lua's `%` agrees when both operands are integers
 	 * known never to be negative.
 	 */
-	fun remainder(left: KtExpression, right: KtExpression): Expression {
-		val dividend = body.expression(left)
+	fun remainder(left: KtExpression, right: KtExpression, dividend: Expression = body.expression(left)): Expression {
 		val divisor = body.expression(right)
 		if (integral(left, right) && unit.nonNegative.isKnown(left) && unit.nonNegative.isKnown(right)) {
 			return Expression.binary(dividend, BinaryOperator.MODULO, divisor)

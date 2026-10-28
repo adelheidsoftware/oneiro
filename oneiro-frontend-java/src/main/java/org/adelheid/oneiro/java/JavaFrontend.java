@@ -194,14 +194,15 @@ public final class JavaFrontend {
 	private static UnitLowering unitLowering(CompilationUnitTree unit, DocTrees trees, JavacTask task, JavaTypes types,
 			Options options) {
 		UnitLowering first =
-				new UnitLowering(unit, trees, task.getElements(), types, new LocalNames(Set.of()), options, null);
+				new UnitLowering(unit, trees, task.getElements(), types, new LocalNames(Set.of()), options, null,
+						Set.of());
 		first.lower();
 		Set<String> taken = new HashSet<>(first.globals());
 		first.helpers().forEach(helper -> taken.add(helper.luaName()));
 		Set<String> clashes = new HashSet<>(declaredNames(unit));
 		clashes.retainAll(taken);
 		return new UnitLowering(unit, trees, task.getElements(), types, new LocalNames(clashes), options,
-				first.helpers());
+				first.helpers(), first.globals());
 	}
 
 	/** The names of every local, parameter and private method declared in the file. */

@@ -96,7 +96,7 @@ public final class Switches {
 				.filter(label -> label instanceof ConstantCaseLabelTree || label instanceof PatternCaseLabelTree)
 				.count();
 		if (SourceFacts.containsCall(selectorTree) || (!PlainValues.isPlain(selector) && comparisons > 1)) {
-			String local = unit.freshLocal(selectorName(selectorTree), switchTree);
+			String local = body.invent(selectorName(selectorTree), switchTree);
 			lowered.add(new Statement.Local(List.of(local), List.of(selector)));
 			selector = name(local);
 		}
@@ -204,7 +204,8 @@ public final class Switches {
 			case ExpressionTree value -> {
 				// The value of a switch expression's case, case A -> 1
 				List<Comment> leading = BodyLowering.comments(unit.comments.take(from, unit.start(value)));
-				List<Statement> statements = sink != null ? body.deliver(value, sink) : body.expressionStatement(value);
+				List<Statement> statements = body.statementsOf(value,
+						() -> sink != null ? body.deliver(value, sink) : body.expressionStatement(value));
 				CommentIndex.SourceComment trailing = unit.comments.takeTrailing(unit.end(value));
 				SourcePosition origin = unit.origin(value);
 				List<Block.Entry> entries = new ArrayList<>();

@@ -101,8 +101,11 @@ what their classes are, which the main set's code alone decides, and hands on th
   (a `@ConfigGroup` interface over `PersistentDB`), `DeclarationChecks`, `NonNegativeMembers`, `ReviewWarnings`
   (the warnings at uses moderation reviews closely) and `ModuleAssembly`, which puts the module's statements in the
   order Lua needs them.
-- **`BodyLowering`** lowers the statements and expressions of one method. It keeps the scope that the rest share and
-  hands each kind of code to a class of its own: `Loops` and `OneBasedLoops`, `Switches`, `Exceptions` (`try` as
+- **`BodyLowering`** lowers the statements and expressions of one method. It keeps the scope that the rest share,
+  including one registry of the names it makes up for locals, and runs before each statement the code its values need:
+  a value Lua reads twice, or makes with statements, such as a stream or a switch, goes into a local first, where
+  nothing the statement does would see the difference (`reused`, `hoistedValue`, `whyNotHoisted`). It hands each kind
+  of code to a class of its own: `Loops` and `OneBasedLoops`, `Switches`, `Exceptions` (`try` as
   `pcall`), `Lambdas` and `MethodReferences`, `Operators`, `TypeTests`, `ObjectCreation` and `PluginCalls`.
 - **Calls outside the plugin.** `ApiCalls` handles the RS3 bindings, reading their annotations. `LibraryCalls` handles
   the Java library, with `StringMethods`, `NumberMethods` and `CollectionMethods`; `StringBuilding` turns
@@ -136,8 +139,8 @@ are in the same four packages as the Java front end's: `core`, `language`, `libr
   `DeclarationChecks` checks the file's names and declarations before any of them is lowered, and `ObjectEnums`
   finds, across the compilation, the enums whose constants must be objects; the main set's code alone decides about
   the main set's, and the dev set's code that would change one is an error.
-- **`BodyLowering`** lowers the statements and expressions of a function, handing each kind of code to a class of its
-  own: `Loops`, `Branches`, `Exceptions`, `Lambdas`, `ObjectExpressions`, `Operators`, `TypeTests` and
+- **`BodyLowering`** lowers the statements and expressions of a function, with the Java front end's registry of
+  made-up names and its locals before a statement, handing each kind of code to a class of its own: `Loops`, `Branches`, `Exceptions`, `Lambdas`, `ObjectExpressions`, `Operators`, `TypeTests` and
   `ReturnValues` (the several values of a `@LuaReturnValues` type). `ApiCalls` handles the RS3 bindings, reading their
   annotations through `Annotations`; `LibraryCalls` handles the Kotlin library, with `StringMembers`,
   `CollectionCopies` and `LibraryReferences`; `CollectionLoops` fuses a chain of collection functions into one loop,

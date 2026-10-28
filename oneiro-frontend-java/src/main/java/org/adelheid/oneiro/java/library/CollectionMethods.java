@@ -87,7 +87,7 @@ final class CollectionMethods {
 			case "set", "addAll", "forEach", "removeIf" ->
 					throw new Rejection(call, LibraryCalls.STATEMENT_ONLY.formatted(name));
 			case "sort" -> sort(list, arguments.getFirst());
-			case "stream" -> throw new Rejection(call, LibraryCalls.STREAM_IN_STATEMENT);
+			case "stream" -> throw new Rejection(call, LibraryCalls.STREAM_HELD);
 			default -> {
 				if (types.isDeque(unit.type(receiver))) {
 					yield dequeMethod(call, name, list, arguments);
@@ -167,7 +167,7 @@ final class CollectionMethods {
 				yield Helper.TABLE_LENGTH.invoke(set);
 			}
 			case "isEmpty" -> binary(call(name("next"), set), BinaryOperator.EQUAL, new Expression.Nil());
-			case "stream" -> throw new Rejection(call, LibraryCalls.STREAM_IN_STATEMENT);
+			case "stream" -> throw new Rejection(call, LibraryCalls.STREAM_HELD);
 			case "add", "remove", "forEach", "removeIf", "addAll" ->
 					throw new Rejection(call, LibraryCalls.STATEMENT_ONLY.formatted(name));
 			case "first", "getFirst" -> {
@@ -379,8 +379,8 @@ final class CollectionMethods {
 	private List<Statement> eachOf(ExpressionTree source, Holding holding,
 			BiFunction<String, String, Statement> store) {
 		Expression table = body.expression(holding.table());
-		String key = unit.freshLocal("key", source);
-		String value = unit.freshLocal("value", source);
+		String key = body.inventInner("key", source);
+		String value = body.inventInner("value", source);
 		List<String> names = switch (holding.contents()) {
 			case ELEMENTS, VALUES -> List.of("_", value);
 			case KEYS -> List.of(key);
