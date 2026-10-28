@@ -8,122 +8,139 @@ All notable changes to Oneiro are listed here. The format follows
 
 ### Added
 
-- Kotlin code of the dev source set can call the main set's top-level functions and properties,
-  `Levels.clampLevel(it)`, which before was not supported.
-- A sort with more steps after it in a Kotlin chain, `drops.sortedByDescending { it.price }.take(2)`: the sorted
-  list is a local of its own, `sorted`, which a second loop walks for the steps after it.
-- An annotation on a Kotlin expression, `val names = @Suppress("UNCHECKED_CAST") (value as List<String>)`,
-  which the Lua leaves out.
-- A Kotlin value that Lua reads twice and that a second read could change, such as a call's, is now read once into
-  a local before the statement, named after the property or the call that gives it: `nearest(entries)?.length` is
-  `local nearest = Hoisting.nearest(entries)` and `nearest and #nearest or 0`. So are `detailed(entries).size in 1..9`,
-  `setting(name) as? String`, `text[middle(text) + 1]`, `labeller(tag)::label`, and `addAll(ledger.detailed())` in a
-  `buildList`. Before, each was refused, with "store it in a local first".
-- More Kotlin values that Lua makes with statements now run before the statement they are in, as a chain or an `if`
-  with blocks already did: a `buildString { ... }`, whose pieces are joined in place, `log(table.concat(text))`; a
-  scope function whose lambda is more than one value, or whose receiver is a literal, `1 + "herbs".let { it.length }`;
-  and a `joinToString` with a prefix, a postfix or a transform.
-- An `if` whose branch needs statements, such as `if (changes.isEmpty()) "nothing" else changes.joinToString { ... }`,
-  is now statements of its own, with the branch's value returned or assigned in it.
-- A lambda of several statements in a Kotlin chain, `mapIndexed { index, drop -> val number = index + 1; ... }`: its
-  statements run in the loop's body before its value. A value in a chain's lambda that needs statements of its own,
-  such as another chain, runs them there too.
-- Java values that Lua makes with statements now run before the statement they are in, into a local, as in Kotlin: a
-  switch or a conditional inside an expression, `log("The monster is " + switch (mood) { ... })`, and a stream,
-  `log((int) names.stream().filter(...).count() + " empty")`. A stream on the right of `&&` or `||` runs inside an
-  `if` that only Java's right side would reach, `local both = wanted ~= ""` and `if both then ... end`. Before, each
-  was refused.
-- A Java value that Lua reads twice and that a second read could change, such as a call's, is now read once into a
-  local before the statement, as in Kotlin: `text.charAt(middle(text) + 1)`, `counts[middle(text)] += 1`,
-  `setting(name) instanceof String text`, `labeller(tag)::label`, `lines.addAll(detailed(entries))`, and a right side
-  of `&` with a call, `ready & isLong(name)`. Before, each was refused, with "store it in a local first".
-- `limit(n)` and `skip(n)` in a Java stream, which count in the loop, `local taken = 0` with
-  `if taken == n then break end`, and a `sorted` with more steps after it, `sorted(byPrice).limit(2)`, whose sorted
-  list is a local of its own, which a second loop walks for the steps after it.
-- A lambda of several statements in a Java stream, `filter(drop -> { int worth = ...; return worth > 150; })`: its
-  statements run in the loop's body before its value, which it returns at its end. A value in a stream's lambda that
-  needs statements of its own, such as another stream, runs them there too.
+- **More Java compiles.** Each of these was an error before:
+  - A `switch`, a `? :` or a stream inside a larger expression, such as
+    `log("The monster is " + switch (mood) { ... })` or `log((int) names.stream().filter(...).count() + " empty")`.
+    Lua has no expression for these, so Oneiro works the value out into a local just before the statement and uses
+    the local in its place:
+
+    ```lua
+    local count = 0
+    for _, name in ipairs(names) do
+        if name == "" then
+            count = count + 1
+        end
+    end
+    log(formatStr("{} empty", count))
+    ```
+
+    A stream on the right of `&&` or `||` runs only when Java would run it: `local both = wanted ~= ""`, then
+    `if both then ... end`.
+  - A value the Lua has to read twice, where a second read could give a different result, such as a call's value:
+    `text.charAt(middle(text) + 1)`, `counts[middle(text)] += 1`, `setting(name) instanceof String text`,
+    `labeller(tag)::label`, `lines.addAll(detailed(entries))` and `ready & isLong(name)`. The call now runs once,
+    into a local before the statement: `local position = Hoisting.middle(text) + 2`, then
+    `text:sub(position, position)`.
+  - `limit(n)` and `skip(n)` in a stream. Each keeps a count in the loop: `local taken = 0`, then
+    `if taken == n then break end`.
+  - `sorted()` anywhere in a stream, not only just before `toList()`. When more steps follow it, as in
+    `sorted(byPrice).limit(2)`, the sorted list gets a local of its own, `sorted`, and a second loop runs the
+    remaining steps over it.
+  - A `filter` or `map` lambda with a block body, such as
+    `filter(drop -> { int worth = drop.count() * drop.price(); return worth > 150; })`, as long as its only `return`
+    is at the end. Its statements run inside the loop. A stream inside a stream's lambda works too.
+- **More Kotlin compiles.** Each of these was an error before:
+  - A value the Lua has to read twice, where a second read could give a different result, such as a call's value:
+    `nearest(entries)?.length`, `detailed(entries).size in 1..9`, `setting(name) as? String`,
+    `text[middle(text) + 1]`, `labeller(tag)::label`, and `addAll(ledger.detailed())` inside a `buildList`. The call
+    now runs once, into a local before the statement, named after the call: `local nearest = Hoisting.nearest(entries)`,
+    then `nearest and #nearest or 0`.
+  - More values that need statements now work inside a larger expression, as chains and an `if` with blocks already
+    did: a `buildString { ... }`, whose pieces are joined where the text is used, `log(table.concat(text))`; a scope
+    function whose lambda is more than one value, or whose receiver is a literal, such as
+    `1 + "herbs".let { it.length }`; and a `joinToString` with a prefix, a postfix or a transform.
+  - An `if` with a branch that needs statements, such as
+    `if (changes.isEmpty()) "nothing" else changes.joinToString { ... }`. It becomes an `if` statement that returns or
+    assigns each branch's value.
+  - A sort followed by more steps in a chain, such as `drops.sortedByDescending { it.price }.take(2)`. The sorted list
+    gets a local of its own, `sorted`, and a second loop runs the remaining steps over it.
+  - A lambda with several statements in a chain, such as `mapIndexed { index, drop -> val number = index + 1; ... }`.
+    Its statements run inside the loop, before the lambda's value. A chain inside a chain's lambda works too.
+  - An annotation on an expression, such as `val names = @Suppress("UNCHECKED_CAST") (value as List<String>)`. The
+    Lua leaves it out.
+  - Code in the dev source set can call the main source set's top-level functions and properties, such as
+    `Levels.clampLevel(it)`.
 
 ### Changed
 
-- The helper that counts a map's or a set's entries, for `map.size`, is now `tableLength`, the name Lua developers
-  know it by, rather than `count`. A local of your plugin's named `count` keeps its name now, where before it became
-  `count_`.
-- When a Kotlin value cannot run before its statement, the message now says why, such as "but it comes after
-  mood.toString(), which would then run later" or "but it runs only when the if takes its branch".
-- A Kotlin `if` or `when` inside an expression, whose value a local before the statement takes, names that local after
-  the value's type where no parameter names it, `text` for a string, rather than `value`.
-- `val repeated = buildString { ... }`, and a `run { ... }` without locals of its own, now declare the local where
-  its value is given, `local repeated = table.concat(text)`, rather than declaring it empty first.
-- The helpers Oneiro's Lua uses, such as `orderedTable`, are files of their own under `utils/`,
-  `utils/ordered_table.lua`, which each module that uses one requires, `local orderedTable = require("utils/ordered_table")`,
-  rather than a copy defined in each module. The plugin carries each helper once, and only those its code uses; those
-  only the dev source set uses go into the development folder alone. `checkPlugin` accepts them, a vendored library may
-  not ship files in `utils/`, and `explainError` names a line of one as the helper it is.
-- A list, a set or a map that a local Oneiro makes up in Kotlin holds is named after the parameter of the plugin's or
-  the client's function it is handed to, or after the property it becomes, `texts` or `lines`, where that name is
-  free, rather than `list`. A list a chain reads from a call before its loop is named after the call, `top`.
-- A Kotlin map or set whose order nothing can see is a plain table, `{}` or `{ guam = 10 }`, rather than one the helper
-  `orderedTable()` makes: the value of a `val`, a local or a private property, that the code only reads, sets, tests
-  and removes keys of, counts and tests for emptiness.
-- A Java stream that sorts a list with nothing before the sort, `harvests.stream().sorted(...).toList()`, copies the
-  list with `table.move(harvests, 1, #harvests, 1, {})` before sorting it, as Kotlin's `sortedBy` does, rather than in
-  a loop.
-- A list or a set a Java stream builds is named after the parameter of the plugin's or the client's method it is
-  handed to, or after the field it becomes, `texts` or `lines`, where that name is free, rather than `list`, as in
-  Kotlin. A field assigned a stream's list takes the finished list, `self.lines = lines`.
-- A stream kept or passed on as a Java stream, `return names.stream();`, now says what to do: "end the stream where it
-  starts, with a step such as toList() or count(), instead of keeping or passing the stream itself."
+- **Helpers are files of their own.** The small helper functions Oneiro's Lua uses, such as `orderedTable`, now live
+  in a `utils/` folder at the plugin's root, one file per helper, and each module that needs one requires it:
+  `local orderedTable = require("utils/ordered_table")`. Before, each module defined its own copy. The plugin ships
+  each helper once, and only the ones its code uses; a helper only the dev source set uses goes only into the
+  development folder. `checkPlugin` accepts these files, a vendored library may not put files in `utils/`, and
+  `explainError` names a line in a helper by the helper's name.
+- **The helper `count` is now called `tableLength`**, the name Lua developers know it by. It counts a map's or a set's
+  entries, for `map.size`. A local in your plugin named `count` now keeps its name; before, it became `count_`.
+- **Better names for the locals Oneiro adds**, in Java and Kotlin:
+  - A list, set or map is named after the parameter it is passed to, or the field or property it is assigned to, such
+    as `texts` or `lines`, when that name is free. Before, it was always `list`. A Java field assigned a stream's list
+    gets the finished list, `self.lines = lines`.
+  - In Kotlin, the list a chain reads from a call before its loop is named after the call, such as `top`; and an `if`
+    or `when` value worked out before its statement is named after its type when no parameter names it, `text` for a
+    string, rather than `value`.
+- **Kotlin maps and sets whose order nothing can see are plain tables**, `{}` or `{ guam = 10 }`, rather than
+  `orderedTable()`. This applies to the value of a `val`, a local or a private property that the code only reads,
+  sets, tests and removes keys of, counts and tests for emptiness, but never loops over, copies, returns or passes on.
+- **Shorter Lua for a Kotlin `buildString` or `run` assigned to a local.** `val repeated = buildString { ... }`, and a
+  `run { ... }` without locals of its own, now declare the local with its value, `local repeated = table.concat(text)`,
+  instead of declaring it empty first.
+- **A Java stream that sorts a whole list**, such as `harvests.stream().sorted(...).toList()`, now copies the list with
+  `table.move(harvests, 1, #harvests, 1, {})` and sorts the copy, as Kotlin's `sortedBy` already did, instead of
+  copying it in a loop.
+- **Clearer errors.** When Oneiro cannot work a value out before its statement without changing what the code does,
+  the error now says why, such as "but it comes after mood.toString(), which would then run later" or "but it runs
+  only when the if takes its branch". A Java stream that is kept or passed on as a stream, such as
+  `return names.stream();`, now says what to do instead: "end the stream where it starts, with a step such as toList()
+  or count(), instead of keeping or passing the stream itself."
 
 ### Fixed
 
-- Each name Oneiro makes up for a local in Kotlin is now taken once in a function, numbered from the name itself.
-  Before, two locals of one kind could be declared with one name in a block, `local list` and then `local list`, and
-  numbers could follow numbers, `count22` beside a local `count` of the source.
-- Two values in one Kotlin statement that each run before it, such as two chains or two `buildString`s, now both
-  compile. Before, the second was refused, as though the first's calls came before it in the statement; and in a
-  string joined with `+`, the values ran before the statement from the last to the first.
-- A call whose table argument is too wide for a line of its own now opens the table on the call's line,
-  `shown:show(Section.SESSION, {`, its entries indented once, as StyLua lays such a call out. Before, each argument
-  went on a line of its own, which StyLua would reformat.
-- `./gradlew build` now refreshes the development folder, `build/oneiro/dev-plugin/`, of a plugin with a dev source
-  set, so that after `linkDevPlugin` each build updates what the client loads, as the docs said. Before, only
-  `assembleDevPlugin` wrote it.
-- An `else` with nothing in it, such as Kotlin's `else -> {}` or Java's `else {}`, now leaves no `else` in the Lua.
-  One that holds a comment keeps it.
-- A literal where Lua reads a value twice, as in Kotlin's `5 in 1..9`, now compiles, `5 >= 1 and 5 <= 9`. Before,
-  it was refused, as a call would be, which might give a different value the second time.
-- A Kotlin data class or pair compared with `null`, `if (saved != null)`, now compiles to `saved ~= nil`. Before, it
-  was refused as though it compared two objects by `equals`; and `==` with a data class on its right side only, such
-  as `value == tile`, was taken for identity, where it is now refused as with one on its left.
-- Each name Oneiro makes up for a local in Java is now taken once in a function, as in Kotlin, and none takes the
-  name of a global the module reads: a switch's selector named after `Kinds.log()` beside a call of `log` is `log2`.
-  Before, the selector became `local log`, and the `log(...)` after it called the text.
-- A local Oneiro makes up in Kotlin, such as a chain's `sum` or `list`, no longer hides a name the code around it
-  reads. Before, `values.sumOf { it * 2 } + sum(1, 2)` beside a private function `sum` became
-  `return sum + sum(1, 2)`, `values.count { it < keys.size }` called the count it was making, and a chain inside a
-  `forEach` lambda could hide a parameter of the function around it. The local now takes a number, `sum2`.
-- A chain of collection functions whose value is an argument, `log(drops.filter { ... }.map { it.item }.joinToString())`,
-  now runs once. Before, the Lua ran the chain's first part a second time, in a loop of its own whose list nothing
-  read, so each lambda in it ran twice for each element.
-- A comment above a Kotlin `when` branch that has no code, `// Other states change nothing` above `else -> {}`, now
-  stays in the Lua, as that branch's content. Before, it was dropped without the warning a comment Oneiro cannot
-  place gets.
-- Code of the dev source set now sees the main set's classes as the main set's Lua makes them: Oneiro reads the main
-  set's sources with it, where before it saw only their compiled classes, and got the Lua wrong without an error. A
-  Kotlin enum's `entries` were empty, `#{}`; an enum whose constants are objects was taken for one whose constants are
-  strings, so its `ordinal` was refused in Kotlin and its `name()` in Java gave the constant's table; data classes,
-  records and inner classes were built wrongly; and a type test did not see the main set's subclasses. Dev code that
+- **The locals Oneiro adds no longer clash with other names.**
+  - In Kotlin, each name is now used once per function. Before, a block could declare two locals with the same name,
+    `local list` and then `local list` again, and numbers could pile up, such as `count22` next to your own `count`.
+  - In Kotlin, a local Oneiro adds, such as a chain's `sum` or `list`, no longer hides a name the code around it uses.
+    Before, `values.sumOf { it * 2 } + sum(1, 2)` next to a private function `sum` became `return sum + sum(1, 2)`;
+    `values.count { it < keys.size }` called the counter it was building; and a chain inside a `forEach` lambda could
+    hide a parameter of the function around it. The local now gets a number, `sum2`.
+  - In Java, each name is now used once per function, and never matches a global the module uses. Before, a `switch`
+    on `Kinds.log()` got a local named `log`, so a `log(...)` call after it tried to call the text.
+- **Two Kotlin values in one statement that both need to run first**, such as two chains or two `buildString`s, now
+  both compile. Before, the second was refused; and in a string joined with `+`, they ran in the reverse order.
+- **A Kotlin chain used as an argument runs once.** Before,
+  `log(drops.filter { ... }.map { it.item }.joinToString())` ran the first part of the chain a second time, in an
+  extra loop whose result nothing used, so each lambda in it ran twice for each element.
+- **A literal that the Lua reads twice compiles**, such as Kotlin's `5 in 1..9`, which becomes `5 >= 1 and 5 <= 9`.
+  Before, it was refused as though it were a call, which might give a different value the second time.
+- **A Kotlin data class or pair compared with `null`**, `if (saved != null)`, now compiles to `saved ~= nil`. Before, it
+  was refused as though it compared two objects with `equals`. And `==` with a data class only on its right side, such
+  as `value == tile`, was taken for an identity check; it is now refused, as it already was with the data class on the
+  left.
+- **Calling an object as a function in Kotlin**, `doubler(value)` or `Doubler()(value)`, where its class implements a
+  function type or has an `operator fun invoke`, now calls that object's `invoke`: `doubler:invoke(value)`. Before,
+  inside a class's function the Lua called the function's own object, `self:invoke(value)`, and inside an object's
+  function it was an error.
+- **Calling a property of another object as a function in Kotlin**, `machine.callback(value)`, now calls the
+  property's value. Before, the Lua called the object that holds it, `machine(value)`.
+- **Code in the dev source set sees the main set's classes as the main set's Lua builds them.** Oneiro now reads the
+  main set's sources alongside the dev code. Before, it saw only their compiled classes, and could write wrong Lua
+  without an error: a Kotlin enum's `entries` were empty, `#{}`; an enum whose constants are objects was taken for one
+  whose constants are strings, so Kotlin refused its `ordinal` and Java's `name()` gave the constant's table; data
+  classes, records and inner classes were built wrongly; and a type test missed the main set's subclasses. Dev code that
   would change what the main set's Lua makes of a class is now an error, such as reading the order of an enum whose
   constants the main set's Lua makes strings.
-- A Java class without members of its objects, `public class Marker {}`, now has objects where code creates one or
-  another class extends it. Before, its Lua was a table without `new`, which failed when the plugin ran.
-- Calling an object as a function in Kotlin, `doubler(value)` or `Doubler()(value)`, where its class implements a
-  function type or has an `operator fun invoke`, now calls that object's `invoke`: `doubler:invoke(value)`. Before,
-  in a class's function, the Lua called the function's own object, `self:invoke(value)`, and in an object's, it was an
-  error.
-- Calling a property of another object as a function in Kotlin, `machine.callback(value)`, now calls the property's
-  value. Before, the Lua called the object that holds it, `machine(value)`.
+- **A Java class whose objects have no fields or methods**, `public class Marker {}`, now has objects where code creates
+  one or another class extends it. Before, its Lua was a table without `new`, which failed when the plugin ran.
+- **A comment above a Kotlin `when` branch with no code**, such as `// Other states change nothing` above
+  `else -> {}`, now stays in the Lua, as that branch's content. Before, it was dropped, without the warning Oneiro
+  gives for a comment it cannot place.
+- **An empty `else`**, such as Kotlin's `else -> {}` or Java's `else {}`, no longer leaves an empty `else` in the Lua.
+  One that holds a comment keeps it.
+- **A call whose table argument does not fit on one line** now opens the table on the call's line,
+  `shown:show(Section.SESSION, {`, with its entries indented once, the way StyLua lays it out. Before, each argument
+  went on a line of its own, which StyLua would reformat.
+- **`./gradlew build` now refreshes the development folder**, `build/oneiro/dev-plugin/`, of a plugin with a dev source
+  set, so that after `linkDevPlugin` every build updates what the client loads, as the docs said. Before, only
+  `assembleDevPlugin` updated it.
 
 ## [0.3.0] - 2026-10-27
 
