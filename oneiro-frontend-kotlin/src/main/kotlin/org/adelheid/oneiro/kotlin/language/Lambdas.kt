@@ -107,12 +107,35 @@ internal class Lambdas(private val body: BodyLowering) {
 		val code: Block by lazy(lowered)
 	}
 
-	/**
-	 * A lambda's code to run in place, in the function it is written in, where a `return@label` would leave that
-	 * function rather than the lambda, so the lambda must have none. Nor may it `break` or `continue` a loop around
-	 * it, which Lua would take for the loop its code runs in.
-	 */
+	/** A lambda's code to run in place, in the function it is written in; see [inPlace]. */
 	fun inline(lambda: KtLambdaExpression, label: String): Inlined = with(unit.session) {
+		val literal = lambda.functionLiteral
+		val code = literal.bodyBlockExpression ?: throw Rejection(lambda, "This lambda has no body.")
+		inPlace(lambda, label)
+		val names = mutableListOf<String>()
+		for (parameter in literal.valueParameters) {
+			val destructured = parameter.destructuringDeclaration
+			if (destructured != null) {
+				destructured.entries.forEach { names += unit.localName(it, it.name ?: "_") }
+			} else {
+				names += unit.localName(parameter, parameter.name ?: "_")
+			}
+		}
+		if (literal.valueParameters.isEmpty()) {
+			// The implicit it
+			literal.symbol.valueParameters.forEach { names += unit.localName(it.psi ?: literal, it.name.asString()) }
+		}
+		Inlined(names, code.statements.singleOrNull()) { body.block(code) }
+	}
+
+	/**
+	 * Marks a lambda's code to run in place, in the function it is written in, as the body of a loop, where a
+	 * `return@label` would leave that function rather than the lambda, so the lambda must have none. Nor may it
+	 * `break` or `continue` a loop around it, which Lua would take for the loop its code runs in.
+	 *
+	 * @param label the function the lambda is passed to, whose name a `return@label` would give
+	 */
+	fun inPlace(lambda: KtLambdaExpression, label: String) {
 		val literal = lambda.functionLiteral
 		val code = literal.bodyBlockExpression ?: throw Rejection(lambda, "This lambda has no body.")
 		unit.inlinedLambdas += literal
@@ -133,20 +156,6 @@ internal class Lambdas(private val body: BodyLowering) {
 					+ " for loop.")
 			}
 		}
-		val names = mutableListOf<String>()
-		for (parameter in literal.valueParameters) {
-			val destructured = parameter.destructuringDeclaration
-			if (destructured != null) {
-				destructured.entries.forEach { names += unit.localName(it, it.name ?: "_") }
-			} else {
-				names += unit.localName(parameter, parameter.name ?: "_")
-			}
-		}
-		if (literal.valueParameters.isEmpty()) {
-			// The implicit it
-			literal.symbol.valueParameters.forEach { names += unit.localName(it.psi ?: literal, it.name.asString()) }
-		}
-		Inlined(names, code.statements.singleOrNull()) { body.block(code) }
 	}
 
 	/** A lambda's parameter: the declaration its name belongs to, and the name. */
@@ -258,9 +267,7 @@ internal class Lambdas(private val body: BodyLowering) {
 		val target = when {
 			unbound -> Expression.name(objectName!!)
 			receiver == null || receiver is KtThisExpression -> body.receiverOrSelf(null, reference, owner)
-			body.isStable(receiver) -> body.expression(receiver)
-			else -> throw Rejection(receiver, "Kotlin reads this value once, where the reference is, but Lua's function"
-				+ " would read it each time it runs; store it in a local first.")
+			else -> body.reused(receiver, LibraryReferences.READ_WHERE_RUN)
 		}
 		val call = if (isPrivate) {
 			Expression.Call(Expression.name(unit.names.luaName(function.name.asString())), listOf(target) + arguments)

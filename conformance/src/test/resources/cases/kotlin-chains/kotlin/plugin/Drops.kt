@@ -163,4 +163,25 @@ object Drops {
 	fun logItems(drops: List<Drop>, price: Double) {
 		log(drops.filter { worthMore(it, price) }.map { it.item }.joinToString(","))
 	}
+
+	/** Each drop's line, numbered from 1, worked out in steps. */
+	fun numbered(drops: List<Drop>): List<String> = drops.mapIndexed { index, drop ->
+		val number = index + 1
+		"$number. ${drop.item}"
+	}
+
+	/** The items of the drops worth keeping, by a test in steps. */
+	fun keepers(drops: List<Drop>): List<String> = drops.filter { drop ->
+		val worth = drop.count * drop.price
+		worth > 150.0
+	}.map { it.item }
+
+	/** How many drops of each group are single, a chain inside a chain's lambda. */
+	fun singles(groups: List<List<Drop>>): List<Int> = groups.map { group -> group.count { it.count == 1 } }
+
+	/** The longest item name, by a reduce in steps, which leaves the first item to start from. */
+	fun longest(drops: List<Drop>): String? = drops.map { it.item }.reduceOrNull { best, item ->
+		val longer = item.length > best.length
+		if (longer) item else best
+	}
 }

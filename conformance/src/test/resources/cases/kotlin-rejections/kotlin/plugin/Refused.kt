@@ -40,8 +40,8 @@ object Refused {
 	/** A number as text, by toString() on the receiver without naming it. */
 	fun Int.label(): String = toString()
 
-	/** A scope function inside an expression, whose code runs as statements. */
-	fun logged(text: String): Int = text.apply { log(this) }.length
+	/** A scope function inside a test's lambda, whose code runs as statements there. */
+	fun logged(text: String): String? = text.takeIf { it.apply { log(this) }.isNotEmpty() }
 
 	/** A labelled return inside let. */
 	fun shown(text: String): String {

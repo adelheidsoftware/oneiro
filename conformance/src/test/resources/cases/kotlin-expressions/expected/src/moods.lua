@@ -13,15 +13,15 @@ Moods.Mood = Mood
 -- Logs how the monster feels.
 ---@param mood string
 function Moods.report(mood)
-    local value
+    local text
     if mood == Mood.CALM then
-        value = "calm"
+        text = "calm"
     elseif mood == Mood.ANGRY then
-        value = "angry"
+        text = "angry"
     elseif mood == Mood.AFRAID then
-        value = "afraid"
+        text = "afraid"
     end
-    log(formatStr("The monster is {}", value))
+    log(formatStr("The monster is {}", text))
 end
 
 -- A line about a level, with a note on how far it is past the maximum.
@@ -65,19 +65,19 @@ end
 ---@param first string
 ---@param second string
 function Moods.both(first, second)
-    local value
+    local text
     if first == Mood.CALM then
-        value = "calm"
+        text = "calm"
     else
-        value = "upset"
+        text = "upset"
     end
-    local value2
+    local text2
     if second == Mood.CALM then
-        value2 = "calm"
+        text2 = "calm"
     else
-        value2 = "upset"
+        text2 = "upset"
     end
-    log(formatStr("{} and {}", value, value2))
+    log(formatStr("{} and {}", text, text2))
 end
 
 return Moods

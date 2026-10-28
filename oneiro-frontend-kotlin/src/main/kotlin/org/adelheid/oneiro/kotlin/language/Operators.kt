@@ -78,8 +78,8 @@ internal class Operators(private val body: BodyLowering) {
 			KtTokens.DIV -> return division(left, right)
 			KtTokens.PERC -> return remainder(left, right)
 			KtTokens.IDENTIFIER -> return infix(binary, left, right)
-			KtTokens.IN_KEYWORD -> return inRange(binary, left, body.expression(left), right)
-			KtTokens.NOT_IN -> return negation(inRange(binary, left, body.expression(left), right))
+			KtTokens.IN_KEYWORD -> return inRange(binary, left, right)
+			KtTokens.NOT_IN -> return negation(inRange(binary, left, right))
 			KtTokens.ELVIS -> return elvis(binary, left, right)
 			in ASSIGNMENTS -> throw Rejection(binary, "In Lua an assignment is a statement, not a value; assign on a"
 				+ " line of its own.")
@@ -126,23 +126,22 @@ internal class Operators(private val body: BodyLowering) {
 	}
 
 	/**
-	 * `x in range`: within a range of integers, `x >= a and x <= b`, which reads the value twice, so it must be a name
-	 * or a property read; otherwise a collection's `contains`.
+	 * `x in range`: within a range of integers, `x >= a and x <= b`, which reads the value twice (see
+	 * [BodyLowering.reused]); otherwise a collection's `contains`.
 	 *
-	 * @param element the expression whose type the value has
+	 * @param element the value, or for a when's subject, the expression whose type the subject has
+	 * @param subject a when's subject, which the when has read already, or null to read the element
 	 */
-	fun inRange(where: PsiElement, element: KtExpression, value: Expression, range: KtExpression,
-		stable: Boolean = false): Expression {
+	fun inRange(where: PsiElement, element: KtExpression, range: KtExpression, subject: Expression? = null):
+		Expression {
 		val bounds = range as? KtBinaryExpression
 		val token = bounds?.operationToken
 		val inclusive = token == KtTokens.RANGE
 		if (bounds == null || !(inclusive || token == KtTokens.RANGE_UNTIL ||
 				bounds.operationReference.getReferencedName() == "until")) {
-			return body.library.contains(where, element, value, Receiver.Written(range))
+			return body.library.contains(where, element, subject ?: body.expression(element), Receiver.Written(range))
 		}
-		if (!stable && !body.isStable(element)) {
-			throw Rejection(element, "Lua compares this value with both ends of the range; store it in a local first.")
-		}
+		val value = subject ?: body.reused(element, "Lua compares this value with both ends of the range")
 		val low = body.expression(bounds.left ?: throw Rejection(bounds, EMPTY))
 		val high = body.expression(bounds.right ?: throw Rejection(bounds, EMPTY))
 		val above = Expression.binary(value, BinaryOperator.GREATER_EQUAL, low)

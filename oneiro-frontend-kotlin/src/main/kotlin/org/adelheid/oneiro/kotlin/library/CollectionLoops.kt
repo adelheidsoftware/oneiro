@@ -1,6 +1,7 @@
 package org.adelheid.oneiro.kotlin.library
 
 import com.intellij.psi.PsiElement
+import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.kotlin.core.BodyLowering
 import org.adelheid.oneiro.kotlin.core.Receiver
 import org.adelheid.oneiro.kotlin.core.Rejection
@@ -9,10 +10,12 @@ import org.adelheid.oneiro.kotlin.language.CountingRange
 import org.adelheid.oneiro.lowering.translation.Helper
 import org.adelheid.oneiro.lowering.translation.IndexArithmetic
 import org.adelheid.oneiro.lowering.translation.Inlining
+import org.adelheid.oneiro.lowering.translation.PlainValues
 import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.Statement
+import org.adelheid.oneiro.lua.Trivia
 import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.symbol
 import org.jetbrains.kotlin.analysis.api.types.KaType
@@ -20,7 +23,7 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
-import org.jetbrains.kotlin.psi.KtConstantExpression
+import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
@@ -241,9 +244,6 @@ internal class CollectionLoops(private val body: BodyLowering) {
 	/** A receiver's expression, or null for one left unnamed. */
 	private fun written(receiver: Receiver): KtExpression? = (receiver as? Receiver.Written)?.expression
 
-	/** Whether reading a receiver again gives the same value, as one left unnamed, a name, does. */
-	private fun isStable(receiver: Receiver): Boolean = written(receiver)?.let(body::isStable) ?: true
-
 	/** The loop over a source, made once the element's name is known, and the name to give it otherwise. */
 	private class Source(val defaultName: String, val loop: (String, Block) -> Statement)
 
@@ -258,6 +258,12 @@ internal class CollectionLoops(private val body: BodyLowering) {
 
 		/** A statement for each element that gets this far, such as counting it. */
 		class Do(val statement: Statement) : Step
+
+		/**
+		 * The statements of a lambda before its value, for each element that gets this far; the comments that close
+		 * the block go before what comes after it.
+		 */
+		class Code(val code: Block) : Step
 
 		/**
 		 * A loop around everything after it, over the collection `flatMap` gives for each element, at its depth among
@@ -294,7 +300,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		private var zipParts: List<String?>? = null
 
 		fun lower(): List<Statement> {
-			if (chain.stages.isEmpty() && chain.terminal.name in SORTS && isStable(chain.source) &&
+			if (chain.stages.isEmpty() && chain.terminal.name in SORTS &&
 				body.library.kind(type(chain.source)) == LibraryCalls.Kind.SEQUENCE) {
 				return sortedCopy()
 			}
@@ -617,13 +623,13 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		private fun limit(stage: Operation): Expression = readOnce(stage.arguments[0], "limit", stage.call)
 
 		/**
-		 * A value the loop reads each time round: a literal or a name as it is, anything else read once into a local
-		 * before the loop, as Kotlin reads it once.
+		 * A value the loop reads each time round: one that reading again gives the same, such as a literal or a name,
+		 * as it is (see [PlainValues]), and anything else read once into a local before the loop, as Kotlin reads it
+		 * once.
 		 */
 		private fun readOnce(value: KtExpression, preferred: String, where: PsiElement): Expression {
-			val plain = KtPsiUtil.safeDeparenthesize(value)
-			val lowered = body.expression(plain)
-			if (plain is KtConstantExpression || body.isStable(plain)) {
+			val lowered = body.expression(KtPsiUtil.safeDeparenthesize(value))
+			if (PlainValues.isPlain(lowered)) {
 				return lowered
 			}
 			return Expression.name(localBefore(preferred, lowered, where))
@@ -660,23 +666,22 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val lambda = function as? KtLambdaExpression
 				?: throw Rejection.notYet(function, "${stage.name} with a function reference")
 			val (index, item) = pairedParameters(stage, lambda)
-			val value = body.lambdas.value(lambda, "A chain's ${stage.name} becomes a value inside the loop; write it"
-				+ " as one expression, { index, x -> ... }.")
-			if (item.name != "_") {
-				unit.alias(item, element)
-			}
-			if (index.name != "_") {
-				val name = unit.localName(index, index.name!!)
-				used += name
-				if (index in unit.oneBased) {
-					sourceIndex = name
-				} else {
-					val position = taken("i", stage.call)
-					sourceIndex = position
-					steps += Step.Bind(name, IndexArithmetic.minusOne(Expression.name(position)))
+			return lambdaValue(lambda, {
+				if (item.name != "_") {
+					unit.alias(item, element)
 				}
-			}
-			return body.expression(value)
+				if (index.name != "_") {
+					val name = unit.localName(index, index.name!!)
+					used += name
+					if (index in unit.oneBased) {
+						sourceIndex = name
+					} else {
+						val position = taken("i", stage.call)
+						sourceIndex = position
+						steps += Step.Bind(name, IndexArithmetic.minusOne(Expression.name(position)))
+					}
+				}
+			})
 		}
 
 		/**
@@ -727,11 +732,10 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		 */
 		private fun selected(selector: KtExpression, preferred: String, where: PsiElement): String {
 			val value = if (selector is KtLambdaExpression) {
-				val key = body.lambdas.value(selector, "A chain's selector becomes a value inside the loop; write it as"
-					+ " one expression, { key }.")
-				bindElement(selector)
-				body.library.checkKey(key, type(key))
-				body.expression(key)
+				lambdaValue(selector, { bindElement(selector) }) { key ->
+					body.library.checkKey(key, type(key))
+					body.expression(key)
+				}
 			} else {
 				bindPending("value", selector)
 				applied(selector)
@@ -771,10 +775,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		/** A predicate's test of the current element: the lambda's expression, or a call of the function. */
 		private fun test(predicate: KtExpression): Expression {
 			if (predicate is KtLambdaExpression) {
-				val condition = body.lambdas.value(predicate, "A chain's test becomes an if inside the loop; write it"
-					+ " as one expression, { condition }.")
-				bindElement(predicate)
-				return body.expression(condition)
+				return lambdaValue(predicate, { bindElement(predicate) })
 			}
 			bindPending("value", predicate)
 			return applied(predicate)
@@ -783,10 +784,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		/** A function's value for the current element: the lambda's expression, or a call of the function. */
 		fun mapped(function: KtExpression): Expression {
 			if (function is KtLambdaExpression) {
-				val value = body.lambdas.value(function, "A chain's map becomes a value inside the loop; write it as"
-					+ " one expression, { value }.")
-				bindElement(function)
-				return body.expression(value)
+				return lambdaValue(function, { bindElement(function) })
 			}
 			return applied(function)
 		}
@@ -825,6 +823,59 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			element = local
 			entries = null
 			pending = null
+		}
+
+		/**
+		 * The value of a lambda the loop runs for each element, once [bind] has made the lambda's parameters stand for
+		 * the element: what [value] makes of its last expression, read in place, after the statements before it, which
+		 * run in the loop's body first, as a step of their own.
+		 */
+		fun lambdaValue(lambda: KtLambdaExpression, bind: () -> Unit,
+			value: (KtExpression) -> Expression = body::expression): Expression {
+			val (code, lowered) = lambdaCode(lambda, bind, value)
+			if (code.entries().isNotEmpty() || code.closingComments().isNotEmpty()) {
+				steps += Step.Code(code)
+			}
+			return lowered
+		}
+
+		/**
+		 * A lambda's statements before its last expression, each with what its values need before it, and what [value]
+		 * makes of that expression, once [bind] has made the lambda's parameters stand for the element. The comments
+		 * above the last expression, and after it, close the block. A last expression the lowering rejects has been
+		 * reported, and gives nil.
+		 */
+		private fun lambdaCode(lambda: KtLambdaExpression, bind: () -> Unit,
+			value: (KtExpression) -> Expression): Pair<Block, Expression> {
+			// The lambda's label, as Kotlin gives it, is the name of the function it is passed to
+			val function = PsiTreeUtil.getParentOfType(lambda, KtCallExpression::class.java)?.calleeExpression?.text
+			body.lambdas.inPlace(lambda, function ?: "label")
+			val code = lambda.bodyExpression ?: throw Rejection(lambda, "This lambda has no body.")
+			val last = code.statements.lastOrNull() ?: throw Rejection(lambda, NO_VALUE)
+			bind()
+			val comments = unit.source.leading(last)
+			var lowered: Expression = Expression.Nil()
+			val statements = body.block(code) { expression ->
+				if (expression is KtDeclaration) {
+					throw Rejection(expression, NO_VALUE)
+				}
+				lowered = value(expression)
+				listOf()
+			}
+			return Block(statements.entries(), comments + statements.closingComments()) to lowered
+		}
+
+		/** A lambda's statements before the code that reads its value, which takes the comments that close them. */
+		private fun ahead(code: Block, block: Block): Block {
+			val first = block.entries().firstOrNull()
+			val comments = code.closingComments()
+			if (first == null || comments.isEmpty()) {
+				return Block(code.entries() + block.entries(), comments + block.closingComments())
+			}
+			val trivia = first.trivia()
+			val commented = Block.Entry(first.statement(), Trivia(trivia.blankLineBefore(), comments + trivia.leading(),
+				trivia.trailing()), first.origin())
+			return Block(code.entries() + commented + block.entries().drop(1), block.closingComments())
 		}
 
 		/** Makes a lambda's parameter stand for the current element, which a pending value is bound for first. */
@@ -977,12 +1028,14 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			after: MutableList<Statement>): Block {
 			val lambda = function as? KtLambdaExpression
 				?: throw Rejection.notYet(function, "associate with a function reference")
-			val pair = body.lambdas.value(lambda, "A chain's associate becomes an assignment inside the loop; write the"
-				+ " pair as one expression, { key to value }.")
-			bindElement(lambda)
-			val (key, value) = body.library.pairParts(pair)?.takeIf { it.size == 2 }
-				?: throw Rejection.notYet(pair, "associate with a pair that is not written key to value")
-			return stored(body.expression(key), body.expression(value), init, after)
+			var key: Expression = Expression.Nil()
+			val value = lambdaValue(lambda, { bindElement(lambda) }) { pair ->
+				val (keyTree, valueTree) = body.library.pairParts(pair)?.takeIf { it.size == 2 }
+					?: throw Rejection.notYet(pair, "associate with a pair that is not written key to value")
+				key = body.expression(keyTree)
+				body.expression(valueTree)
+			}
+			return stored(key, value, init, after)
 		}
 
 		/**
@@ -1040,7 +1093,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		/** `list.sorted()` and its kin on a list, with no steps before: a copy of the list, sorted. */
 		private fun sortedCopy(): List<Statement> {
 			val list = accumulator("list")
-			val source = body.expression(chain.source)
+			val source = body.reused(chain.source, LibraryCalls.READ_TWICE)
 			val copy = tableCall("move", source, Expression.integer(1), LibraryCalls.length(source),
 				Expression.integer(1), Expression.Table(listOf()))
 			val statements = mutableListOf(local(list, copy), sort(list))
@@ -1182,24 +1235,26 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val lambda = function as? KtLambdaExpression
 				?: throw Rejection.notYet(function, "${terminal.name} with a function reference")
 			val (total, item) = pairedParameters(terminal, lambda)
-			val value = body.lambdas.value(lambda, "A chain's ${terminal.name} becomes an assignment inside the loop;"
-				+ " write the lambda's value as one expression, { total, x -> total + x }.")
-			if (item.name != "_") {
-				bindPending(unit.localName(item, item.name!!), lambda)
-				unit.alias(item, element)
-			}
-			val running = runningValue(total)
+			lateinit var running: String
+			// The lambda's statements run where its value is worked out, which reduce skips for the first element
+			val (code, value) = lambdaCode(lambda, {
+				if (item.name != "_") {
+					bindPending(unit.localName(item, item.name!!), lambda)
+					unit.alias(item, element)
+				}
+				running = runningValue(total)
+			}, body::expression)
 			deliver(after, Expression.name(running))
-			val next = assign(running, body.expression(value))
+			val next = ahead(code, Block.of(assign(running, value)))
 			if (terminal.name == "fold") {
 				init += local(running, body.expression(terminal.arguments.byName["initial"]!!))
-				return Block.of(next)
+				return next
 			}
 			bindPending("value", terminal.call)
 			init += Statement.Local(listOf(running), listOf())
 			val first = Expression.binary(Expression.name(running), BinaryOperator.EQUAL, Expression.Nil())
 			return Block.of(Statement.If(listOf(Statement.If.Branch(first, Block.of(assign(running,
-				Expression.name(element))))), Block.of(next)))
+				Expression.name(element))))), next))
 		}
 
 		/**
@@ -1261,12 +1316,11 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val lambda = transform as? KtLambdaExpression
 				?: throw Rejection.notYet(transform, "zip with a function reference")
 			val parameters = pairedParameters(terminal, lambda)
-			val value = body.lambdas.value(lambda, "A chain's zip becomes a value inside the loop; write it as one"
-				+ " expression, { a, b -> ... }.")
-			zipParts = parameters.toList().map { parameter ->
-				if (parameter.name == "_") null else unit.localName(parameter, parameter.name!!).also { used += it }
-			}
-			return body.expression(value)
+			return lambdaValue(lambda, {
+				zipParts = parameters.toList().map { parameter ->
+					if (parameter.name == "_") null else unit.localName(parameter, parameter.name!!).also { used += it }
+				}
+			})
 		}
 
 		/** `average()`: the total and the count, and then the one divided by the other, which is NaN for none. */
@@ -1338,10 +1392,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		/** A transform's text for the current element, as `table.concat` takes it. */
 		private fun text(transform: KtExpression): Expression {
 			if (transform is KtLambdaExpression) {
-				val value = body.lambdas.value(transform, "A chain's transform becomes a value inside the loop; write"
-					+ " it as one expression, { text }.")
-				bindElement(transform)
-				return body.strings.asText(value)
+				return lambdaValue(transform, { bindElement(transform) }, body.strings::asText)
 			}
 			return applied(transform)
 		}
@@ -1414,6 +1465,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 					}
 					is Step.Do -> block = Block(listOf(Block.Entry.of(step.statement)) + block.entries(),
 						block.closingComments())
+					is Step.Code -> block = ahead(step.code, block)
 					is Step.Loop -> {
 						val loop = Block.Entry.of(step.loop(block))
 						val ended = stops.filter { it.second >= step.depth }.map { it.first }.distinct()
@@ -1466,6 +1518,9 @@ internal class CollectionLoops(private val body: BodyLowering) {
 	}
 
 	companion object {
+
+		private const val NO_VALUE = "This lambda gives the loop no value; end it with the value, as the last" +
+			" expression."
 
 		private const val SUPPORTED = "Oneiro makes one loop of a chain of collection functions: a list, set, array, " +
 			"range or map, or a map's keys, values or entries, then filter, filterNot, filterKeys, filterValues, " +

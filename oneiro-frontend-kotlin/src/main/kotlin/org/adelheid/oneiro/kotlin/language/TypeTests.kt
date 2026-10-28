@@ -36,7 +36,7 @@ internal class TypeTests(private val body: BodyLowering) {
 	/**
 	 * `x as T`, the value itself: Lua checks no casts, so a value of another type goes on where Kotlin would throw. And
 	 * `x as? T`, the value when it passes the type's test and nil otherwise, `test and x or nil`, which reads the value
-	 * twice, so it must be a name or a property read, and must not be a `Boolean`, whose false `and` would turn to nil.
+	 * twice (see [BodyLowering.reused]), and must not be a `Boolean`, whose false `and` would turn to nil.
 	 */
 	fun cast(cast: KtBinaryExpressionWithTypeRHS): Expression = with(unit.session) {
 		val value = cast.left
@@ -44,14 +44,10 @@ internal class TypeTests(private val body: BodyLowering) {
 			return body.expression(value)
 		}
 		val type = cast.right?.type ?: throw Rejection(cast, "This cast names no type.")
-		if (!body.isStable(value)) {
-			throw Rejection(cast, "Lua reads this value twice, to test its type and to give it; store it in a local"
-				+ " first.")
-		}
 		if (unit.types.isBoolean(type)) {
 			throw Rejection(cast, "Lua's and would turn a false into nil here; test the value with is instead.")
 		}
-		val lowered = body.expression(value)
+		val lowered = body.reused(value, "Lua reads this value twice, to test its type and to give it")
 		val passed = Expression.binary(typeTest(lowered, type, cast), BinaryOperator.AND, lowered)
 		Expression.binary(passed, BinaryOperator.OR, Expression.Nil())
 	}

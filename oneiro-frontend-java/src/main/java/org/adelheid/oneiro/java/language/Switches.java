@@ -44,6 +44,7 @@ import org.adelheid.oneiro.java.core.CommentIndex;
 import org.adelheid.oneiro.java.core.Rejection;
 import org.adelheid.oneiro.java.core.SourceFacts;
 import org.adelheid.oneiro.java.core.UnitLowering;
+import org.adelheid.oneiro.lowering.translation.PlainValues;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Comment;
@@ -94,7 +95,7 @@ public final class Switches {
 				.flatMap(arm -> arm.getLabels().stream())
 				.filter(label -> label instanceof ConstantCaseLabelTree || label instanceof PatternCaseLabelTree)
 				.count();
-		if (SourceFacts.containsCall(selectorTree) || (!isPlain(selector) && comparisons > 1)) {
+		if (SourceFacts.containsCall(selectorTree) || (!PlainValues.isPlain(selector) && comparisons > 1)) {
 			String local = unit.freshLocal(selectorName(selectorTree), switchTree);
 			lowered.add(new Statement.Local(List.of(local), List.of(selector)));
 			selector = name(local);
@@ -162,17 +163,6 @@ public final class Switches {
 			lowered.add(new Statement.Do(otherwise));
 		}
 		return lowered;
-	}
-
-	/** Whether Lua reads the value as cheaply as a local: a name, a literal, or fields and indexes of those. */
-	private static boolean isPlain(Expression value) {
-		return switch (value) {
-			case Expression.Name _, Expression.NumberLiteral _, Expression.StringLiteral _, Expression.BooleanLiteral _,
-					Expression.Nil _ -> true;
-			case Expression.Field field -> isPlain(field.target());
-			case Expression.Index index -> isPlain(index.target()) && isPlain(index.key());
-			default -> false;
-		};
 	}
 
 	/** {@code kind} for {@code event.getKind()} or {@code event.kind()}, the name for a selector read into a local. */

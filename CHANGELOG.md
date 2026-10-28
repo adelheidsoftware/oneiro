@@ -14,15 +14,38 @@ All notable changes to Oneiro are listed here. The format follows
   list is a local of its own, `sorted`, which a second loop walks for the steps after it.
 - An annotation on a Kotlin expression, `val names = @Suppress("UNCHECKED_CAST") (value as List<String>)`,
   which the Lua leaves out.
+- A Kotlin value that Lua reads twice and that a second read could change, such as a call's, is now read once into
+  a local before the statement, named after the property or the call that gives it: `nearest(entries)?.length` is
+  `local nearest = Hoisting.nearest(entries)` and `nearest and #nearest or 0`. So are `detailed(entries).size in 1..9`,
+  `setting(name) as? String`, `text[middle(text) + 1]`, `labeller(tag)::label`, and `addAll(ledger.detailed())` in a
+  `buildList`. Before, each was refused, with "store it in a local first".
+- More Kotlin values that Lua makes with statements now run before the statement they are in, as a chain or an `if`
+  with blocks already did: a `buildString { ... }`, whose pieces are joined in place, `log(table.concat(text))`; a
+  scope function whose lambda is more than one value, or whose receiver is a literal, `1 + "herbs".let { it.length }`;
+  and a `joinToString` with a prefix, a postfix or a transform.
+- An `if` whose branch needs statements, such as `if (changes.isEmpty()) "nothing" else changes.joinToString { ... }`,
+  is now statements of its own, with the branch's value returned or assigned in it.
+- A lambda of several statements in a Kotlin chain, `mapIndexed { index, drop -> val number = index + 1; ... }`: its
+  statements run in the loop's body before its value. A value in a chain's lambda that needs statements of its own,
+  such as another chain, runs them there too.
 
 ### Changed
 
 - The helper that counts a map's or a set's entries, for `map.size`, is now `tableLength`, the name Lua developers
   know it by, rather than `count`. A local of your plugin's named `count` keeps its name now, where before it became
   `count_`.
+- When a Kotlin value cannot run before its statement, the message now says why, such as "but it comes after
+  mood.toString(), which would then run later" or "but it runs only when the if takes its branch".
+- A Kotlin `if` or `when` inside an expression, whose value a local before the statement takes, names that local after
+  the value's type where no parameter names it, `text` for a string, rather than `value`.
+- `val repeated = buildString { ... }`, and a `run { ... }` without locals of its own, now declare the local where
+  its value is given, `local repeated = table.concat(text)`, rather than declaring it empty first.
 
 ### Fixed
 
+- Two values in one Kotlin statement that each run before it, such as two chains or two `buildString`s, now both
+  compile. Before, the second was refused, as though the first's calls came before it in the statement; and in a
+  string joined with `+`, the values ran before the statement from the last to the first.
 - A call whose table argument is too wide for a line of its own now opens the table on the call's line,
   `shown:show(Section.SESSION, {`, its entries indented once, as StyLua lays such a call out. Before, each argument
   went on a line of its own, which StyLua would reformat.

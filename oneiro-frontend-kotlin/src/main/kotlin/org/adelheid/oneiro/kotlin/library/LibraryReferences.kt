@@ -72,16 +72,12 @@ internal class LibraryReferences(private val body: BodyLowering) {
 	}
 
 	/**
-	 * `list::add` and its kin, on a collection that is a name, which the function reads when it runs, as Kotlin
-	 * reads the collection where the reference is.
+	 * `list::add` and its kin, on a collection the function reads when it runs, as Kotlin reads it where the reference
+	 * is; see [BodyLowering.reused].
 	 */
 	private fun collectionFunction(reference: KtCallableReferenceExpression, name: String, receiver: KtExpression,
 		parameters: Int): Expression {
-		if (!body.isStable(receiver)) {
-			throw Rejection(receiver, "Kotlin reads this value once, where the reference is, but Lua's function would"
-				+ " read it each time it runs; store it in a local first.")
-		}
-		val collection = body.expression(receiver)
+		val collection = body.reused(receiver, READ_WHERE_RUN)
 		val value = unit.localName(reference, if (name == "get" || name == "containsKey") "key" else "value")
 		val element = Expression.name(value)
 		val member = Expression.Index(collection, element)
@@ -151,4 +147,10 @@ internal class LibraryReferences(private val body: BodyLowering) {
 	private fun unsupported(reference: KtCallableReferenceExpression): Rejection =
 		Rejection(reference, "Oneiro has no Lua function for this reference; write it as a lambda, { ... }, which it"
 			+ " lowers in place.")
+
+	companion object {
+
+		/** Why the Lua of a reference reads the value it is on more than once, for a message. */
+		const val READ_WHERE_RUN = "Lua's function would read this value each time it runs, where Kotlin reads it once"
+	}
 }

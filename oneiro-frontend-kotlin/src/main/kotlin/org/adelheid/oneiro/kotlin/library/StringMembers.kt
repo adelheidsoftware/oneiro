@@ -93,10 +93,10 @@ internal class StringMembers(private val body: BodyLowering) {
 
 	/**
 	 * A nullable string's `isNullOrEmpty()` and `isNullOrBlank()`: nil, or empty, or for the second without a char
-	 * that is not whitespace. The text is read twice, so it is a name or a property read.
+	 * that is not whitespace. The text is read twice; see [BodyLowering.reused].
 	 */
 	private fun nullOrEmpty(name: String, receiver: Receiver): Expression {
-		val text = body.library.stable(receiver)
+		val text = body.reused(receiver, LibraryCalls.READ_TWICE)
 		val absent = Expression.binary(text, BinaryOperator.EQUAL, Expression.Nil())
 		val empty = ofText(if (name == "isNullOrEmpty") "isEmpty" else "isBlank", text)!!
 		return Expression.binary(absent, BinaryOperator.OR, empty)

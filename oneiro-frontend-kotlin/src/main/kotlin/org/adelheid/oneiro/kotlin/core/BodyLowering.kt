@@ -28,6 +28,7 @@ import org.adelheid.oneiro.lowering.TableFolding
 import org.adelheid.oneiro.lowering.client.ClientLimits
 import org.adelheid.oneiro.lowering.translation.IndexArithmetic
 import org.adelheid.oneiro.lowering.translation.LuaPatterns
+import org.adelheid.oneiro.lowering.translation.PlainValues
 import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
@@ -86,6 +87,7 @@ import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtForExpression
+import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.psi.KtIfExpression
 import org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel
@@ -156,12 +158,20 @@ internal class BodyLowering(
 	private val builders = CollectionBuilders(this)
 	val destructuring = Destructuring(this)
 
-	// The statements that the ifs and whens inside the statement being lowered run before it, and that statement; see
-	// [hoisted]
-	private var hoisting: MutableList<Statement>? = null
-	private var hoistRoot: KtExpression? = null
+	/**
+	 * The statement being lowered, the code that values inside it need run before it, such as an if's or a chain's,
+	 * and those values; see [hoisted].
+	 */
+	private class Hoisting(val root: KtExpression) {
+		val entries = mutableListOf<Block.Entry>()
+		val values = mutableListOf<KtExpression>()
+	}
+
+	private var hoisting: Hoisting? = null
 	// The names the locals of hoisted values have taken
 	private val hoistedNames = mutableSetOf<String>()
+	// What expressions read more than once lower to, once lowered; see [reused]
+	private val reusedValues = mutableMapOf<KtExpression, Expression>()
 
 	/** A lowering for code nested in this one's, such as a lambda's, which runs on the same object. */
 	fun nested(): BodyLowering = BodyLowering(unit, owner, instance)
@@ -218,19 +228,21 @@ internal class BodyLowering(
 		}
 	}
 
-	/** Lowers a statement, after the statements of the ifs and whens inside it that run before it; see [hoisted]. */
+	/** Lowers a statement, after the code that values inside it need run before it; see [hoisted]. */
 	private fun hoistingInto(statement: KtExpression, lower: () -> List<Block.Entry>): List<Block.Entry> {
+		val inner = Hoisting(statement)
+		val lowered = within(inner, lower)
+		return inner.entries + lowered
+	}
+
+	/** Lowers code whose hoisted values go before the statement [inner] stands for. */
+	private fun <T> within(inner: Hoisting, lower: () -> T): T {
 		val outer = hoisting
-		val outerRoot = hoistRoot
-		val hoisted = mutableListOf<Statement>()
-		hoisting = hoisted
-		hoistRoot = statement
+		hoisting = inner
 		try {
-			val lowered = lower()
-			return hoisted.map(Block.Entry::of) + lowered
+			return lower()
 		} finally {
 			hoisting = outer
-			hoistRoot = outerRoot
 		}
 	}
 
@@ -265,8 +277,11 @@ internal class BodyLowering(
 		// target = receiver.apply { ... } on a target that reading again gives the same, a name or a property
 		val target = (statement as? KtBinaryExpression)?.takeIf { it.operationToken == KtTokens.EQ }?.left
 		val scope = (statement as? KtBinaryExpression)?.right?.let(scopes::scope)
-		if (target != null && scope != null && isStable(target)) {
-			scopes.assigned(scope, assignmentTarget(target))?.let { return it }
+		if (target != null && scope != null) {
+			val assigned = assignmentTarget(target)
+			if (PlainValues.isPlain(assigned)) {
+				scopes.assigned(scope, assigned)?.let { return it }
+			}
 		}
 		return scopes.entries(statement, endsFunction) ?: statement(statement).map(Block.Entry::of)
 	}
@@ -552,10 +567,10 @@ internal class BodyLowering(
 			return builders.built(initializer, name)
 		}
 		delivered(initializer) { Statement.assignment(local, it) }?.let { statements ->
-			// A value handed on in one assignment, as run { value } gives, is the local's own
-			val only = statements.singleOrNull() as? Statement.Assignment
-			if (only != null && only.targets() == listOf(local)) {
-				return listOf(Statement.Local(listOf(name), only.values()))
+			// A value handed on in the last statement, as run { value } and buildString give, is declared there
+			val last = statements.lastOrNull() as? Statement.Assignment
+			if (last != null && last.targets() == listOf(local)) {
+				return statements.dropLast(1) + Statement.Local(listOf(name), last.values())
 			}
 			return listOf(Statement.Local(listOf(name), listOf())) + statements
 		}
@@ -669,7 +684,13 @@ internal class BodyLowering(
 		is Receiver.Unnamed -> receiver.lua
 	}
 
-	fun expression(expression: KtExpression): Expression = when (expression) {
+	/** A library member's receiver read more than once; see [reused]. One left unnamed is a name, read as it is. */
+	fun reused(receiver: Receiver, what: String): Expression = when (receiver) {
+		is Receiver.Written -> reused(receiver.expression, what)
+		is Receiver.Unnamed -> receiver.lua
+	}
+
+	fun expression(expression: KtExpression): Expression = reusedValues[expression] ?: when (expression) {
 		is KtConstantExpression -> constant(expression)
 		is KtStringTemplateExpression -> string(expression)
 		is KtNameReferenceExpression -> reference(expression, null)
@@ -698,48 +719,91 @@ internal class BodyLowering(
 
 	/**
 	 * An `if` or `when` inside an expression, whose branches Lua cannot say as one: a local before the statement takes
-	 * its value, which each branch assigns, `local value` and `if ... then value = ... end`, where nothing the
-	 * statement does would see the difference; see [canHoist].
+	 * its value, which each branch assigns, `local value` and `if ... then value = ... end`; see [hoisted].
 	 */
 	private fun hoisted(value: KtExpression): Expression {
 		val kind = if (value is KtWhenExpression) "when" else "if"
-		val reason = "In Lua this $kind is a statement, which can run before the code around it only where nothing" +
-			" would see the difference; give its value to a local of its own first, val x = $kind ..."
-		return hoistedInto(value, hoistedName(value), reason) { name ->
-			listOf(Statement.Local(listOf(name), listOf())) +
-				(branches.deliver(value) { Statement.assignment(Expression.name(name), it) }
-					?: throw IllegalStateException("an if or when that gives no value: ${value.text}"))
+		return hoistedInto(value, hoistedName(value), "In Lua this $kind is a statement",
+			"give its value to a local of its own first, val x = $kind ...") { name ->
+			val branched = branches.deliver(value) { Statement.assignment(Expression.name(name), it) }
+				?: throw IllegalStateException("an if or when that gives no value: ${value.text}")
+			(listOf(Statement.Local(listOf(name), listOf())) + branched).map(Block.Entry::of)
 		}
 	}
 
 	/**
 	 * A chain of collection functions inside an expression, `if (npcs.any { ... })` or `count { ... } + 1`: as for an
-	 * `if` or `when` there, a local before the statement takes its value, named after the call that gives it, where
-	 * nothing the statement does would see the difference; see [canHoist]. Null for a value that is no chain.
+	 * `if` or `when` there, a local before the statement takes its value, named after the call that gives it; see
+	 * [hoisted]. Null for a value that is no chain.
 	 */
 	fun hoistedChain(value: KtExpression): Expression? {
 		val chain = chains.chain(value) ?: return null
-		return hoistedInto(value, chains.resultName(chain), LibraryCalls.CHAIN_IN_STATEMENT) { name ->
-			chains.lower(chain, CollectionLoops.Destination.Local(name))
+		return hoistedInto(value, chains.resultName(chain), LibraryCalls.CHAIN_LOOP) { name ->
+			chains.lower(chain, CollectionLoops.Destination.Local(name)).map(Block.Entry::of)
 		}
 	}
 
 	/**
 	 * A value inside an expression that Lua makes with statements: the statements [lower] makes, which give the value
-	 * to a local of the name it is passed, run before the statement, where nothing it does would see the difference,
-	 * and the expression reads the local; see [canHoist].
+	 * to a local of the name it is passed, run before the statement, and the expression reads the local; see
+	 * [hoisted].
 	 *
-	 * @param reason why the value cannot run before the statement, and what to write instead, where it cannot
+	 * @param what what Lua makes of the value, for the message where it cannot run before the statement
+	 * @param instead what to write instead, for that message
 	 */
-	private fun hoistedInto(value: KtExpression, preferred: String, reason: String,
-		lower: (String) -> List<Statement>): Expression {
-		val statements = hoisting
-		val root = hoistRoot
-		if (statements == null || root == null || !canHoist(value, root)) {
-			throw Rejection(value, reason)
+	fun hoistedInto(value: KtExpression, preferred: String, what: String, instead: String = LOCAL_FIRST,
+		lower: (String) -> List<Block.Entry>): Expression.Name {
+		lateinit var name: String
+		hoisted(value, what, instead) {
+			name = hoistedLocal(preferred, value)
+			lower(name)
 		}
-		val name = hoistedLocal(preferred, value)
-		statements += lower(name)
+		return Expression.name(name)
+	}
+
+	/**
+	 * Runs the code [lower] makes for a value inside an expression before the statement the value is in, where
+	 * nothing the statement does would see the difference; otherwise rejects the value, saying why not.
+	 *
+	 * @param what what Lua makes of the value, for the message where it cannot run before the statement
+	 * @param instead what to write instead, for that message
+	 * @param at where that message points
+	 */
+	fun hoisted(value: KtExpression, what: String, instead: String = LOCAL_FIRST, at: PsiElement = value,
+		lower: () -> List<Block.Entry>) {
+		val around = hoisting
+		whyNotHoisted(value, around)?.let { why ->
+			throw Rejection(at, "$what, which can run before the code around it only where nothing would see the"
+				+ " difference, but $why; $instead")
+		}
+		around!!.entries += lower()
+		around.values += value
+	}
+
+	/**
+	 * A value the Lua reads more than once, lowered once: as it is when reading it again gives the same (see
+	 * [PlainValues]), and otherwise in a local before the statement, which each read names, after the value (see
+	 * [valueName]). Lowering the expression again gives the same.
+	 *
+	 * @param what why the Lua reads the value more than once, for the message where it cannot go in a local first
+	 */
+	fun reused(value: KtExpression, what: String): Expression {
+		reusedValues[value]?.let { return it }
+		val read = reused(expression(value), value, what, valueName(value))
+		reusedValues[value] = read
+		return read
+	}
+
+	/** A value the Lua reads more than once, already lowered from [where]: as [reused] reads one. */
+	fun reused(lowered: Expression, where: KtExpression, what: String, preferred: String): Expression {
+		if (PlainValues.isPlain(lowered)) {
+			return lowered
+		}
+		lateinit var name: String
+		hoisted(where, "$what, so it goes into a local first", "store it in a local first.") {
+			name = hoistedLocal(preferred, where)
+			listOf(Block.Entry.of(Statement.Local(listOf(name), listOf(lowered))))
+		}
 		return Expression.name(name)
 	}
 
@@ -747,37 +811,27 @@ internal class BodyLowering(
 	 * `a && b` and `a || b`. When Lua can say the right side only with statements before it, such as a chain's loop,
 	 * the whole test goes into a local before the statement, `local both = a`, and the right side's statements run
 	 * inside `if both then`, which ends `both = b`, so that they run only when Kotlin's right side would; `either` and
-	 * `if not either then` for `||`. That local is a hoisted value's, which nothing the statement does may see run
-	 * early; see [canHoist].
+	 * `if not either then` for `||`. That local is a hoisted value's; see [hoisted].
 	 */
 	fun shortCircuit(binary: KtBinaryExpression, left: KtExpression, right: KtExpression): Expression {
 		val and = binary.operationToken == KtTokens.ANDAND
 		val operator = if (and) BinaryOperator.AND else BinaryOperator.OR
 		val leftValue = expression(left)
-		val outer = hoisting
-		val outerRoot = hoistRoot
-		val inner = mutableListOf<Statement>()
-		val rightValue = try {
-			hoisting = inner
-			hoistRoot = right
-			expression(right)
-		} finally {
-			hoisting = outer
-			hoistRoot = outerRoot
-		}
-		if (inner.isEmpty()) {
+		val inner = Hoisting(right)
+		val rightValue = within(inner) { expression(right) }
+		if (inner.entries.isEmpty()) {
 			return Expression.Binary(operator, leftValue, rightValue)
 		}
-		if (outer == null || outerRoot == null || !canHoist(binary, outerRoot)) {
-			throw Rejection(right, "In Lua the right side of this ${binary.operationReference.text} runs as statements,"
-				+ " which can run before the code around it only where nothing would see the difference; give the"
-				+ " test to a local of its own first, val x = ...")
+		lateinit var local: Expression
+		hoisted(binary, "In Lua the right side of this ${binary.operationReference.text} runs as statements",
+			"give the test to a local of its own first, val x = ...", right) {
+			val name = hoistedLocal(if (and) "both" else "either", binary)
+			local = Expression.name(name)
+			val decided = Block(inner.entries + Block.Entry.of(Statement.assignment(local, rightValue)), listOf())
+			val undecided = if (and) local else Expression.Unary(UnaryOperator.NOT, local)
+			listOf(Block.Entry.of(Statement.Local(listOf(name), listOf(leftValue))),
+				Block.Entry.of(Statement.ifThen(undecided, decided)))
 		}
-		val name = hoistedLocal(if (and) "both" else "either", binary)
-		val local = Expression.name(name)
-		outer += Statement.Local(listOf(name), listOf(leftValue))
-		val decided = Block((inner + Statement.assignment(local, rightValue)).map(Block.Entry::of), listOf())
-		outer += Statement.ifThen(if (and) local else Expression.Unary(UnaryOperator.NOT, local), decided)
 		return local
 	}
 
@@ -797,42 +851,116 @@ internal class BodyLowering(
 	}
 
 	/**
-	 * Whether an `if` or `when` inside a statement can run before the statement: the statement runs it each time it
-	 * runs, not only when an `&&`, an `||`, a `?:`, a `?.` or a branch gets to it, nor once each turn of a loop or each
-	 * element of a chain; and nothing the statement evaluates before it calls a function, whose effects would then
-	 * come after the branches' code.
+	 * Why the code a value inside a statement needs cannot run before the statement, or null when it can: the
+	 * statement must run the value each time it runs, not only when an `&&`, an `||`, a `?:`, a `?.` or a branch gets
+	 * to it, nor once each turn of a loop or each time a lambda runs; and nothing the statement evaluates before the
+	 * value may call a function, whose effects would then come after the value's code. The values already hoisted run
+	 * before the statement too, and their calls with them.
 	 */
-	private fun canHoist(value: KtExpression, root: KtExpression): Boolean {
+	private fun whyNotHoisted(value: KtExpression, around: Hoisting?): String? {
+		val outside = "here there is no statement for it to go before"
+		if (around == null) {
+			return outside
+		}
 		var node: PsiElement = value
-		while (node != root) {
-			val parent = node.parent ?: return false
+		while (node != around.root) {
+			val parent = node.parent ?: return outside
 			val inside = { part: PsiElement? -> part != null && PsiTreeUtil.isAncestor(part, value, false) }
-			val sometimes = when (parent) {
-				is KtFunctionLiteral -> true
-				is KtBinaryExpression -> parent.operationToken in SHORT_CIRCUIT && inside(parent.right)
-				is KtIfExpression -> !inside(parent.condition)
-				is KtWhenExpression -> !inside(parent.subjectExpression)
-				is KtWhileExpressionBase -> inside(parent.condition)
-				is KtSafeQualifiedExpression -> inside(parent.selectorExpression)
-				else -> false
+			val why = when {
+				parent is KtFunctionLiteral -> "it is inside a lambda"
+				parent is KtBinaryExpression && parent.operationToken in SHORT_CIRCUIT && inside(parent.right) ->
+					"it runs only when the ${parent.operationReference.text} gets to it"
+				parent is KtIfExpression && !inside(parent.condition) -> "it runs only when the if takes its branch"
+				parent is KtWhenExpression && !inside(parent.subjectExpression) ->
+					"it runs only when the when takes its branch"
+				parent is KtWhileExpressionBase && inside(parent.condition) ->
+					"it runs each time the loop tests its condition"
+				parent is KtSafeQualifiedExpression && inside(parent.selectorExpression) ->
+					"it runs only when the ?. finds a value"
+				else -> null
 			}
-			if (sometimes) {
-				return false
+			if (why != null) {
+				return why
 			}
 			node = parent
 		}
 		val start = value.textRange.startOffset
-		return PsiTreeUtil.collectElementsOfType(root, KtCallExpression::class.java)
-			.none { it.textRange.endOffset <= start }
+		val earlier = PsiTreeUtil.collectElementsOfType(around.root, KtCallExpression::class.java).firstOrNull { call ->
+			call.textRange.endOffset <= start && around.values.none { PsiTreeUtil.isAncestor(it, call, false) }
+		} ?: return null
+		return "it comes after ${shown(earlier)}, which would then run later"
 	}
 
-	/** The name of a hoisted value's local: the parameter's that it is passed to, or `value`. */
-	private fun hoistedName(value: KtExpression): String = with(unit.session) {
-		val argument = value.parent as? KtValueArgument ?: return "value"
-		val call = PsiTreeUtil.getParentOfType(argument, KtCallExpression::class.java) ?: return "value"
+	/** A call as a message names it: as written, with its receiver, where that is short, and otherwise its name. */
+	private fun shown(call: KtCallExpression): String {
+		val whole = (call.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression == call } ?: call
+		val text = whole.text
+		return if (text.length <= SHOWN_CALL && '\n' !in text) text else "${call.calleeExpression?.text}(...)"
+	}
+
+	/**
+	 * The name of the local a value read more than once goes into: the property's or the call's that gives it, as
+	 * written, `detailed` for `ledger.detailed()`, but without `get`, `is`, `mutable`, `Of` or `OrNull`, `first` for
+	 * `firstOrNull()` and `list` for `mutableListOf()`; otherwise as [hoistedName] names it.
+	 */
+	private fun valueName(value: KtExpression): String {
+		val plain = KtPsiUtil.safeDeparenthesize(value)
+		val selector = (plain as? KtQualifiedExpression)?.selectorExpression ?: plain
+		val own = when (selector) {
+			is KtNameReferenceExpression -> selector.getReferencedName()
+			is KtCallExpression -> (selector.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+				?.let(::withoutAffixes)
+			else -> null
+		}
+		return own?.replaceFirstChar { it.lowercaseChar() } ?: hoistedName(value)
+	}
+
+	/**
+	 * A function's name as its value's: without `get`, `is`, `mutable`, `Of` or `OrNull`; null for one that names no
+	 * value then, such as `getOrElse`.
+	 */
+	private fun withoutAffixes(name: String): String? {
+		var base = name.removeSuffix("OrNull").removeSuffix("Of")
+		for (prefix in listOf("get", "is", "mutable")) {
+			if (base.length > prefix.length && base.startsWith(prefix) && base[prefix.length].isUpperCase()) {
+				base = base.substring(prefix.length)
+			}
+		}
+		return base.takeUnless { it.isEmpty() || it.startsWith("Or") && it.length > 2 && it[2].isUpperCase() }
+	}
+
+	/**
+	 * The name of a hoisted value's local where the value has none of its own: the parameter's that it is passed to,
+	 * or one from its type; see [typeName].
+	 */
+	fun hoistedName(value: KtExpression): String = with(unit.session) {
+		parameterName(value) ?: typeName(value.expressionType)
+	}
+
+	/**
+	 * The name of the parameter a value is passed to; null for a value that is no argument, a vararg's, and one of a
+	 * compiled Java class that keeps no names, which Kotlin calls `p0`, `p1` and so on.
+	 */
+	private fun parameterName(value: KtExpression): String? = with(unit.session) {
+		val argument = value.parent as? KtValueArgument ?: return null
+		val call = PsiTreeUtil.getParentOfType(argument, KtCallExpression::class.java) ?: return null
 		val parameter = call.resolveToCall()?.successfulFunctionCallOrNull()?.valueArgumentMapping
-			?.get(argument.getArgumentExpression())?.symbol ?: return "value"
-		if (parameter.isVararg) "value" else parameter.name.asString()
+			?.get(argument.getArgumentExpression())?.symbol ?: return null
+		parameter.name.asString().takeUnless { parameter.isVararg || UNNAMED_PARAMETER.matches(it) }
+	}
+
+	/**
+	 * A name for a local from its value's type: `text` for a string, and for a class of the plugin or the client its
+	 * name, `label` for a `Label`; `value` otherwise.
+	 */
+	fun typeName(type: KaType?): String = with(unit.session) {
+		val symbol = type?.expandedSymbol
+		when {
+			type != null && types.isString(type) -> "text"
+			symbol != null && (unit.isPluginType(symbol) || api.isApi(symbol)) ->
+				symbol.classId?.shortClassName?.asString()?.replaceFirstChar { it.lowercaseChar() } ?: "value"
+			else -> "value"
+		}
 	}
 
 	/**
@@ -887,14 +1015,34 @@ internal class BodyLowering(
 		return unit.optionals.loaded(inner) != null || (negated != null && unit.optionals.loaded(negated) != null)
 	}
 
-	/** Whether an `if` has single values that are never false or nil, so that Lua can say it as `c and a or b`. */
+	/**
+	 * Whether an `if` has single values that are never false or nil, and that need no statements before them, so that
+	 * Lua can say it as `c and a or b`.
+	 */
 	private fun isSafeConditional(conditional: KtIfExpression): Boolean {
 		val then = conditional.then
 		val otherwise = conditional.`else`
 		val type = then?.let { with(unit.session) { it.expressionType } }
 		return then != null && then !is KtBlockExpression && otherwise != null && otherwise !is KtBlockExpression &&
-			otherwise !is KtIfExpression && type != null && !types.isBoolean(type) && !types.isNullable(type)
+			otherwise !is KtIfExpression && type != null && !types.isBoolean(type) && !types.isNullable(type) &&
+			!needsStatements(then) && !needsStatements(otherwise)
 	}
+
+	/**
+	 * Whether Lua makes a branch's value, or a value inside it, with statements, which can run before the code around
+	 * them but not before a branch's: a chain, a builder, `buildString`, `run`, `use`, a `when`, a `try`, a scope
+	 * function whose code cannot be read in place, or an `if` Lua cannot say as one expression. The code of lambdas
+	 * inside the branch is left out, as it runs where the lambda does.
+	 */
+	private fun needsStatements(branch: KtExpression): Boolean =
+		PsiTreeUtil.collectElementsOfType(branch, KtExpression::class.java).any { value ->
+			val enclosing = PsiTreeUtil.getParentOfType(value, KtFunction::class.java, KtClassOrObject::class.java)
+			val inLambda = enclosing != null && PsiTreeUtil.isAncestor(branch, enclosing, false)
+			!inLambda && (value is KtWhenExpression || value is KtTryExpression ||
+				value is KtIfExpression && value.`else` != null && !isSafeConditional(value) ||
+				chains.chain(value) != null || builders.builder(value) != null || strings.isBuildString(value) ||
+				isRun(value) || isUse(value) || scopes.scope(value)?.let(scopes::readsInPlace) == false)
+		}
 
 	private fun constant(constant: KtConstantExpression): Expression = when (constant.node.elementType) {
 		KtNodeTypes.NULL -> Expression.Nil()
@@ -964,29 +1112,26 @@ internal class BodyLowering(
 
 	/**
 	 * `receiver?.member` as `receiver and receiver.member`, which gives nil for a nil receiver; the receiver is read
-	 * twice, so it must be a name or a property read, and must never be false.
+	 * twice (see [reused]), and must never be false.
 	 */
 	private fun safeCall(safe: KtSafeQualifiedExpression): Expression {
 		val receiver = safe.receiverExpression
 		val type = with(unit.session) { receiver.expressionType }
-		if (!isStable(receiver) || type == null || types.isBoolean(type)) {
-			throw Rejection(safe, "Lua reads this value twice to test it for nil; store it in a local first.")
+		if (type == null || types.isBoolean(type)) {
+			throw Rejection(safe, "Lua's and would take a false here for a nil; test the value with if instead.")
 		}
-		return Expression.binary(expression(receiver), BinaryOperator.AND, qualified(safe))
+		return Expression.binary(reused(receiver, NIL_TEST), BinaryOperator.AND, qualified(safe))
 	}
 
 	/**
 	 * `receiver?.let { x -> ... }` and the other scope functions as a statement: the lambda's code when the receiver is
-	 * not nil, `local x = receiver` first for `let`; `receiver?.member(...)` runs the call when the receiver, a name or
-	 * a property read, is not nil.
+	 * not nil, `local x = receiver` first for `let`; `receiver?.member(...)` runs the call when the receiver, read
+	 * twice (see [reused]), is not nil.
 	 */
 	private fun safeStatement(safe: KtSafeQualifiedExpression): List<Statement> {
 		scopes.safeScope(safe)?.let { return scopes.safeEffect(it) }
-		val receiver = safe.receiverExpression
-		if (!isStable(receiver)) {
-			throw Rejection(safe, "Lua reads this value twice to test it for nil; store it in a local first.")
-		}
-		val present = Expression.binary(expression(receiver), BinaryOperator.NOT_EQUAL, Expression.Nil())
+		val receiver = reused(safe.receiverExpression, NIL_TEST)
+		val present = Expression.binary(receiver, BinaryOperator.NOT_EQUAL, Expression.Nil())
 		val lowered = qualified(safe)
 		if (lowered !is Expression.Call && lowered !is Expression.MethodCall) {
 			throw Rejection(safe, "In Lua a statement is a call or an assignment; this expression's value would go"
@@ -1352,18 +1497,27 @@ internal class BodyLowering(
 		scopes.scope(call, receiver, where)?.let { return scopes.value(it) }
 		scopes.test(call, receiver, where)?.let { test ->
 			return scopes.testValue(test) ?: hoistedInto(where, hoistedName(where), STATEMENTS_FIRST.format(
-				test.function)) { name -> scopes.testLocal(name, test) }
+				test.function)) { name -> scopes.testLocal(name, test).map(Block.Entry::of) }
 		}
 		if (receiver == null && isRun(call)) {
 			return hoistedInto(call, hoistedName(call), STATEMENTS_FIRST.format("run")) { name ->
-				listOf(Statement.Local(listOf(name), listOf())) +
-					runValue(call) { Statement.assignment(Expression.name(name), it) }
+				val code = runValue(call) { Statement.assignment(Expression.name(name), it) }
+				(listOf(Statement.Local(listOf(name), listOf())) + code).map(Block.Entry::of)
 			}
 		}
 		builders.builder(call)?.let { builder ->
 			return hoistedInto(call, builders.holderName(builder), STATEMENTS_FIRST.format(builder)) { name ->
-				builders.built(call, name)
+				builders.built(call, name).map(Block.Entry::of)
 			}
+		}
+		if (strings.isBuildString(call)) {
+			// The pieces are put together before the statement, and joined where the text is read
+			lateinit var pieces: String
+			hoisted(call, STATEMENTS_FIRST.format("buildString")) {
+				pieces = hoistedLocal("text", call)
+				strings.pieces(call, pieces).map(Block.Entry::of)
+			}
+			return strings.joined(pieces)
 		}
 		if (api.owner(symbol)?.classId?.asFqNameString() == LuaPatterns.CLASS) {
 			if (symbol.callableId?.callableName?.asString() == "gmatch") {
@@ -1742,19 +1896,6 @@ internal class BodyLowering(
 		return Expression.call(Expression.field(Expression.name("table"), "unpack"), expression(value))
 	}
 
-	/**
-	 * Whether reading an expression again gives the same value and does nothing else: a name, a property read, or a
-	 * literal.
-	 */
-	fun isStable(expression: KtExpression): Boolean = when (expression) {
-		is KtNameReferenceExpression, is KtThisExpression, is KtConstantExpression -> true
-		is KtStringTemplateExpression -> !expression.hasInterpolation()
-		is KtParenthesizedExpression -> expression.expression?.let(::isStable) == true
-		is KtDotQualifiedExpression -> expression.selectorExpression is KtNameReferenceExpression &&
-			isStable(expression.receiverExpression)
-		else -> false
-	}
-
 	/** `list[i]` and `map[key]`. */
 	private fun index(access: KtArrayAccessExpression): Expression {
 		val receiver = access.arrayExpression ?: throw Rejection(access, EMPTY)
@@ -1776,22 +1917,34 @@ internal class BodyLowering(
 		return declaration is KtNamedDeclaration && declaration in unit.oneBased
 	}
 
-	private companion object {
-		const val EMPTY = "This expression is incomplete and does not compile."
+	companion object {
 
-		const val NO_CLASSES = "Lua has no runtime type information, so a value has no class to read; test it with" +
-			" is instead."
+		/** What Lua makes of a value whose code runs as statements, with its function, for a message. */
+		const val STATEMENTS_FIRST = "In Lua the code of %s runs as statements"
 
-		/** Why a value whose code Lua runs as statements cannot run before the code around it, with its function. */
-		const val STATEMENTS_FIRST = "In Lua the code of %s runs as statements, which can run before the code" +
-			" around it only where nothing would see the difference; give its value to a local of its own first," +
-			" val x = ..."
-		val FUNCTION_TYPE = Regex("kotlin\\.(jvm\\.functions\\.)?Function\\d+|kotlin\\.reflect\\.KFunction\\d*")
-		val ASSIGNMENTS = setOf(KtTokens.EQ, KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ,
-			KtTokens.PERCEQ)
-		val STEPS = setOf(KtTokens.PLUSPLUS, KtTokens.MINUSMINUS)
+		private const val EMPTY = "This expression is incomplete and does not compile."
+
+		private const val NO_CLASSES = "Lua has no runtime type information, so a value has no class to read; test" +
+			" it with is instead."
+
+		/** What to write instead of a value whose code cannot run before the statement it is in. */
+		private const val LOCAL_FIRST = "give its value to a local of its own first, val x = ..."
+
+		/** Why the Lua of `?.` reads its receiver twice, for a message. */
+		private const val NIL_TEST = "Lua reads this value twice to test it for nil"
+
+		/** The longest call a message shows as written. */
+		private const val SHOWN_CALL = 40
+		private val FUNCTION_TYPE =
+			Regex("kotlin\\.(jvm\\.functions\\.)?Function\\d+|kotlin\\.reflect\\.KFunction\\d*")
+		private val ASSIGNMENTS = setOf(KtTokens.EQ, KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ,
+			KtTokens.DIVEQ, KtTokens.PERCEQ)
+		private val STEPS = setOf(KtTokens.PLUSPLUS, KtTokens.MINUSMINUS)
 
 		/** The operators whose right side runs only sometimes. */
-		val SHORT_CIRCUIT = setOf(KtTokens.ANDAND, KtTokens.OROR, KtTokens.ELVIS)
+		private val SHORT_CIRCUIT = setOf(KtTokens.ANDAND, KtTokens.OROR, KtTokens.ELVIS)
+
+		/** The name Kotlin gives a parameter of a compiled Java class that keeps no names. */
+		private val UNNAMED_PARAMETER = Regex("p\\d+")
 	}
 }

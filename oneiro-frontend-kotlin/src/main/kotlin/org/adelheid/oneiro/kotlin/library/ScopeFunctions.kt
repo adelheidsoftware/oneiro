@@ -11,7 +11,9 @@ import org.jetbrains.kotlin.analysis.api.resolution.successfulFunctionCallOrNull
 import org.jetbrains.kotlin.analysis.api.resolution.symbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaLocalVariableSymbol
 import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
+import org.jetbrains.kotlin.analysis.api.types.KaType
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
@@ -251,19 +253,44 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 	}
 
 	/**
-	 * A scope function inside an expression: a lambda of one value, on a receiver the code names, read in place,
-	 * `log(name.let { it.uppercase() })`. Anything else runs as statements, which an expression cannot hold.
+	 * A scope function inside an expression. A lambda of one value is read in place,
+	 * `log(name.let { it.uppercase() })`, on a receiver the code names, or on a local that takes the receiver before
+	 * the statement, `local text = "herbs"` for `"herbs".let { it.length }`. The code of any other runs before the
+	 * statement, with the local the value goes in, unless it is `apply` or `also` on a receiver the code names, whose
+	 * value is that name; see [BodyLowering.hoisted].
 	 */
 	fun value(scope: Scope): Expression {
+		val what = BodyLowering.STATEMENTS_FIRST.format(scope.function)
 		val receiverName = stableName(scope.receiver)
-		val single = scope.lambda.bodyExpression?.statements?.singleOrNull()
-		if (!scope.givesLambdaValue || receiverName == null || single == null || single is KtProperty) {
-			throw Rejection(scope.call, "In Lua the code of ${scope.function} runs as statements; give its value to a"
-				+ " local, val x = ..., a return or an assignment of its own.")
+		val single = singleValue(scope)
+		if (scope.givesLambdaValue && single != null) {
+			val name = receiverName ?: body.hoistedInto(scope.receiver, receiverHolderName(scope), what) { holder ->
+				listOf(Block.Entry.of(local(holder, body.expression(scope.receiver))))
+			}.name()
+			bind(scope, name)
+			return body.expression(single)
 		}
-		bind(scope, receiverName)
-		return body.expression(single)
+		if (!scope.givesLambdaValue && receiverName != null) {
+			body.hoisted(scope.call, what) {
+				bind(scope, receiverName)
+				placed(code(scope, null))
+			}
+			return Expression.name(receiverName)
+		}
+		val preferred = if (scope.givesLambdaValue) body.hoistedName(scope.call) else receiverHolderName(scope)
+		return body.hoistedInto(scope.call, preferred, what) { name -> local(name, scope) }
 	}
+
+	/**
+	 * Whether a scope function inside an expression is read in place, with no code before the statement: a lambda of
+	 * one value, on a receiver the code names.
+	 */
+	fun readsInPlace(scope: Scope): Boolean =
+		scope.givesLambdaValue && singleValue(scope) != null && stableName(scope.receiver) != null
+
+	/** The one expression of a scope function's lambda, which gives its value; null for a lambda of more. */
+	private fun singleValue(scope: Scope): KtExpression? =
+		scope.lambda.bodyExpression?.statements?.singleOrNull()?.takeIf { it !is KtDeclaration }
 
 	/**
 	 * `target = receiver.apply { ... }`, and a class's property of that value: the target, a name or a property, takes
@@ -396,15 +423,20 @@ internal class ScopeFunctions(private val body: BodyLowering) {
 			val parameter = body.lambdas.parameter(scope.lambda)
 			return unit.localName(parameter.declaration, parameter.name)
 		}
-		val type = with(unit.session) { scope.receiver.expressionType }
-		val typeName = with(unit.session) { type?.expandedSymbol?.classId?.shortClassName?.asString() }
-		val preferred = when {
-			type != null && body.types.isString(type) -> "text"
-			typeName != null -> typeName.replaceFirstChar { it.lowercaseChar() }
-			else -> "value"
-		}
-		return unit.names.luaName(body.invent(preferred, scope.call))
+		return unit.names.luaName(body.invent(body.typeName(type(scope.receiver)), scope.call))
 	}
+
+	/**
+	 * The name of a local that keeps the receiver before the statement, which the code around reads too: the name
+	 * the lambda gives its parameter, otherwise one made from the receiver's type, `text` for a string.
+	 */
+	private fun receiverHolderName(scope: Scope): String {
+		val parameter = if (scope.passesReceiver) scope.lambda.functionLiteral.valueParameters.singleOrNull() else null
+		return parameter?.name?.takeIf { it != "_" }?.let { unit.localName(parameter, it) }
+			?: body.typeName(type(scope.receiver))
+	}
+
+	private fun type(expression: KtExpression): KaType? = with(unit.session) { expression.expressionType }
 
 	/** The lambda's code among the statements around it, or in a `do` block where its locals or comments need one. */
 	private fun placed(code: Block): List<Block.Entry> =

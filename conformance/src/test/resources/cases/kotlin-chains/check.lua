@@ -81,3 +81,10 @@ assert(#cheap == 2 and cheap[1].item == "coins" and cheap[2].item == "ashes", "a
 Drops.logItems(drops, 1000.0)
 assert(logged[#logged] == "rune bar", "filter and map, joined as an argument")
 assert(Drops.looks == #drops, "a chain joined as an argument looks at each element once")
+
+local numbered = Drops.numbered(drops)
+assert(#numbered == 4 and numbered[1] == "1. bones" and numbered[4] == "4. ashes", "mapIndexed in steps")
+assert(table.concat(Drops.keepers(drops), ",") == "coins,rune bar", "a filter in steps")
+local singles = Drops.singles({ drops, { drops[1] }, {} })
+assert(#singles == 3 and singles[1] == 1 and singles[2] == 1 and singles[3] == 0, "a chain inside a chain's lambda")
+assert(Drops.longest(drops) == "rune bar" and Drops.longest({}) == nil, "a reduce in steps")

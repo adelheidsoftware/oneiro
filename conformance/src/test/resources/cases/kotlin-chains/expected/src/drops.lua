@@ -454,4 +454,64 @@ function Drops.logItems(drops, price)
     log(table.concat(list, ","))
 end
 
+-- Each drop's line, numbered from 1, worked out in steps.
+---@param drops table[]
+---@return string[]
+function Drops.numbered(drops)
+    local list = {}
+    for index, drop in ipairs(drops) do
+        local number = index
+        list[#list + 1] = formatStr("{}. {}", number, drop.item)
+    end
+    return list
+end
+
+-- The items of the drops worth keeping, by a test in steps.
+---@param drops table[]
+---@return string[]
+function Drops.keepers(drops)
+    local list = {}
+    for _, drop in ipairs(drops) do
+        local worth = drop.count * drop.price
+        if worth > 150.0 then
+            list[#list + 1] = drop.item
+        end
+    end
+    return list
+end
+
+-- How many drops of each group are single, a chain inside a chain's lambda.
+---@param groups table[][]
+---@return integer[]
+function Drops.singles(groups)
+    local list = {}
+    for _, group in ipairs(groups) do
+        local count = 0
+        for _, it in ipairs(group) do
+            if it.count == 1 then
+                count = count + 1
+            end
+        end
+        list[#list + 1] = count
+    end
+    return list
+end
+
+-- The longest item name, by a reduce in steps, which leaves the first item to start from.
+---@param drops table[]
+---@return string?
+function Drops.longest(drops)
+    local best
+    for _, it in ipairs(drops) do
+        local item = it.item
+        if best == nil then
+            best = item
+        else
+            local longer = #item > #best
+            best = longer and item or best
+        end
+    end
+    return best
+end
+
 return Drops

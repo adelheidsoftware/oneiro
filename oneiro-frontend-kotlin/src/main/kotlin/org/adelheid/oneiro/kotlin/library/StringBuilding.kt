@@ -57,9 +57,11 @@ internal class StringBuilding(private val body: BodyLowering) {
 		flatten(expression, parts)
 		val onlyStrings = parts.all { part -> part.value != null && isString(part.value) }
 		if (onlyStrings) {
-			var joined = body.expression(parts.last().value!!)
-			for (index in parts.size - 2 downTo 0) {
-				joined = Expression.binary(body.expression(parts[index].value!!), BinaryOperator.CONCAT, joined)
+			// Lowered in the order Kotlin evaluates them, which the values they hoist keep
+			val lowered = parts.map { body.expression(it.value!!) }
+			var joined = lowered.last()
+			for (index in lowered.size - 2 downTo 0) {
+				joined = Expression.binary(lowered[index], BinaryOperator.CONCAT, joined)
 			}
 			return joined
 		}
@@ -326,12 +328,7 @@ internal class StringBuilding(private val body: BodyLowering) {
 		if (values.isEmpty()) {
 			return null
 		}
-		val target = builder ?: current?.let { receiver ->
-			if (!body.isStable(receiver)) {
-				throw Rejection(receiver, "Lua needs this value twice; store it in a local first.")
-			}
-			body.expression(receiver)
-		} ?: return null
+		val target = builder ?: current?.let { body.reused(it, LibraryCalls.READ_TWICE) } ?: return null
 		return values.map { value -> Statement.assignment(Expression.Index(target, LibraryCalls.nextIndex(target)),
 			asText(value)) }
 	}
@@ -351,24 +348,37 @@ internal class StringBuilding(private val body: BodyLowering) {
 	}
 
 	/**
-	 * `buildString { ... }` as the statements that build it: an empty list of pieces in a local, the lambda's code,
-	 * whose `append`s add to it, and the joined pieces handed to the sink.
+	 * `buildString { ... }` as the statements that build it: its pieces, as [pieces] puts them together, and then the
+	 * joined pieces handed to the sink.
 	 */
 	fun buildString(call: KtCallExpression, sink: (Expression) -> Statement): List<Statement> {
+		val name = body.invent("text", call)
+		return pieces(call, name) + sink(joined(name))
+	}
+
+	/**
+	 * The statements that put the pieces of `buildString { ... }` together in a local of this name: an empty list of
+	 * pieces, and then the lambda's code, whose `append`s add to it.
+	 */
+	fun pieces(call: KtCallExpression, name: String): List<Statement> {
 		val lambda: KtLambdaExpression = call.lambdaArguments.single().getLambdaExpression()
 			?: throw Rejection(call, EMPTY)
 		val literal = lambda.functionLiteral
 		unit.inlinedLambdas += literal
-		val name = body.invent("text", call)
 		builders.addLast(name)
 		val code = try {
 			body.block(literal.bodyBlockExpression ?: throw Rejection(lambda, EMPTY))
 		} finally {
 			builders.removeLast()
 		}
-		val joined = Expression.call(Expression.field(Expression.name("table"), "concat"), Expression.name(name))
 		return listOf(Statement.Local(listOf(name), listOf(Expression.Table(listOf())))) +
-			code.entries().map { it.statement() } + sink(joined)
+			code.entries().map { it.statement() }
+	}
+
+	/** The text of the pieces in the local of this name, joined: `table.concat(text)`. */
+	fun joined(name: String): Expression {
+		unit.useGlobal("table")
+		return Expression.call(Expression.field(Expression.name("table"), "concat"), Expression.name(name))
 	}
 
 	private fun call(function: String, vararg arguments: Expression): Expression {

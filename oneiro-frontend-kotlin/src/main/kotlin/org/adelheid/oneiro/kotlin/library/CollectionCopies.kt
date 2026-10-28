@@ -48,7 +48,7 @@ internal class CollectionCopies(private val body: BodyLowering) {
 		val holding = holding(source)
 		return when (holding.contents) {
 			Contents.ELEMENTS -> {
-				val list = body.library.stable(source)
+				val list = body.reused(source, LibraryCalls.READ_TWICE)
 				call("move", list, Expression.integer(1), LibraryCalls.length(list), Expression.integer(1),
 					Expression.Table(listOf()))
 			}
@@ -76,9 +76,9 @@ internal class CollectionCopies(private val body: BodyLowering) {
 	 */
 	fun addedAll(receiver: Receiver, target: LibraryCalls.Kind, source: KtExpression): Statement {
 		val holding = holding(source)
-		val into = body.library.stable(receiver)
+		val into = body.reused(receiver, LibraryCalls.READ_TWICE)
 		if (target == LibraryCalls.Kind.SEQUENCE && holding.contents == Contents.ELEMENTS) {
-			val list = body.library.stable(source)
+			val list = body.reused(source, LibraryCalls.READ_TWICE)
 			return Statement.CallStatement(call("move", list, Expression.integer(1), LibraryCalls.length(list),
 				LibraryCalls.nextIndex(into), into))
 		}

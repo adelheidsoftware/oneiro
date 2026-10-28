@@ -101,7 +101,7 @@ object Gaps {
 	}
 
 	fun afterBlank(text: String): Char {
-		return text[text.indexOf(" ") + 1]
+		return text.trim()[text.indexOf(" ") + 1]
 	}
 
 	fun accent(): Int {

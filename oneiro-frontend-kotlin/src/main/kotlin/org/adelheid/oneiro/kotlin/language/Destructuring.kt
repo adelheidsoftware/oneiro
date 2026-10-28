@@ -4,6 +4,7 @@ import com.intellij.psi.PsiElement
 import org.adelheid.oneiro.kotlin.core.BodyLowering
 import org.adelheid.oneiro.kotlin.core.Rejection
 import org.adelheid.oneiro.kotlin.library.LibraryCalls
+import org.adelheid.oneiro.lowering.translation.PlainValues
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Expression
 import org.adelheid.oneiro.lua.Statement
@@ -38,13 +39,14 @@ internal class Destructuring(private val body: BodyLowering) {
 			return listOf(Statement.Local(names, named.map { body.expression(parts[it.index]) }))
 		}
 		val type = with(unit.session) { initializer.expressionType }
-		if (body.isStable(initializer)) {
-			val value = body.expression(initializer)
-			return listOf(Statement.Local(names, named.map { part(value, type, it.index, it.value) }))
-		}
 		val holder = body.invent(holderName(type), declaration)
 		val holding = body.localValue(holder, initializer)
-		return holding + Statement.Local(names, named.map { part(Expression.name(holder), type, it.index, it.value) })
+		// A value that reading again gives the same, such as a name, is read as it is rather than in a local
+		val plain = (holding.singleOrNull() as? Statement.Local)?.values()?.singleOrNull()
+			?.takeIf(PlainValues::isPlain)
+		val value = plain ?: Expression.name(holder)
+		val parts = Statement.Local(names, named.map { part(value, type, it.index, it.value) })
+		return if (plain != null) listOf(parts) else holding + parts
 	}
 
 	/**

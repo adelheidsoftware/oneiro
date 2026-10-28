@@ -248,17 +248,16 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 */
 	private fun storedIfAbsent(name: String, receiver: Receiver, arguments: LibraryArguments): Statement {
 		checkKey(arguments[0])
-		val value = if (name == "getOrPut") {
+		val default = if (name == "getOrPut") {
 			val lambda = arguments[1] as? KtLambdaExpression
-			val inlined = lambda?.let { body.lambdas.inline(it, "getOrPut") }
-			if (inlined?.value == null) {
-				return Statement.CallStatement(getOrPut(receiver, arguments))
-			}
-			body.expression(inlined.value)
+			lambda?.let { body.lambdas.inline(it, "getOrPut") }?.value
+				?: return Statement.CallStatement(getOrPut(receiver, arguments))
 		} else {
-			element(arguments[1])
+			null
 		}
-		val entry = Expression.Index(stable(receiver), stable(arguments[0]))
+		// The map and the key are read before the value, as Kotlin reads them
+		val entry = Expression.Index(body.reused(receiver, READ_TWICE), body.reused(arguments[0], READ_TWICE))
+		val value = if (default != null) body.expression(default) else element(arguments[1])
 		return Statement.ifThen(Expression.binary(entry, BinaryOperator.EQUAL, Expression.Nil()),
 			Block.of(Statement.assignment(entry, value)))
 	}
@@ -349,7 +348,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		val test = inlined.value?.let(body::expression)
 			?: throw Rejection.notYet(lambda, "A $name whose lambda does more than test each element")
 		val item = inlined.parameters.singleOrNull() ?: throw Rejection.notYet(lambda, "This $name")
-		val table = stable(receiver)
+		val table = body.reused(receiver, READ_TWICE)
 		return when (kind) {
 			Kind.SEQUENCE -> {
 				val index = body.invent("i", where)
@@ -387,15 +386,10 @@ internal class LibraryCalls(private val body: BodyLowering) {
 
 	/**
 	 * The char at a position of a text, `text[i]`, as a one-character string: `text:sub(i + 1, i + 1)`. The position
-	 * appears twice, so it may not call anything.
+	 * appears twice; see [BodyLowering.reused].
 	 */
 	fun characterAt(text: Expression, position: KtExpression): Expression {
-		val calls = position is KtCallExpression ||
-			PsiTreeUtil.findChildOfType(position, KtCallExpression::class.java) != null
-		if (calls) {
-			throw Rejection(position, "Lua would evaluate this position twice; store it in a local first.")
-		}
-		val index = position(position)
+		val index = body.reused(position(position), position, "Lua would evaluate this position twice", "position")
 		return Expression.methodCall(text, "sub", index, index)
 	}
 
@@ -588,7 +582,12 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			"getOrNull" -> Expression.Index(list, position(arguments[0]))
 			// An empty list's first and last are nil, which is firstOrNull's and lastOrNull's null
 			"first", "firstOrNull" -> if (arguments.isEmpty()) Expression.Index(list, Expression.integer(1)) else null
-			"last", "lastOrNull" -> if (arguments.isEmpty()) Expression.Index(list, length(stable(receiver))) else null
+			"last", "lastOrNull" -> if (arguments.isEmpty()) {
+				val named = body.reused(receiver, READ_TWICE)
+				Expression.Index(named, length(named))
+			} else {
+				null
+			}
 			"isEmpty", "none" -> if (arguments.isEmpty()) {
 				Expression.binary(length(list), BinaryOperator.EQUAL, Expression.integer(0))
 			} else {
@@ -608,7 +607,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			"joinToString" -> joined(where, receiver, arguments)
 			// A copy: Lua's table.move of every element into a new table
 			"toMutableList", "toList" -> if (arguments.isEmpty()) {
-				val copied = stable(receiver)
+				val copied = body.reused(receiver, READ_TWICE)
 				tableCall("move", copied, Expression.integer(1), length(copied), Expression.integer(1),
 					Expression.Table(listOf()))
 			} else {
@@ -618,7 +617,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			"reversed" -> if (arguments.isEmpty()) helper(Helper.REVERSED, list) else null
 			"orEmpty" -> Expression.binary(list, BinaryOperator.OR, Expression.Table(listOf()))
 			"isNullOrEmpty" -> {
-				val named = stable(receiver)
+				val named = body.reused(receiver, READ_TWICE)
 				Expression.binary(Expression.binary(named, BinaryOperator.EQUAL, Expression.Nil()), BinaryOperator.OR,
 					Expression.binary(length(named), BinaryOperator.EQUAL, Expression.integer(0)))
 			}
@@ -629,11 +628,12 @@ internal class LibraryCalls(private val body: BodyLowering) {
 
 	/**
 	 * `list.joinToString(separator)` as `table.concat(list, separator)`, which joins strings and numbers as Kotlin
-	 * writes them; its separator is `", "` unless the call gives another.
+	 * writes them; its separator is `", "` unless the call gives another. Null for a join with more, which a chain's
+	 * loop makes.
 	 */
-	private fun joined(where: KtExpression, receiver: Receiver, arguments: LibraryArguments): Expression {
+	private fun joined(where: KtExpression, receiver: Receiver, arguments: LibraryArguments): Expression? {
 		if (arguments.byName.keys.any { it != "separator" }) {
-			throw Rejection.notYet(where, "joinToString with a prefix, postfix, limit or transform")
+			return null
 		}
 		if (type(receiver)?.let(types::elementClass) !in JOINABLE) {
 			throw Rejection.notYet(where, "Joining values other than strings and numbers")
@@ -729,7 +729,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 
 	/** A nullable map's or set's `isNullOrEmpty()`: nil, or a table whose `next` finds no first key. */
 	private fun nullOrEmpty(receiver: Receiver): Expression {
-		val named = stable(receiver)
+		val named = body.reused(receiver, READ_TWICE)
 		return Expression.binary(Expression.binary(named, BinaryOperator.EQUAL, Expression.Nil()), BinaryOperator.OR,
 			empty(named))
 	}
@@ -956,20 +956,6 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	private fun isCall(expression: KtExpression): Boolean =
 		expression is KtCallExpression || (expression as? KtQualifiedExpression)?.selectorExpression is KtCallExpression
 
-	/** A receiver the Lua names twice, as in `list[#list + 1] = x`, which therefore must not contain a call. */
-	fun stable(receiver: KtExpression): Expression {
-		if (isCall(receiver)) {
-			throw Rejection(receiver, "Lua needs this value twice; store it in a local first.")
-		}
-		return body.expression(receiver)
-	}
-
-	/** A receiver the Lua names twice: a written one as [stable] takes it, and one left unnamed by its name. */
-	fun stable(receiver: Receiver): Expression = when (receiver) {
-		is Receiver.Written -> stable(receiver.expression)
-		is Receiver.Unnamed -> receiver.lua
-	}
-
 	/**
 	 * The receiver's expression, for a member that reads the expression as written; one left unnamed is refused, as it
 	 * has none.
@@ -1010,9 +996,15 @@ internal class LibraryCalls(private val body: BodyLowering) {
 
 		const val STATEMENT_ONLY = "In Lua %s is a statement, not a value; call it on its own line."
 
-		const val CHAIN_IN_STATEMENT = "In Lua a chain of collection functions is a loop, which can run before the " +
-			"code around it only where nothing would see the difference; give its value to a local of its own first, " +
-			"val x = ..."
+		private const val CHAIN_IN_STATEMENT = "In Lua a chain of collection functions is a loop, which can run" +
+			" before the code around it only where nothing would see the difference; give its value to a local of its" +
+			" own first, val x = ..."
+
+		/** What Lua makes of a chain of collection functions, for a message. */
+		const val CHAIN_LOOP = "In Lua a chain of collection functions is a loop"
+
+		/** Why the Lua of a member reads its receiver or an argument twice, for a message. */
+		const val READ_TWICE = "Lua reads this value twice"
 
 		/**
 		 * The variables of a loop over a map's entries, `for key, value in pairs(map)`, as Lua writes them: a key the

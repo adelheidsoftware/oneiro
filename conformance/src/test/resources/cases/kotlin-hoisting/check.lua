@@ -1,0 +1,35 @@
+-- Values read into a local before the statement that uses them give what Kotlin's do.
+
+local logged = {}
+function log(...)
+    logged[#logged + 1] = table.concat({ ... }, " ")
+end
+
+local Hoisting = require("src/hoisting")
+
+local lines = Hoisting.ledger({ "a", "b" }, "Ledger")
+assert(#lines == 3 and lines[1] == "Ledger" and lines[3] == "- b", "a call's list added in a builder")
+assert(Hoisting.wordLength() == 6, "a scope function on a literal")
+Hoisting.stars(3)
+assert(logged[#logged] == "***", "a buildString inside a call")
+Hoisting.pair()
+assert(logged[#logged] == "ab", "two buildStrings in one statement")
+assert(Hoisting.repeated("ab", 2) == "abab", "a buildString for a local")
+assert(Hoisting.changed({}) == "nothing", "an if with a chain in a branch, the other branch")
+assert(Hoisting.changed({ "a", "b" }) == "A, B", "an if with a chain in a branch")
+Hoisting.logChanged({ "c" })
+assert(logged[#logged] == "C", "the same if inside a call")
+Hoisting.bracketed({ "x", "y" })
+assert(logged[#logged] == "[x, y]", "a join with a prefix and a postfix inside a call")
+assert(Hoisting.nearestLength({ "abc" }) == 3 and Hoisting.nearestLength({}) == 0, "a safe call on a call's value")
+assert(Hoisting.topLength({ "ab", "c" }) == 2 and Hoisting.topLength({}) == 0, "a safe call on a list's first")
+assert(Hoisting.sensible({ "a" }) and not Hoisting.sensible({}), "a call's value within a range")
+assert(Hoisting.settingText("mode") == "fast" and Hoisting.settingText("level") == nil, "a call's value cast safely")
+assert(Hoisting.afterMiddle("abcd") == "d", "a char at a position worked out once")
+local labelled = Hoisting.labelled({ "a", "b" }, "#")
+assert(#labelled == 2 and labelled[2] == "# b", "a reference to a method of a call's value")
+Hoisting.sizes({ "abcdefg", "ab", "abc" })
+assert(logged[#logged] == "1 long, 2 short", "two chains in one statement")
+assert(Hoisting.logged("hey") == 3 and logged[#logged] == "hey", "a scope function's code before its statement")
+Hoisting.shouted("hi")
+assert(logged[#logged] == "HI!", "a scope function of steps inside a call")

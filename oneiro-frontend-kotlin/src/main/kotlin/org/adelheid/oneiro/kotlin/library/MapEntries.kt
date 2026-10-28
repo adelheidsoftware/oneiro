@@ -97,10 +97,9 @@ internal class MapEntries(
 		if (predicate !is KtLambdaExpression) {
 			return fusion.applied(predicate, Expression.name(part))
 		}
-		val condition = body.lambdas.value(predicate, "A chain's test becomes an if inside the loop; write it as one"
-			+ " expression, { condition }.")
-		unit.alias(body.lambdas.parameter(predicate).declaration, part)
-		return body.expression(condition)
+		return fusion.lambdaValue(predicate, {
+			unit.alias(body.lambdas.parameter(predicate).declaration, part)
+		})
 	}
 
 	/** What a find over the entries gives: the part of the entry the chain reads, `?.key` or `?.value`. */

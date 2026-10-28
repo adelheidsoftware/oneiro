@@ -6,6 +6,38 @@ plugin/Equality.kt:13: error: Kotlin's == compares these objects by equals, but 
 	fun isTile(value: Any, tile: Tile): Boolean = value == tile
 	                                              ^
 
+plugin/InPlace.kt:12: error: In Lua a chain of collection functions is a loop, which can run before the code around it only where nothing would see the difference, but it is inside a lambda; give its value to a local of its own first, val x = ...
+	fun noneEmpty(names: List<String>): List<String>? = names.takeIf { it.count { name -> name.isEmpty() } == 0 }
+	                                                                   ^
+
+plugin/InPlace.kt:15: error: In Lua a chain of collection functions is a loop, which can run before the code around it only where nothing would see the difference, but it runs only when the ?: gets to it; give its value to a local of its own first, val x = ...
+	fun orEmpty(name: String?, names: List<String>): Int = name?.length ?: names.count { it.isEmpty() }
+	                                                                       ^
+
+plugin/InPlace.kt:18: error: Lua reads this value twice to test it for nil, so it goes into a local first, which can run before the code around it only where nothing would see the difference, but it runs only when the if takes its branch; store it in a local first.
+	fun nearestLength(names: List<String>, look: Boolean): Int = if (look) nearest(names)?.length ?: 0 else 0
+	                                                                       ^
+
+plugin/InPlace.kt:22: error: Lua reads this value twice to test it for nil, so it goes into a local first, which can run before the code around it only where nothing would see the difference, but it comes after nearest(names), which would then run later; store it in a local first.
+		log(nearest(names) ?: "", nearest(names)?.length ?: 0)
+		                          ^
+
+plugin/InPlace.kt:27: error: Lua reads this value twice to test it for nil, so it goes into a local first, which can run before the code around it only where nothing would see the difference, but it runs each time the loop tests its condition; store it in a local first.
+		while ((nearest(names)?.length ?: 0) > 0) {
+		        ^
+
+plugin/InPlace.kt:33: error: In Lua a chain of collection functions is a loop, which can run before the code around it only where nothing would see the difference, but it runs only when the ?. finds a value; give its value to a local of its own first, val x = ...
+	fun cut(name: String?, names: List<String>): String? = name?.substring(names.count { it.isEmpty() })
+	                                                                       ^
+
+plugin/InPlace.kt:36: error: Lua reads this value twice to test it for nil, so it goes into a local first, which can run before the code around it only where nothing would see the difference, but here there is no statement for it to go before; store it in a local first.
+	fun padded(text: String, width: Int = nearest(listOf(text))?.length ?: 0): String = "$text$width"
+	                                      ^
+
+plugin/InPlace.kt:40: error: Lua runs this lambda's code as the body of a loop, which return@map cannot leave; write the loop as a for loop, and use continue.
+		if (it < 0) return@map 0
+		            ^
+
 plugin/Refused.kt:10: error: Calling kotlin.collections.zipWithNext is not supported yet; https://github.com/adelheidsoftware/oneiro/blob/main/docs/kotlin-subset.md lists the Kotlin that is.
 		private val pairs = names.zipWithNext()
 		                    ^
@@ -42,15 +74,15 @@ plugin/Refused.kt:41: error: Oneiro reads toString() only on a receiver the code
 	fun Int.label(): String = toString()
 	                          ^
 
-plugin/Refused.kt:44: error: In Lua the code of apply runs as statements; give its value to a local, val x = ..., a return or an assignment of its own.
-	fun logged(text: String): Int = text.apply { log(this) }.length
-	                                ^
+plugin/Refused.kt:44: error: In Lua the code of apply runs as statements, which can run before the code around it only where nothing would see the difference, but it is inside a lambda; give its value to a local of its own first, val x = ...
+	fun logged(text: String): String? = text.takeIf { it.apply { log(this) }.isNotEmpty() }
+	                                                  ^
 
 plugin/Refused.kt:50: error: Lua runs the code of let in place, where a return@label would leave the function around it; give the lambda its value at its end, using if where it differs.
 				return@let "empty"
 				^
 
-plugin/Refused.kt:58: error: In Lua this when is a statement, which can run before the code around it only where nothing would see the difference; give its value to a local of its own first, val x = when ...
+plugin/Refused.kt:58: error: In Lua this when is a statement, which can run before the code around it only where nothing would see the difference, but it comes after mood.toString(), which would then run later; give its value to a local of its own first, val x = when ...
 	fun calm(mood: Int): String = mood.toString() + when (mood) {
 	                                                ^
 

@@ -3,6 +3,7 @@ package org.adelheid.oneiro.kotlin.language
 import com.intellij.psi.util.PsiTreeUtil
 import org.adelheid.oneiro.kotlin.core.BodyLowering
 import org.adelheid.oneiro.kotlin.core.Rejection
+import org.adelheid.oneiro.lowering.translation.PlainValues
 import org.adelheid.oneiro.lua.BinaryOperator
 import org.adelheid.oneiro.lua.Block
 import org.adelheid.oneiro.lua.Comment
@@ -102,7 +103,7 @@ internal class Branches(private val body: BodyLowering) {
 				val value = body.expression(tree)
 				val calls = tree is KtCallExpression || PsiTreeUtil.findChildOfType(tree, KtCallExpression::class.java,
 					false) != null
-				if (calls || !isPlain(value) && comparisons > 1) {
+				if (calls || !PlainValues.isPlain(value) && comparisons > 1) {
 					val name = body.invent(subjectName(tree), statement)
 					before += Statement.Local(listOf(name), listOf(value))
 					Expression.name(name) to tree
@@ -134,15 +135,6 @@ internal class Branches(private val body: BodyLowering) {
 			return before + (otherwise?.entries()?.map { it.statement() } ?: listOf())
 		}
 		return before + Statement.If(branches, otherwise)
-	}
-
-	/** Whether Lua reads a value as cheaply as a local: a name, a literal, or fields and indexes of those. */
-	private fun isPlain(value: Expression): Boolean = when (value) {
-		is Expression.Name, is Expression.NumberLiteral, is Expression.StringLiteral, is Expression.BooleanLiteral,
-		is Expression.Nil -> true
-		is Expression.Field -> isPlain(value.target())
-		is Expression.Index -> isPlain(value.target()) && isPlain(value.key())
-		else -> false
 	}
 
 	/** `size` for `values.size`, `kind` for `event.kind()`: the name of a subject read into a local. */
@@ -184,7 +176,7 @@ internal class Branches(private val body: BodyLowering) {
 				body.expression(condition.expression ?: throw Rejection(condition, EMPTY)))
 			is KtWhenConditionInRange -> {
 				val range = condition.rangeExpression ?: throw Rejection(condition, EMPTY)
-				val test = body.operators.inRange(condition, typed, value, range, stable = true)
+				val test = body.operators.inRange(condition, typed, range, value)
 				if (condition.isNegated) Expression.Unary(UnaryOperator.NOT, test) else test
 			}
 			is KtWhenConditionIsPattern -> {
