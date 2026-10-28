@@ -140,7 +140,7 @@ internal class Loops(private val body: BodyLowering) {
 		if (destructured != null && (kind == LibraryCalls.Kind.SEQUENCE || kind == LibraryCalls.Kind.SET)) {
 			// Each element in the loop's variable, whose parts the body reads first
 			val elementType = type?.let { body.types.typeArgumentOf(it, 0) }
-			val element = body.invent(body.destructuring.holderName(elementType), loop)
+			val element = body.inventInner(body.destructuring.holderName(elementType), loop)
 			val code = body.destructuring.unpacked(destructured.entries, element, elementType, loopBody(loop))
 			val walk = if (kind == LibraryCalls.Kind.SEQUENCE) "ipairs" else "pairs"
 			val names = if (kind == LibraryCalls.Kind.SEQUENCE) listOf("_", element) else listOf(element)
@@ -189,7 +189,7 @@ internal class Loops(private val body: BodyLowering) {
 		if (index in unit.oneBased) {
 			return Statement.GenericFor(listOf(name, value), walked, code)
 		}
-		val position = body.invent("i", index)
+		val position = body.inventInner("i", index)
 		val counted = Statement.Local(listOf(name), listOf(IndexArithmetic.minusOne(Expression.name(position))))
 		return Statement.GenericFor(listOf(position, value), walked,
 			Block(listOf(Block.Entry.of(counted)) + code.entries(), code.closingComments()))
@@ -299,8 +299,8 @@ internal class Loops(private val body: BodyLowering) {
 			return variables
 		}
 		val entry = loop.loopParameter ?: throw Rejection(loop, "This loop is incomplete and does not compile.")
-		val key = body.invent("key", loop)
-		val value = body.invent("value", loop)
+		val key = body.inventInner("key", loop)
+		val value = body.inventInner("value", loop)
 		unit.aliasEntry(entry, key, value)
 		return listOf(key, value)
 	}

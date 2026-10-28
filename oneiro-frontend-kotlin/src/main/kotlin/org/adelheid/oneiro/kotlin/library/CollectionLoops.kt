@@ -404,8 +404,8 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			if (operation.call != chain.terminal.call && argument(operation) != null) {
 				throw Rejection.notYet(operation.call, "${operation.name} with a transform before other calls")
 			}
-			val list = readOnce(receiver, "list", operation.call)
-			val position = taken("i", operation.call)
+			val list = readOnce(receiver, body.valueName(receiver), operation.call)
+			val position = inner("i", operation.call)
 			return if (operation.name == "zip") zipped(operation, list, position) else sliced(operation, list, position)
 		}
 
@@ -525,7 +525,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			if (consumers.size == 1 && chain.terminal.name == "count" && argument(chain.terminal) == null) {
 				return "_"
 			}
-			return fresh(defaultName, consumers.firstOrNull()?.call ?: chain.terminal.call)
+			return inner(defaultName, consumers.firstOrNull()?.call ?: chain.terminal.call)
 		}
 
 		// ---- Steps
@@ -676,7 +676,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 					if (index in unit.oneBased) {
 						sourceIndex = name
 					} else {
-						val position = taken("i", stage.call)
+						val position = inner("i", stage.call)
 						sourceIndex = position
 						steps += Step.Bind(name, IndexArithmetic.minusOne(Expression.name(position)))
 					}
@@ -745,14 +745,14 @@ internal class CollectionLoops(private val body: BodyLowering) {
 
 		/** A local inside the loop, under a name of its own, which the steps after it read: `local name = value`. */
 		fun bound(preferred: String, value: Expression, where: PsiElement): String {
-			val name = taken(preferred, where)
+			val name = inner(preferred, where)
 			steps += Step.Bind(name, value)
 			return name
 		}
 
 		/** A local before the loop, under a name of its own. */
 		private fun localBefore(preferred: String, value: Expression, where: PsiElement): String {
-			val name = taken(preferred, where)
+			val name = declared(preferred, where)
 			before += local(name, value)
 			return name
 		}
@@ -817,7 +817,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		/** Gives a pending mapped value a local, so that it can be read more than once. */
 		private fun bindPending(preferred: String, where: PsiElement) {
 			val value = pending ?: return
-			val local = if (preferred in used) fresh(preferred, where) else preferred
+			val local = if (preferred in used) inner(preferred, where) else preferred
 			steps += Step.Bind(local, value)
 			used += local
 			element = local
@@ -906,26 +906,26 @@ internal class CollectionLoops(private val body: BodyLowering) {
 		/** A function value called on the value; a function expression goes into a local before the loop first. */
 		private fun called(function: Expression, value: Expression, where: PsiElement): Expression {
 			if (function is Expression.FunctionExpression) {
-				val local = taken("action", where)
+				val local = declared("action", where)
 				before += Statement.Local(listOf(local), listOf(function))
 				return Expression.Call(Expression.name(local), listOf(value))
 			}
 			return Expression.Call(function, listOf(value))
 		}
 
-		/** A name of the function's own the loop's variables have not taken. */
-		fun fresh(preferred: String, where: PsiElement): String {
-			var name = body.invent(preferred, where)
-			var number = 2
-			while (name in used) {
-				name = preferred + number++
-			}
+		/**
+		 * A name for a variable inside the loop, or for one of the loop's own, which ends with it; see
+		 * [BodyLowering.inventInner].
+		 */
+		fun inner(preferred: String, where: PsiElement): String {
+			val name = body.inventInner(preferred, where, used)
+			used += name
 			return name
 		}
 
-		/** A name of the function's own the loop's variables have not taken, which one of them now takes. */
-		fun taken(preferred: String, where: PsiElement): String {
-			val name = fresh(preferred, where)
+		/** A name for a local before the loop, which lasts to the end of the block; see [BodyLowering.invent]. */
+		fun declared(preferred: String, where: PsiElement): String {
+			val name = body.invent(preferred, where, used)
 			used += name
 			return name
 		}
@@ -1012,7 +1012,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 			val groups = accumulator("groups")
 			init += local(groups, helper(Helper.ORDERED_TABLE))
 			deliver(after, Expression.name(groups))
-			val group = taken("group", terminal.call)
+			val group = inner("group", terminal.call)
 			val slot = Expression.Index(Expression.name(groups), Expression.name(key))
 			val absent = Expression.binary(Expression.name(group), BinaryOperator.EQUAL, Expression.Nil())
 			val next = Expression.Index(Expression.name(group), LibraryCalls.nextIndex(Expression.name(group)))
@@ -1267,7 +1267,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 				destination.name
 			} else {
 				val preferred = unit.localName(total, total.name?.takeIf { it != "_" } ?: "total")
-				if (preferred in used) fresh(preferred, total) else preferred
+				if (preferred in used) declared(preferred, total) else preferred
 			}
 			used += name
 			unit.alias(total, name)
@@ -1325,8 +1325,8 @@ internal class CollectionLoops(private val body: BodyLowering) {
 
 		/** `average()`: the total and the count, and then the one divided by the other, which is NaN for none. */
 		private fun averaged(init: MutableList<Statement>, after: MutableList<Statement>): Block {
-			val sum = taken("sum", chain.terminal.call)
-			val count = taken("count", chain.terminal.call)
+			val sum = declared("sum", chain.terminal.call)
+			val count = declared("count", chain.terminal.call)
 			init += Statement.Local(listOf(sum, count), listOf(Expression.integer(0), Expression.integer(0)))
 			deliver(after, Expression.binary(Expression.name(sum), BinaryOperator.DIVIDE, Expression.name(count)))
 			return Block.of(assign(sum, Expression.binary(Expression.name(sum), BinaryOperator.ADD, current())),
@@ -1374,7 +1374,7 @@ internal class CollectionLoops(private val body: BodyLowering) {
 				throw Rejection.notYet(terminal.call, "Joining values other than strings and numbers without a"
 					+ " transform")
 			}
-			val parts = fresh("parts", terminal.call)
+			val parts = declared("parts", terminal.call)
 			init += local(parts, Expression.Table(listOf()))
 			val separator = arguments["separator"]?.let(body::expression) ?: Expression.string(", ")
 			var joinedParts = tableCall("concat", Expression.name(parts), separator)
@@ -1410,14 +1410,22 @@ internal class CollectionLoops(private val body: BodyLowering) {
 
 		/**
 		 * The local a terminal builds its result in: the destination's own local when the result goes there as it is,
-		 * otherwise a new one.
+		 * otherwise a new one, which for a list, a set or a map is named after the property the result goes to; see
+		 * [BodyLowering.collectionName].
 		 */
 		fun accumulator(preferred: String): String {
 			val default = chain.default
 			if (destination is Destination.Local && (default == null || Branches.jumps(default))) {
 				return destination.name
 			}
-			return fresh(preferred, chain.terminal.call)
+			val where = chain.terminal.call
+			if (preferred !in BodyLowering.COLLECTIONS) {
+				return declared(preferred, where)
+			}
+			val property = (destination as? Destination.Sink)?.sink?.let(body::destinationName)
+			val name = body.collectionName(preferred, property, where, used)
+			used += name
+			return name
 		}
 
 		/** The type of the terminal call's value. */

@@ -1,10 +1,7 @@
 -- src/panels.lua
 -- Kotlin's scope functions, opened where they are called: let, also, apply, run and with.
 
--- The string without leading and trailing whitespace, as Kotlin's String.trim.
-local function trim(s)
-    return s:match("^%s*(.-)%s*$")
-end
+local trim = require("utils/trim")
 
 local Panels = {}
 

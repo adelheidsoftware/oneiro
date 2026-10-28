@@ -1,14 +1,7 @@
 -- src/walker.lua
 -- Locals named like the file's private members, which share one namespace with them in Lua.
 
--- The number of entries in a map or set, as Java's size(); a Lua table keeps no count.
-local function tableLength(t)
-    local n = 0
-    for _ in pairs(t) do
-        n = n + 1
-    end
-    return n
-end
+local tableLength = require("utils/table_length")
 
 local Walker = {}
 

@@ -17,8 +17,9 @@ Two rules decide every row:
   replacement, Oneiro offers a small, clearly documented API (such as `LuaString` for Lua patterns).
 
 Some translations need a few lines of Lua that no single expression can say, such as Java's integer division. Those
-become **helpers**: small `local function`s with a comment, emitted near the top of the module that uses them, and
-only when it uses them. Each one is listed in [Helpers](#helpers).
+become **helpers**: small functions, each in a file of its own under `utils/` with a comment, which the modules that use
+it require, `local quotient = require("utils/quotient")`. The plugin ships only the helpers its code uses. Each one is
+listed in [Helpers](#helpers).
 
 ## Files and modules
 
@@ -480,8 +481,11 @@ through a record of its own so annotated.
 
 ## Helpers
 
-Each helper is a `local function` with a one-line comment, emitted once per module that needs it, after the
-`require` lines.
+Each helper is a file of its own under `utils/`, named after it in snake case, `utils/table_length.lua`: it starts
+with its path, as every file Oneiro writes does, and a comment naming the rule of Java's that it follows, defines the
+function, and returns it. A module that uses a helper requires it after the modules it requires,
+`local tableLength = require("utils/table_length")`, and calls it by that name. The plugin ships only the helpers its
+modules use; those that only the dev source set uses go into the development folder alone.
 
 | Helper | Used for |
 | --- | --- |
@@ -529,7 +533,8 @@ These are documented differences, not errors:
 
 - **`continue`** becomes `goto continue` with a `::continue::` label at the end of the loop body, the common Lua idiom
   and the only translation that works in every loop. The house style allows this one use of `goto`.
-- **Helpers** are emitted once per module that uses them, so every file reads on its own.
+- **Helpers** are files of their own, which each module that uses one requires, so that the plugin carries each
+  helper once, and its comment with it, however many modules use it.
 - **Strings** are built with `formatStr` and `table.concat`, as described in [Building strings](#building-strings).
 - **Enum constants are their own names**, which reads well in logs.
 - **Nested classes and enums are defined first**, after the module table and before the outer class's members,

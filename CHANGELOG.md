@@ -40,9 +40,23 @@ All notable changes to Oneiro are listed here. The format follows
   the value's type where no parameter names it, `text` for a string, rather than `value`.
 - `val repeated = buildString { ... }`, and a `run { ... }` without locals of its own, now declare the local where
   its value is given, `local repeated = table.concat(text)`, rather than declaring it empty first.
+- The helpers Oneiro's Lua uses, such as `orderedTable`, are files of their own under `utils/`,
+  `utils/ordered_table.lua`, which each module that uses one requires, `local orderedTable = require("utils/ordered_table")`,
+  rather than a copy defined in each module. The plugin carries each helper once, and only those its code uses; those
+  only the dev source set uses go into the development folder alone. `checkPlugin` accepts them, a vendored library may
+  not ship files in `utils/`, and `explainError` names a line of one as the helper it is.
+- A list, a set or a map that a local Oneiro makes up in Kotlin holds is named after the parameter of the plugin's or
+  the client's function it is handed to, or after the property it becomes, `texts` or `lines`, where that name is
+  free, rather than `list`. A list a chain reads from a call before its loop is named after the call, `top`.
+- A Kotlin map or set whose order nothing can see is a plain table, `{}` or `{ guam = 10 }`, rather than one the helper
+  `orderedTable()` makes: the value of a `val`, a local or a private property, that the code only reads, sets, tests
+  and removes keys of, counts and tests for emptiness.
 
 ### Fixed
 
+- Each name Oneiro makes up for a local in Kotlin is now taken once in a function, numbered from the name itself.
+  Before, two locals of one kind could be declared with one name in a block, `local list` and then `local list`, and
+  numbers could follow numbers, `count22` beside a local `count` of the source.
 - Two values in one Kotlin statement that each run before it, such as two chains or two `buildString`s, now both
   compile. Before, the second was refused, as though the first's calls came before it in the statement; and in a
   string joined with `+`, the values ran before the statement from the last to the first.

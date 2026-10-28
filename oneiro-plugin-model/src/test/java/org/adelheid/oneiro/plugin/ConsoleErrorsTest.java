@@ -172,6 +172,26 @@ class ConsoleErrorsTest {
 				""".formatted(FOLDER), explanation.text());
 	}
 
+	/**
+	 * A place in one of the helpers Oneiro writes, in a file of its own under {@code utils/}, has no source line, so it
+	 * keeps its Lua place, named as the helper; the call after it is the plugin's.
+	 */
+	@Test
+	void aLineOfAHelperIsNamedAsOneirosHelper() throws IOException {
+		ConsoleErrors.Explanation explanation = explain("""
+				[ERROR] in Oneiro Error Probe(-1): [string "-- utils/ordered_table.lua..."]:12: attempt to index nil
+				stack traceback:
+				\t[string "-- utils/ordered_table.lua..."]:12: in function 'orderedTable'
+				\t[string "-- src/failures.lua..."]:20: in function
+				""");
+		assertEquals("""
+				utils/ordered_table.lua:12 (orderedTable, a helper Oneiro writes): attempt to index nil
+				\tat utils/ordered_table.lua:12 (orderedTable, a helper Oneiro writes)
+				\tat %sFailures.java:27: return missing.length();
+
+				""".formatted(FOLDER), explanation.text());
+	}
+
 	@Test
 	void aMessageOfTheClientsOwnIsExplained() throws IOException {
 		// Rich Death's console as it was, newest line first, with its main.lua for the file; the Java line stands in

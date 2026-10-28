@@ -1,24 +1,9 @@
 -- src/strings.lua
 -- Strings in the house style: formatStr for building, table.concat for joining.
 
--- The 0-based position of the text in the string, or -1, as Kotlin's String.indexOf.
-local function stringIndexOf(s, text)
-    local start = s:find(text, 1, true)
-    if start == nil then
-        return -1
-    end
-    return start - 1
-end
-
--- Whether the string ends with the suffix, as Kotlin's String.endsWith.
-local function endsWith(s, suffix)
-    return suffix == "" or s:sub(-#suffix) == suffix
-end
-
--- The string without leading and trailing whitespace, as Kotlin's String.trim.
-local function trim(s)
-    return s:match("^%s*(.-)%s*$")
-end
+local stringIndexOf = require("utils/string_index_of")
+local endsWith = require("utils/ends_with")
+local trim = require("utils/trim")
 
 local Strings = {}
 

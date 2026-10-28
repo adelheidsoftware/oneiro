@@ -4,23 +4,7 @@
 local Boss = require("src/boss")
 local Monster = require("src/monster")
 local Pet = require("src/pet")
-
--- Whether the value is an object of the class, or of a class that extends it, as Java's instanceof.
-local function isInstance(value, class)
-    if type(value) ~= "table" then
-        return false
-    end
-    local current = getmetatable(value)
-    while current ~= nil do
-        if current == class then
-            return true
-        end
-        -- A subclass's table looks up what it lacks in its superclass's
-        local parent = getmetatable(current)
-        current = parent and parent.__index
-    end
-    return false
-end
+local isInstance = require("utils/is_instance")
 
 local Encounters = {}
 

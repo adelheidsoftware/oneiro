@@ -1,14 +1,7 @@
 -- src/order.lua
 -- Module-level code runs top to bottom in Lua, so the functions it calls come first.
 
--- A new array of n copies of value, as Kotlin fills a new IntArray with zeros or a BooleanArray with false.
-local function filled(n, value)
-    local array = {}
-    for i = 1, n do
-        array[i] = value
-    end
-    return array
-end
+local filled = require("utils/filled")
 
 local Order = {}
 

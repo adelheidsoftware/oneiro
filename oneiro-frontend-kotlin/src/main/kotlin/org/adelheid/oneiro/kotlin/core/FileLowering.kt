@@ -20,7 +20,6 @@ import org.adelheid.oneiro.lowering.LocalNames
 import org.adelheid.oneiro.lowering.LuaModule
 import org.adelheid.oneiro.lowering.ModuleLayout
 import org.adelheid.oneiro.lowering.ModulePaths
-import org.adelheid.oneiro.lowering.SourceLanguage
 import org.adelheid.oneiro.lowering.client.ClientApi
 import org.adelheid.oneiro.lowering.translation.Helper
 import org.adelheid.oneiro.lua.Block
@@ -339,7 +338,7 @@ internal class FileLowering(
 
 	/** The module's statements, laid out by [ModuleLayout] with the file's requires and helpers. */
 	fun assemble(table: Expression?, instanceClass: Boolean, members: List<Member>): List<Block.Entry> =
-		ModuleLayout.assemble(moduleName, table, instanceClass, requires, helpers, SourceLanguage.KOTLIN, members)
+		ModuleLayout.assemble(moduleName, table, instanceClass, requires, helpers, members)
 
 	private fun path(packageName: String): String =
 		ModulePaths.requirePath(sourceFolder(), options.rootPackage, packageName, moduleName) + ".lua"
@@ -571,6 +570,9 @@ internal class FileLowering(
 	fun useGlobal(name: String) {
 		globals += name
 	}
+
+	/** The helpers the module uses, which the plugin's files under `utils/` define. */
+	fun helpers(): Set<Helper> = helpers
 
 	fun use(helper: Helper) {
 		helpers += helper

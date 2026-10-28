@@ -1,23 +1,8 @@
 -- src/letters.lua
 -- Letters and digits, one char at a time.
 
--- A new array of n copies of value, as Java fills a new array with zeros or false.
-local function filled(n, value)
-    local array = {}
-    for i = 1, n do
-        array[i] = value
-    end
-    return array
-end
-
--- The 0-based position of the text in the string, or -1, as Java's String.indexOf.
-local function stringIndexOf(s, text)
-    local start = s:find(text, 1, true)
-    if start == nil then
-        return -1
-    end
-    return start - 1
-end
+local filled = require("utils/filled")
+local stringIndexOf = require("utils/string_index_of")
 
 local Letters = {}
 

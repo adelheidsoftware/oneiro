@@ -8,7 +8,10 @@ import static org.adelheid.oneiro.lua.Expression.methodCall;
 import static org.adelheid.oneiro.lua.Expression.string;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import org.adelheid.oneiro.lowering.LuaModule;
+import org.adelheid.oneiro.lowering.ModulePaths;
 import org.adelheid.oneiro.lowering.SourceLanguage;
 import org.adelheid.oneiro.lua.BinaryOperator;
 import org.adelheid.oneiro.lua.Block;
@@ -16,12 +19,14 @@ import org.adelheid.oneiro.lua.Comment;
 import org.adelheid.oneiro.lua.Expression;
 import org.adelheid.oneiro.lua.FunctionBody;
 import org.adelheid.oneiro.lua.Statement;
+import org.adelheid.oneiro.lua.Trivia;
 import org.adelheid.oneiro.lua.UnaryOperator;
 
 /**
- * Small Lua functions for translations that no single expression can say, such as Java's integer division. A module
- * defines only the helpers it uses, near its top, each with a comment naming the behaviour of the plugin's language
- * that it reproduces. A few serve functions only Kotlin has, such as {@code padStart}.
+ * Small Lua functions for translations that no single expression can say, such as Java's integer division. Each helper
+ * the plugin uses is a file of its own under {@code utils/}, {@code utils/ordered_table.lua}, whose comment names the
+ * behaviour of the plugin's language that it reproduces, and which the modules that use it require. A few serve
+ * functions only Kotlin has, such as {@code padStart}.
  */
 public enum Helper {
 
@@ -394,6 +399,27 @@ public enum Helper {
 
 	public String luaName() {
 		return luaName;
+	}
+
+	/** The require path of the helper's file, without {@code .lua}: {@code utils/ordered_table}. */
+	public String requirePath() {
+		return ModulePaths.helperPath(luaName);
+	}
+
+	/** The files of the helpers, each defining its helper and returning it; see {@link #module}. */
+	public static List<LuaModule> modules(Collection<Helper> helpers, SourceLanguage language) {
+		return helpers.stream().map(helper -> helper.module(language)).toList();
+	}
+
+	/**
+	 * The helper's own file, which starts with its path and the comment naming the rule it follows, defines the helper,
+	 * and returns it: {@code local function orderedTable() ... end} and {@code return orderedTable}.
+	 */
+	public LuaModule module(SourceLanguage language) {
+		Block.Entry returned = new Block.Entry(new Statement.Return(List.of(Expression.name(luaName))),
+				new Trivia(true, List.of(), null), null);
+		return LuaModule.of(requirePath() + ".lua", comment(language),
+				new Block(List.of(Block.Entry.of(definition()), returned), List.of()));
 	}
 
 	/**

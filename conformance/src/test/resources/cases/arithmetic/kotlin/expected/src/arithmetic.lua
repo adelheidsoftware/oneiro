@@ -1,22 +1,8 @@
 -- src/arithmetic.lua
 -- Integer arithmetic keeps Kotlin's rounding toward zero.
 
--- Integer division that rounds toward zero, as Kotlin's / does; Lua's // rounds down.
-local function quotient(a, b)
-    local q = a // b
-    if q < 0 and q * b ~= a then
-        q = q + 1
-    end
-    return q
-end
-
--- Kotlin's toInt() of a Double: drops the fraction, rounding toward zero.
-local function toInteger(d)
-    if d >= 0 then
-        return math.floor(d)
-    end
-    return math.ceil(d)
-end
+local quotient = require("utils/quotient")
+local toInteger = require("utils/to_integer")
 
 local Arithmetic = {}
 

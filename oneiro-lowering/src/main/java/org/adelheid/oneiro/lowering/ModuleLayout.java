@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +32,7 @@ public final class ModuleLayout {
 	}
 
 	/**
-	 * The module's statements: the lines that load the modules it uses, the helpers, the module table, any locals
+	 * The module's statements: the lines that load the modules it uses and the helpers, the module table, any locals
 	 * declared ahead, the members, and {@code return Module}. The plugin class's {@code main.lua} has no table and
 	 * returns nothing. A local declared ahead, {@code local name}, is assigned where its member's definition stands.
 	 *
@@ -39,13 +40,11 @@ public final class ModuleLayout {
 	 * @param table the module table's value, {@code {}}, or null for a chunk of locals such as {@code main.lua}
 	 * @param instanceClass whether the table is a class whose objects look their methods up in it
 	 * @param requires the local name of each required module and its require path, in order of first use
-	 * @param helpers the helper functions the module uses
-	 * @param language the language of the plugin, whose rules the helpers' comments name
+	 * @param helpers the helper functions the module uses, which it requires from their files under {@code utils/}
 	 * @param members the module's members, in source order
 	 */
 	public static <K> List<Block.Entry> assemble(String moduleName, @Nullable Expression table, boolean instanceClass,
-			Map<String, String> requires, Collection<Helper> helpers, SourceLanguage language,
-			List<? extends ModuleMember<K>> members) {
+			Map<String, String> requires, Collection<Helper> helpers, List<? extends ModuleMember<K>> members) {
 		List<ModuleMember<K>> ordered = order(members);
 		Map<ModuleMember<K>, Integer> position = new HashMap<>();
 		for (int index = 0; index < ordered.size(); index++) {
@@ -64,13 +63,11 @@ public final class ModuleLayout {
 		}
 
 		List<Block.Entry> entries = new ArrayList<>();
-		for (Map.Entry<String, String> require : requires.entrySet()) {
+		Map<String, String> loaded = new LinkedHashMap<>(requires);
+		helpers.forEach(helper -> loaded.put(helper.luaName(), helper.requirePath()));
+		for (Map.Entry<String, String> require : loaded.entrySet()) {
 			Expression module = call(name("require"), Expression.string(require.getValue()));
 			entries.add(Block.Entry.of(new Statement.Local(List.of(require.getKey()), List.of(module))));
-		}
-		for (Helper helper : helpers) {
-			Trivia trivia = new Trivia(!entries.isEmpty(), helper.comment(language), null);
-			entries.add(new Block.Entry(helper.definition(), trivia, null));
 		}
 		if (table != null) {
 			entries.add(new Block.Entry(new Statement.Local(List.of(moduleName), List.of(table)),

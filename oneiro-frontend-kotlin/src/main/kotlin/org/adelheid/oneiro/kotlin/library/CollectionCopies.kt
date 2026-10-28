@@ -82,8 +82,8 @@ internal class CollectionCopies(private val body: BodyLowering) {
 			return Statement.CallStatement(call("move", list, Expression.integer(1), LibraryCalls.length(list),
 				LibraryCalls.nextIndex(into), into))
 		}
-		val key = body.invent("key", source)
-		val value = body.invent("value", source)
+		val key = body.inventInner("key", source)
+		val value = body.inventInner("value", source)
 		val stored = when {
 			target == LibraryCalls.Kind.SEQUENCE && holding.contents == Contents.KEYS -> appended(into, key)
 			target == LibraryCalls.Kind.SEQUENCE && holding.contents == Contents.VALUES -> appended(into, value)

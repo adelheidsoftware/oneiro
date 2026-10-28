@@ -33,6 +33,14 @@ public final class ModulePaths {
 		return folder + "/" + relative + snakeCase(className);
 	}
 
+	/**
+	 * The require path, without {@code .lua}, of the file of a helper Oneiro writes, under {@code utils/}:
+	 * {@code utils/ordered_table} for {@code orderedTable}.
+	 */
+	public static String helperPath(String luaName) {
+		return "utils/" + snakeCase(luaName);
+	}
+
 	public static boolean isInside(String rootPackage, String packageName) {
 		return packageName.equals(rootPackage) || packageName.startsWith(rootPackage + ".");
 	}

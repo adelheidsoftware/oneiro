@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -49,6 +50,8 @@ import org.adelheid.oneiro.lowering.Diagnostic;
 import org.adelheid.oneiro.lowering.LocalNames;
 import org.adelheid.oneiro.lowering.LuaModule;
 import org.adelheid.oneiro.lowering.PluginFacts;
+import org.adelheid.oneiro.lowering.SourceLanguage;
+import org.adelheid.oneiro.lowering.translation.Helper;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -167,14 +170,18 @@ public final class JavaFrontend {
 		sorted.sort(Comparator.comparing(unit -> unit.getSourceFile().getName()));
 		List<Diagnostic> diagnostics = new ArrayList<>();
 		List<LuaModule> modules = new ArrayList<>();
+		Set<Helper> helpers = EnumSet.noneOf(Helper.class);
 		for (CompilationUnitTree unit : sorted) {
 			UnitLowering lowering = unitLowering(unit, trees, task, types, options);
 			LuaModule module = lowering.lower();
 			diagnostics.addAll(lowering.diagnostics());
+			helpers.addAll(lowering.helpers());
 			if (module != null) {
 				modules.add(module);
 			}
 		}
+		// Each helper a module uses is a file of its own, which every module that uses it requires
+		modules.addAll(Helper.modules(helpers, SourceLanguage.JAVA));
 		CompileResult result = new CompileResult(modules, diagnostics);
 		return result.hasErrors() ? new CompileResult(List.of(), diagnostics) : result;
 	}

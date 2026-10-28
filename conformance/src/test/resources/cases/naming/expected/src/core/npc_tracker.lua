@@ -2,20 +2,8 @@
 -- Names: an acronym in the file name, Lua keywords, globals and helpers as local names, and static imports.
 
 local Limits = require("src/core/limits")
-
--- The string without leading and trailing whitespace, as Java's String.trim.
-local function trim(s)
-    return s:match("^%s*(.-)%s*$")
-end
-
--- The number of entries in a map or set, as Java's size(); a Lua table keeps no count.
-local function tableLength(t)
-    local n = 0
-    for _ in pairs(t) do
-        n = n + 1
-    end
-    return n
-end
+local trim = require("utils/trim")
+local tableLength = require("utils/table_length")
 
 local NPCTracker = {}
 

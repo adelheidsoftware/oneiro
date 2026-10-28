@@ -98,7 +98,7 @@ overrides Oneiro applies to them may no longer match.
 | `compileJava` | javac, with Oneiro as a javac plugin: once javac has analysed the sources without errors, Oneiro checks them and writes the Lua | `build/oneiro/lua/main/` |
 | `oneiroKotlin` | For a plugin written in Kotlin, after Kotlin's own `compileKotlin`: Oneiro's Kotlin front end checks the sources and writes the Lua, in a worker process | `build/oneiro/lua/main/` |
 | `pluginManifest` | Writes `plugin.json` from the `plugin { }` block, with every rule of the manifest checked, among them those on aliases, against the client's globals that the stubs declare | `build/oneiro/manifest/plugin.json` |
-| `assemblePlugin` | The plugin exactly as it ships | `build/oneiro/plugin/`: `main.lua`, `plugin.json`, `src/` with the plugin's own Lua, `resources/`, and each vendored library's Lua with its licence under `licences/` |
+| `assemblePlugin` | The plugin exactly as it ships | `build/oneiro/plugin/`: `main.lua`, `plugin.json`, `src/` with the plugin's own Lua, `utils/` with the helpers Oneiro's Lua uses, `resources/`, and each vendored library's Lua with its licence under `licences/` |
 | `checkPlugin` | Checks that folder; part of `check` | `build/oneiro/check-plugin.txt` |
 | `packagePlugin` | Zips that folder, with `main.lua` and `plugin.json` at the top; part of `assemble` | `build/distributions/<id>-<version>.zip` |
 | `assembleDevPlugin` | The shipped folder plus the dev source set's Lua, compiled and its own, under `dev/`, and its libraries, with a manifest of its own, which names each dependency's `devFolder` where it has one and requires the development dependencies too; part of `assemble` where `linkDevPlugin` links it, so that each build refreshes what the client loads | `build/oneiro/dev-plugin/` |
@@ -405,7 +405,7 @@ the names of the several values a function returns, `overrides(file(...))` names
 overrides take, but for those of the client alone; the build's warnings say where it would help.
 
 The build fails for a library without a licence, since nobody may pass on its code without one; for a library whose
-files would ship where the plugin's own go, as `main.lua`, `src/`, `resources/`, `dev/` or `licences/`, or where
+files would ship where the plugin's own go, as `main.lua`, `src/`, `utils/`, `resources/`, `dev/` or `licences/`, or where
 another library's do; and, in `checkPlugin`, for a library that no Lua of the plugin's requires, which moderators would
 read for nothing. A library declared with `development(name)` goes into the development folder alone, and only the dev
 source set has its classes.
@@ -516,9 +516,9 @@ dependency has types names the package of its classes, so it is no vendored libr
 
 - `main.lua` or `plugin.json` is missing.
 - A dependency names only a folder on this machine, with `devFolder`, and no Mod.io ID.
-- A file is something other than `main.lua`, `plugin.json`, a Lua file under `src/`, a PNG or Ogg Vorbis file under
-  `resources/`, or a file of a vendored library, its Lua or its licence.
-- A Lua file under `src/` does not start with its path, `-- src/core/levels.lua`.
+- A file is something other than `main.lua`, `plugin.json`, a Lua file under `src/`, a helper Oneiro writes in
+  `utils/`, a PNG or Ogg Vorbis file under `resources/`, or a file of a vendored library, its Lua or its licence.
+- A Lua file under `src/`, or a helper in `utils/`, does not start with its path, `-- src/core/levels.lua`.
 - A `require` names a module that is not in the plugin.
 - No Lua of the plugin's, its own or the Lua Oneiro writes, requires a vendored library.
 - A file uses a member of the client's that is for development only, such as `ExecuteConsoleCommand`, or, outside a
@@ -571,7 +571,9 @@ src/main/java/com/example/herbs/Tally.java:31: attempt to perform arithmetic on 
 ```
 
 Each place is the file and line of the source it came from, a `.java` or a `.kt` file, with that line's code, in the
-form IDEs link; a place in the plugin's own Lua is the line of its file under `src/main/lua/`. The task picks the
+form IDEs link; a place in the plugin's own Lua is the line of its file under `src/main/lua/`, and a place in one of
+the helpers Oneiro writes keeps its file and line, named as the helper, `utils/ordered_table.lua:12 (orderedTable, a
+helper Oneiro writes)`, after which the next place is the code that called it. The task picks the
 plugin's errors by its name and leaves out everything else, including other plugins' errors, whose files can share
 a path with this plugin's. It reads the line maps of the latest build, so it explains the Lua that build wrote: after
 changing the code, build and reload the plugin, and reproduce the error, before explaining it.

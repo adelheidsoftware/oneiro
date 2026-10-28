@@ -13,7 +13,8 @@ How Oneiro is put together, for people who work on it. What Oneiro accepts and t
 - **A compiler, not a runtime.** Each Java or Kotlin construct becomes the Lua a person would write for it, at compile
   time.
   There is no runtime library. The few translations that need more than one expression use small helper functions,
-  which a module defines only when it uses them, each with a comment.
+  each in a file of its own under `utils/` with a comment, which the modules that use it require; the plugin ships
+  only the helpers its code uses.
 - **Idiomatic source first.** Where a faithful, readable translation exists, the ordinary Java or Kotlin form is
   accepted. Only genuine gaps between the source language and Lua are rejected, with an error that says why and what
   to write instead.
@@ -94,7 +95,7 @@ values are Lua objects. For the dev source set, javac compiles the main set's so
 what their classes are, which the main set's code alone decides, and hands on the dev set's files alone.
 
 - **`UnitLowering`** turns one source file into one Lua module: the header from the class Javadoc, a `require` line
-  for each plugin class it uses, the helpers its translations need, the module table, and its members. The parts of
+  for each plugin class and helper it uses, the module table, and its members. The parts of
   a file each have a class: `Constructors`, `Overloading` (default chains of overloads), `MemberComments` (Javadoc to
   `---@param` and `---@return`), `InheritedMembers`, `PluginEntry` (the plugin class as `main.lua`), `SettingsModule`
   (a `@ConfigGroup` interface over `PersistentDB`), `DeclarationChecks`, `NonNegativeMembers`, `ReviewWarnings`
@@ -109,7 +110,7 @@ what their classes are, which the main set's code alone decides, and hands on th
   `Comparators` turns a comparator into the test `table.sort` takes.
 - **Shared knowledge.** `JavaTypes` answers questions about types, `SourceFacts` about the source (which integers are
   never negative, what code assigns), `CommentIndex` recovers the comments javac does not keep, and `Helper` defines
-  the Lua helper functions.
+  the Lua helper functions and their files.
 - **Rejections.** When a construct has no translation, lowering throws a `Rejection`. The member being lowered is
   skipped and the rejection becomes an error at its position, so one run reports every problem. No Lua is written
   while any error remains.

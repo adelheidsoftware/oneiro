@@ -1,138 +1,16 @@
 -- src/ledger.lua
 -- Drops in the order they came, and in sorted order.
 
--- The set as Java writes it, [a, b], in Lua's order, which is no more fixed than a HashSet's.
-local function setText(set)
-    local parts = {}
-    for value in pairs(set) do
-        parts[#parts + 1] = tostring(value)
-    end
-    return "[" .. table.concat(parts, ", ") .. "]"
-end
-
--- The map as Java writes it, {a=1, b=2}, in Lua's order, which is no more fixed than a HashMap's.
-local function mapText(map)
-    local parts = {}
-    for key, value in pairs(map) do
-        parts[#parts + 1] = tostring(key) .. "=" .. tostring(value)
-    end
-    return "{" .. table.concat(parts, ", ") .. "}"
-end
-
--- A table whose pairs walks its keys in the order they were first added, as Java's LinkedHashMap and LinkedHashSet do.
--- It holds its entries itself; its metatable keeps their order.
-local function orderedTable()
-    local keys = {}
-    local added = {}
-    return setmetatable({}, {
-        __newindex = function(t, key, value)
-            if value == nil then
-                return
-            end
-            if added[key] then
-                -- A key removed and added again goes to the end, as in a LinkedHashMap
-                for i = #keys, 1, -1 do
-                    if keys[i] == key then
-                        table.remove(keys, i)
-                        break
-                    end
-                end
-            end
-            added[key] = true
-            keys[#keys + 1] = key
-            rawset(t, key, value)
-        end,
-        __pairs = function(t)
-            local i = 0
-            return function()
-                repeat
-                    i = i + 1
-                    local key = keys[i]
-                    -- A key removed since it was added is passed over
-                    if key ~= nil and rawget(t, key) ~= nil then
-                        return key, rawget(t, key)
-                    end
-                until key == nil
-            end
-        end,
-    })
-end
-
--- The table's keys as a list, in the order pairs gives them, as Java copies a set or a map's keySet() into a list.
-local function keysOf(t)
-    local list = {}
-    for key in pairs(t) do
-        list[#list + 1] = key
-    end
-    return list
-end
-
--- Adds each element of the list to the set, and gives the set.
-local function addElements(set, list)
-    for _, value in ipairs(list) do
-        set[value] = true
-    end
-    return set
-end
-
--- Adds each key of the table to the set, and gives the set.
-local function addKeys(set, t)
-    for key in pairs(t) do
-        set[key] = true
-    end
-    return set
-end
-
--- Puts each entry of the source into the map, and gives the map.
-local function copyEntries(map, source)
-    for key, value in pairs(source) do
-        map[key] = value
-    end
-    return map
-end
-
--- The first key pairs gives, as a TreeMap's firstKey() or a TreeSet's first(); nil for an empty table, where Java
--- throws.
-local function firstKey(t)
-    for key in pairs(t) do
-        return key
-    end
-    return nil
-end
-
--- The last key pairs gives, as a TreeMap's lastKey() or a TreeSet's last(); nil for an empty table, where Java throws.
-local function lastKey(t)
-    local last = nil
-    for key in pairs(t) do
-        last = key
-    end
-    return last
-end
-
--- A table whose pairs walks its keys in sorted order, as Java's TreeMap and TreeSet do; comesBefore orders them, and
--- Lua's < when it is nil.
-local function sortedTable(comesBefore)
-    return setmetatable({}, {
-        __pairs = function(t)
-            local keys = {}
-            for key in next, t do
-                keys[#keys + 1] = key
-            end
-            table.sort(keys, comesBefore)
-            local i = 0
-            return function()
-                repeat
-                    i = i + 1
-                    local key = keys[i]
-                    -- A key removed since the walk began is passed over
-                    if key ~= nil and rawget(t, key) ~= nil then
-                        return key, rawget(t, key)
-                    end
-                until key == nil
-            end
-        end,
-    })
-end
+local setText = require("utils/set_text")
+local mapText = require("utils/map_text")
+local orderedTable = require("utils/ordered_table")
+local keysOf = require("utils/keys_of")
+local addElements = require("utils/add_elements")
+local addKeys = require("utils/add_keys")
+local copyEntries = require("utils/copy_entries")
+local firstKey = require("utils/first_key")
+local lastKey = require("utils/last_key")
+local sortedTable = require("utils/sorted_table")
 
 local Ledger = {}
 

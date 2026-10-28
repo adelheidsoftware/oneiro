@@ -20,9 +20,10 @@ import java.util.stream.Stream;
 /**
  * The checks {@code checkPlugin} runs on the folder that ships, before it is zipped. Every dependency its manifest
  * names has a Mod.io ID, by which players' clients find it. The folder may hold only
- * {@code main.lua}, {@code plugin.json}, Lua files under {@code src/}, PNG or Ogg files under {@code resources/}, and
- * the files of the libraries it vendors, their Lua and their licences. Every Lua file under {@code src/}, Oneiro's or
- * the plugin's own, starts with its path, by which the client's errors name it; every {@code require} names a file in
+ * {@code main.lua}, {@code plugin.json}, Lua files under {@code src/}, the helpers Oneiro writes in {@code utils/},
+ * PNG or Ogg files under {@code resources/}, and the files of the libraries it vendors, their Lua and their licences.
+ * Every Lua file under {@code src/}, Oneiro's or the plugin's own, and every helper starts with its path, by which the
+ * client's errors name it; every {@code require} names a file in
  * the folder; each library is required by the plugin's own Lua or the Lua Oneiro writes, since moderators would read
  * its code for nothing otherwise; no image is larger than the client loads; and no Lua uses a member of the client's
  * that is for development only, such as {@code ExecuteConsoleCommand}, the client's way into the console's cheats, nor,
@@ -75,15 +76,16 @@ public final class PackageChecks {
 			if (path.equals("main.lua") || path.equals("plugin.json") || vendored.containsKey(path)) {
 				continue;
 			}
-			if (path.startsWith("src/") && path.endsWith(".lua")) {
+			if (path.startsWith("src/") && path.endsWith(".lua") || isHelper(path)) {
 				continue;
 			}
 			if (path.startsWith("resources/")) {
 				resourceProblems(file, path, problems);
 				continue;
 			}
-			problems.add(path + " is not part of a plugin: only main.lua, plugin.json, Lua files under src/, PNG or"
-					+ " Ogg files under resources/, and the files of the libraries the build vendors ship.");
+			problems.add(path + " is not part of a plugin: only main.lua, plugin.json, Lua files under src/, the"
+					+ " helpers Oneiro writes in utils/, PNG or Ogg files under resources/, and the files of the"
+					+ " libraries the build vendors ship.");
 		}
 		// The files the plugin's own Lua and Oneiro's require, which a library must be among
 		Set<String> required = new HashSet<>();
@@ -116,7 +118,7 @@ public final class PackageChecks {
 			Set<String> permissions, List<String> problems) throws IOException {
 		String text = Files.readString(file, StandardCharsets.UTF_8);
 		boolean startsWithPath = text.startsWith("-- " + path + "\n") || text.startsWith("-- " + path + "\r");
-		if (path.startsWith("src/") && !vendored && !startsWithPath) {
+		if ((path.startsWith("src/") || isHelper(path)) && !vendored && !startsWithPath) {
 			problems.add(path + " does not start with its path, -- " + path
 					+ ", by which the client's errors name it.");
 		}
@@ -142,6 +144,11 @@ public final class PackageChecks {
 			}
 		}
 		return requires;
+	}
+
+	/** Whether a file is one of the helpers Oneiro writes, a Lua file directly in {@code utils/}. */
+	private static boolean isHelper(String path) {
+		return path.startsWith("utils/") && path.endsWith(".lua") && path.indexOf('/', "utils/".length()) < 0;
 	}
 
 	/** Whether Lua code names a member by its path, as a whole: {@code HTTPRequest} in {@code HTTPRequest.new(...)}. */

@@ -225,7 +225,8 @@ internal class Comparators(private val body: BodyLowering) {
 	}
 
 	/** The names of the two values a comparator's function compares, `a` and `b` unless the code has those. */
-	private fun compared(where: PsiElement): List<String> = listOf(body.invent("a", where), body.invent("b", where))
+	private fun compared(where: PsiElement): List<String> =
+		listOf(body.inventInner("a", where), body.inventInner("b", where))
 
 	private fun less(a: String, b: String): Expression =
 		Expression.binary(Expression.name(a), BinaryOperator.LESS, Expression.name(b))

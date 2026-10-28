@@ -62,8 +62,8 @@ internal class MapEntries(
 				?.takeIf { it.size == 2 }
 		}
 		val where = fusion.chain.terminal.call
-		key = destructured.firstNotNullOfOrNull { named(it[0]) } ?: fusion.fresh("key", where)
-		value = destructured.firstNotNullOfOrNull { named(it[1]) } ?: fusion.fresh("value", where)
+		key = destructured.firstNotNullOfOrNull { named(it[0]) } ?: fusion.inner("key", where)
+		value = destructured.firstNotNullOfOrNull { named(it[1]) } ?: fusion.inner("value", where)
 		pairs = Expression.call(Expression.name("pairs"), body.expression(map))
 	}
 
@@ -136,7 +136,7 @@ internal class MapEntries(
 			selected = Expression.name(fusion.bound("selected", selected, terminal.call))
 		}
 		val best = fusion.accumulator("best")
-		val record = fusion.taken(if (max) "most" else "least", terminal.call)
+		val record = fusion.declared(if (max) "most" else "least", terminal.call)
 		init += Statement.Local(listOf(best), listOf())
 		init += Statement.Local(listOf(record), listOf())
 		val unset = Expression.binary(Expression.name(record), BinaryOperator.EQUAL, Expression.Nil())

@@ -168,8 +168,8 @@ internal class BodyLowering(
 	}
 
 	private var hoisting: Hoisting? = null
-	// The names the locals of hoisted values have taken
-	private val hoistedNames = mutableSetOf<String>()
+	// The names of the locals made up in this function that last to the end of their block; see [invent]
+	private val inventedHere = mutableSetOf<String>()
 	// What expressions read more than once lower to, once lowered; see [reused]
 	private val reusedValues = mutableMapOf<KtExpression, Expression>()
 
@@ -392,7 +392,7 @@ internal class BodyLowering(
 			return strings.buildString(value as KtCallExpression, sink)
 		}
 		builders.builder(value)?.let { builder ->
-			val name = invent(builders.holderName(builder), value)
+			val name = collectionName(builders.holderName(builder), destinationName(sink), value)
 			return builders.built(value, name) + sink(Expression.name(name))
 		}
 		if (isRun(value)) {
@@ -460,12 +460,35 @@ internal class BodyLowering(
 	}
 
 	/**
-	 * A name for a local the Lua needs that the source does not have, such as `pcall`'s `ok`: the preferred one,
-	 * unless it would hide a name the code around reads, then the preferred one with a number; see
-	 * [FileLowering.namesAround].
+	 * A name for a local the Lua needs that the source does not have, declared among the statements of a block, such
+	 * as `pcall`'s `ok`: the preferred one, unless it would hide a name the code around reads or another local made up
+	 * in this function, then the preferred one with a number, from 2; see [FileLowering.namesAround]. No local made up
+	 * later in this function takes it, so none hides it, in the block or inside it.
+	 *
+	 * @param others names it must not take besides, such as those of the loop it goes before
 	 */
-	fun invent(preferred: String, where: PsiElement): String {
-		val taken = unit.namesAround(where)
+	fun invent(preferred: String, where: PsiElement, others: Set<String> = setOf()): String {
+		val name = numbered(preferred, where, others)
+		inventedHere += name
+		return name
+	}
+
+	/**
+	 * A name for a variable of a loop or a parameter of a function the Lua makes, which lives only inside it: made as
+	 * [invent] makes one, but free again after it, as Lua's loops one after another each name their key `key`.
+	 */
+	fun inventInner(preferred: String, where: PsiElement, others: Set<String> = setOf()): String =
+		numbered(preferred, where, others)
+
+	/** Whether a made-up local could take a name as it is, without a number; see [invent]. */
+	fun isFree(name: String, where: PsiElement, others: Set<String> = setOf()): Boolean =
+		unit.names.luaName(name) !in taken(where, others)
+
+	private fun taken(where: PsiElement, others: Set<String>): Set<String> =
+		unit.namesAround(where) + inventedHere + others
+
+	private fun numbered(preferred: String, where: PsiElement, others: Set<String>): String {
+		val taken = taken(where, others)
 		val base = unit.names.luaName(preferred)
 		var name = base
 		var number = 2
@@ -474,6 +497,30 @@ internal class BodyLowering(
 		}
 		unit.inventedNames += name
 		return name
+	}
+
+	/**
+	 * The name of a list, a set or a map that a made-up local holds: the name of where it goes where that is free, the
+	 * parameter it is handed to or the property it becomes, `texts` or `lines`; otherwise the kind of value it is,
+	 * `list`, with a number where that is taken.
+	 *
+	 * @param destination the name of where the value goes, or null where it goes to no name, as a return
+	 */
+	fun collectionName(kind: String, destination: String?, where: PsiElement, others: Set<String> = setOf()): String =
+		invent(destination?.takeIf { isFree(it, where, others) } ?: kind, where, others)
+
+	/**
+	 * The name of the property a sink assigns its value to, `lines` for `self.lines = value` and for
+	 * `self.lines[section] = value`; null for a sink that returns the value or assigns it to a local.
+	 */
+	fun destinationName(sink: (Expression) -> Statement): String? {
+		// Sinks only make the statement, so making one to look at changes nothing
+		val target = (sink(Expression.Nil()) as? Statement.Assignment)?.targets()?.singleOrNull()
+		return when (target) {
+			is Expression.Field -> target.name()
+			is Expression.Index -> (target.target() as? Expression.Field)?.name()
+			else -> null
+		}
 	}
 
 	/**
@@ -738,7 +785,10 @@ internal class BodyLowering(
 	 */
 	fun hoistedChain(value: KtExpression): Expression? {
 		val chain = chains.chain(value) ?: return null
-		return hoistedInto(value, chains.resultName(chain), LibraryCalls.CHAIN_LOOP) { name ->
+		val kind = chains.resultName(chain)
+		val destination = if (kind in COLLECTIONS) parameterName(value, ownOnly = true) else null
+		val preferred = destination?.takeIf { isFree(it, value) } ?: kind
+		return hoistedInto(value, preferred, LibraryCalls.CHAIN_LOOP) { name ->
 			chains.lower(chain, CollectionLoops.Destination.Local(name)).map(Block.Entry::of)
 		}
 	}
@@ -755,7 +805,7 @@ internal class BodyLowering(
 		lower: (String) -> List<Block.Entry>): Expression.Name {
 		lateinit var name: String
 		hoisted(value, what, instead) {
-			name = hoistedLocal(preferred, value)
+			name = invent(preferred, value)
 			lower(name)
 		}
 		return Expression.name(name)
@@ -801,7 +851,7 @@ internal class BodyLowering(
 		}
 		lateinit var name: String
 		hoisted(where, "$what, so it goes into a local first", "store it in a local first.") {
-			name = hoistedLocal(preferred, where)
+			name = invent(preferred, where)
 			listOf(Block.Entry.of(Statement.Local(listOf(name), listOf(lowered))))
 		}
 		return Expression.name(name)
@@ -825,7 +875,7 @@ internal class BodyLowering(
 		lateinit var local: Expression
 		hoisted(binary, "In Lua the right side of this ${binary.operationReference.text} runs as statements",
 			"give the test to a local of its own first, val x = ...", right) {
-			val name = hoistedLocal(if (and) "both" else "either", binary)
+			val name = invent(if (and) "both" else "either", binary)
 			local = Expression.name(name)
 			val decided = Block(inner.entries + Block.Entry.of(Statement.assignment(local, rightValue)), listOf())
 			val undecided = if (and) local else Expression.Unary(UnaryOperator.NOT, local)
@@ -833,21 +883,6 @@ internal class BodyLowering(
 				Block.Entry.of(Statement.ifThen(undecided, decided)))
 		}
 		return local
-	}
-
-	/**
-	 * The name of a hoisted value's local: the preferred one, or with a number when the function declares it or
-	 * another hoisted value's local has it.
-	 */
-	private fun hoistedLocal(preferred: String, value: KtExpression): String {
-		val invented = invent(preferred, value)
-		var name = invented
-		var number = 2
-		while (name in hoistedNames) {
-			name = invented + number++
-		}
-		hoistedNames += name
-		return name
 	}
 
 	/**
@@ -903,7 +938,7 @@ internal class BodyLowering(
 	 * written, `detailed` for `ledger.detailed()`, but without `get`, `is`, `mutable`, `Of` or `OrNull`, `first` for
 	 * `firstOrNull()` and `list` for `mutableListOf()`; otherwise as [hoistedName] names it.
 	 */
-	private fun valueName(value: KtExpression): String {
+	fun valueName(value: KtExpression): String {
 		val plain = KtPsiUtil.safeDeparenthesize(value)
 		val selector = (plain as? KtQualifiedExpression)?.selectorExpression ?: plain
 		val own = when (selector) {
@@ -940,12 +975,18 @@ internal class BodyLowering(
 	/**
 	 * The name of the parameter a value is passed to; null for a value that is no argument, a vararg's, and one of a
 	 * compiled Java class that keeps no names, which Kotlin calls `p0`, `p1` and so on.
+	 *
+	 * @param ownOnly whether only a function of the plugin's or the client's names it, not one of the Kotlin library,
+	 *     whose names say only what it takes, `element`
 	 */
-	private fun parameterName(value: KtExpression): String? = with(unit.session) {
+	private fun parameterName(value: KtExpression, ownOnly: Boolean = false): String? = with(unit.session) {
 		val argument = value.parent as? KtValueArgument ?: return null
 		val call = PsiTreeUtil.getParentOfType(argument, KtCallExpression::class.java) ?: return null
-		val parameter = call.resolveToCall()?.successfulFunctionCallOrNull()?.valueArgumentMapping
-			?.get(argument.getArgumentExpression())?.symbol ?: return null
+		val resolved = call.resolveToCall()?.successfulFunctionCallOrNull() ?: return null
+		if (ownOnly && isLibrary(resolved.symbol)) {
+			return null
+		}
+		val parameter = resolved.valueArgumentMapping[argument.getArgumentExpression()]?.symbol ?: return null
 		parameter.name.asString().takeUnless { parameter.isVararg || UNNAMED_PARAMETER.matches(it) }
 	}
 
@@ -1506,7 +1547,9 @@ internal class BodyLowering(
 			}
 		}
 		builders.builder(call)?.let { builder ->
-			return hoistedInto(call, builders.holderName(builder), STATEMENTS_FIRST.format(builder)) { name ->
+			val kind = builders.holderName(builder)
+			val preferred = parameterName(call, ownOnly = true)?.takeIf { isFree(it, call) } ?: kind
+			return hoistedInto(call, preferred, STATEMENTS_FIRST.format(builder)) { name ->
 				builders.built(call, name).map(Block.Entry::of)
 			}
 		}
@@ -1514,7 +1557,7 @@ internal class BodyLowering(
 			// The pieces are put together before the statement, and joined where the text is read
 			lateinit var pieces: String
 			hoisted(call, STATEMENTS_FIRST.format("buildString")) {
-				pieces = hoistedLocal("text", call)
+				pieces = invent("text", call)
 				strings.pieces(call, pieces).map(Block.Entry::of)
 			}
 			return strings.joined(pieces)
@@ -1946,5 +1989,8 @@ internal class BodyLowering(
 
 		/** The name Kotlin gives a parameter of a compiled Java class that keeps no names. */
 		private val UNNAMED_PARAMETER = Regex("p\\d+")
+
+		/** The names of made-up locals that hold a list, a set or a map; see [collectionName]. */
+		val COLLECTIONS = setOf("list", "set", "map", "groups")
 	}
 }

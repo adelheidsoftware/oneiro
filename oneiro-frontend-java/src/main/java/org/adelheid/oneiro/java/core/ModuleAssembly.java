@@ -20,7 +20,6 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import org.adelheid.oneiro.lowering.ModuleLayout;
-import org.adelheid.oneiro.lowering.SourceLanguage;
 import org.adelheid.oneiro.lua.Block;
 import org.adelheid.oneiro.lua.Expression;
 import org.jspecify.annotations.Nullable;
@@ -46,8 +45,7 @@ public final class ModuleAssembly {
 	 */
 	public List<Block.Entry> assemble(@Nullable Expression table, boolean instanceClass,
 			List<UnitLowering.Member> members) {
-		return ModuleLayout.assemble(unit.moduleName, table, instanceClass, unit.requires, unit.helpers(),
-				SourceLanguage.JAVA, members);
+		return ModuleLayout.assemble(unit.moduleName, table, instanceClass, unit.requires, unit.helpers(), members);
 	}
 
 	/**

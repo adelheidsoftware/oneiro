@@ -1,49 +1,12 @@
 -- src/labels.lua
 -- Kotlin's own string functions: padding, prefixes and suffixes, the text around a delimiter, and blank text.
 
--- The text after as many padChar as make it length long, as Kotlin's padStart; longer text stays as it is.
-local function padStart(text, length, padChar)
-    return padChar:rep(length - #text) .. text
-end
-
--- The text before as many padChar as make it length long, as Kotlin's padEnd; longer text stays as it is.
-local function padEnd(text, length, padChar)
-    return text .. padChar:rep(length - #text)
-end
-
--- The text without the prefix when it starts with it, as Kotlin's removePrefix.
-local function removePrefix(text, prefix)
-    if text:sub(1, #prefix) == prefix then
-        return text:sub(#prefix + 1)
-    end
-    return text
-end
-
--- The text without the suffix when it ends with it, as Kotlin's removeSuffix.
-local function removeSuffix(text, suffix)
-    if suffix ~= "" and text:sub(-#suffix) == suffix then
-        return text:sub(1, -#suffix - 1)
-    end
-    return text
-end
-
--- The text before the first delimiter, or all of it when there is none, as Kotlin's substringBefore.
-local function substringBefore(text, delimiter)
-    local first = text:find(delimiter, 1, true)
-    if first == nil then
-        return text
-    end
-    return text:sub(1, first - 1)
-end
-
--- The text after the first delimiter, or all of it when there is none, as Kotlin's substringAfter.
-local function substringAfter(text, delimiter)
-    local _, last = text:find(delimiter, 1, true)
-    if last == nil then
-        return text
-    end
-    return text:sub(last + 1)
-end
+local padStart = require("utils/pad_start")
+local padEnd = require("utils/pad_end")
+local removePrefix = require("utils/remove_prefix")
+local removeSuffix = require("utils/remove_suffix")
+local substringBefore = require("utils/substring_before")
+local substringAfter = require("utils/substring_after")
 
 local Labels = {}
 

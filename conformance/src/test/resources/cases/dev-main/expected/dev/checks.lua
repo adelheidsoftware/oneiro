@@ -6,23 +6,7 @@ local Section = require("src/section")
 local Tally = require("src/tally")
 local Shape = require("src/shape")
 local Bank = require("src/bank")
-
--- Whether the value is an object of the class, or of a class that extends it, as Java's instanceof.
-local function isInstance(value, class)
-    if type(value) ~= "table" then
-        return false
-    end
-    local current = getmetatable(value)
-    while current ~= nil do
-        if current == class then
-            return true
-        end
-        -- A subclass's table looks up what it lacks in its superclass's
-        local parent = getmetatable(current)
-        current = parent and parent.__index
-    end
-    return false
-end
+local isInstance = require("utils/is_instance")
 
 local Checks = {}
 

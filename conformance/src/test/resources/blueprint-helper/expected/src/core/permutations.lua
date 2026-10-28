@@ -11,14 +11,7 @@
 -- - DIST is the smallest number of swaps that turns one arrangement into another: 1 2 3 4 5 to 2 1 3 4 5 is one swap,
 --   to 2 3 1 4 5 two, and nothing is more than four away.
 
--- A new array of n copies of value, as Java fills a new array with zeros or false.
-local function filled(n, value)
-    local array = {}
-    for i = 1, n do
-        array[i] = value
-    end
-    return array
-end
+local filled = require("utils/filled")
 
 local Permutations = {}
 

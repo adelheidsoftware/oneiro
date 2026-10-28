@@ -29,6 +29,7 @@ import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.artifacts.dsl.RepositoryHandler;
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository;
 import org.gradle.api.file.Directory;
+import org.gradle.api.file.DuplicatesStrategy;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.file.RegularFile;
@@ -60,7 +61,8 @@ import org.gradle.jvm.toolchain.JavaToolchainService;
  *       {@code oneiroKotlin}, which writes the Lua of one written in Kotlin, with the Kotlin JVM plugin applied;
  *   <li>{@code pluginManifest}, the {@code plugin.json};
  *   <li>{@code assemblePlugin}, {@code checkPlugin} and {@code packagePlugin}: the folder that ships, with the plugin's
- *       own Lua under {@code src/} and its libraries in its root, its checks and its zip;
+ *       own Lua under {@code src/}, the helpers Oneiro writes under {@code utils/} and its libraries in its root, its
+ *       checks and its zip;
  *   <li>the {@code dev} source set and {@code assembleDevPlugin}, the development folder, with the dev source set's own
  *       Lua under {@code dev/}, its libraries in its root, and a manifest of its own, which names a dependency's folder
  *       on this machine where it has one;
@@ -243,7 +245,8 @@ public final class OneiroPlugin implements Plugin<Project> {
 		Provider<Directory> pluginFolder = layout.getBuildDirectory().dir("oneiro/plugin");
 		TaskProvider<Sync> assemblePlugin = tasks.register("assemblePlugin", Sync.class, sync -> {
 			sync.setGroup(GROUP);
-			sync.setDescription("Assembles the plugin as it ships: main.lua, plugin.json, src/ and resources/.");
+			sync.setDescription(
+					"Assembles the plugin as it ships: main.lua, plugin.json, src/, utils/ and resources/.");
 			sync.from(mainLuaBuilt);
 			sync.from(mainLuaSources, spec -> spec.into("src"));
 			sync.from(stagedLibraries.map(folder -> folder.dir("main")));
@@ -441,7 +444,8 @@ public final class OneiroPlugin implements Plugin<Project> {
 			sync.setGroup(GROUP);
 			sync.setDescription("Assembles the development folder: the plugin as it ships and the dev source set.");
 			sync.from(assemblePlugin, spec -> spec.exclude("main.lua", "plugin.json"));
-			sync.from(devLuaBuilt);
+			// A helper both source sets use is the same file in each, which the shipped folder brings already
+			sync.from(devLuaBuilt, spec -> spec.setDuplicatesStrategy(DuplicatesStrategy.EXCLUDE));
 			sync.from(layout.getProjectDirectory().dir("src/dev/lua"), spec -> spec.into("dev"));
 			sync.from(stagedLibraries.map(folder -> folder.dir("dev")));
 			sync.from(devMain.flatMap(WriteDevMain::getDevMain));

@@ -1,65 +1,10 @@
 -- src/idioms.lua
 -- Kotlin's own idioms: preconditions, fun interfaces, references to the library, literal maps and sets, labels.
 
--- The string without leading and trailing whitespace, as Kotlin's String.trim.
-local function trim(s)
-    return s:match("^%s*(.-)%s*$")
-end
-
--- A table whose pairs walks its keys in the order they were first added, as Kotlin's maps and sets do, but for its hash
--- maps and hash sets. It holds its entries itself; its metatable keeps their order.
-local function orderedTable()
-    local keys = {}
-    local added = {}
-    return setmetatable({}, {
-        __newindex = function(t, key, value)
-            if value == nil then
-                return
-            end
-            if added[key] then
-                -- A key removed and added again goes to the end, as in a LinkedHashMap
-                for i = #keys, 1, -1 do
-                    if keys[i] == key then
-                        table.remove(keys, i)
-                        break
-                    end
-                end
-            end
-            added[key] = true
-            keys[#keys + 1] = key
-            rawset(t, key, value)
-        end,
-        __pairs = function(t)
-            local i = 0
-            return function()
-                repeat
-                    i = i + 1
-                    local key = keys[i]
-                    -- A key removed since it was added is passed over
-                    if key ~= nil and rawget(t, key) ~= nil then
-                        return key, rawget(t, key)
-                    end
-                until key == nil
-            end
-        end,
-    })
-end
-
--- Adds each element of the list to the set, and gives the set.
-local function addElements(set, list)
-    for _, value in ipairs(list) do
-        set[value] = true
-    end
-    return set
-end
-
--- Puts the keys and values the list holds in turn into the map, in order, and gives the map.
-local function putEntries(map, list)
-    for i = 1, #list, 2 do
-        map[list[i]] = list[i + 1]
-    end
-    return map
-end
+local trim = require("utils/trim")
+local orderedTable = require("utils/ordered_table")
+local addElements = require("utils/add_elements")
+local putEntries = require("utils/put_entries")
 
 local Idioms = {}
 

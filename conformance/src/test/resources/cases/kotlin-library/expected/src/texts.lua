@@ -1,47 +1,8 @@
 -- src/texts.lua
 -- Kotlin's functions on text: replace, lines, its nullable forms, and tests of its chars.
 
--- The text with each occurrence of old replaced by new, found as it is written, not as a pattern, as Kotlin's replace.
-local function replace(text, old, new)
-    if old == "" then
-        -- Kotlin puts new before each character and after the last
-        return (text:gsub("", (new:gsub("%%", "%%%%"))))
-    end
-    local parts = {}
-    local start = 1
-    while true do
-        local first, last = text:find(old, start, true)
-        if first == nil then
-            break
-        end
-        parts[#parts + 1] = text:sub(start, first - 1)
-        parts[#parts + 1] = new
-        start = last + 1
-    end
-    parts[#parts + 1] = text:sub(start)
-    return table.concat(parts)
-end
-
--- The text's lines, split at \r\n, \n or \r, as Kotlin's lines().
-local function lines(text)
-    local list = {}
-    local start = 1
-    while true do
-        local first = text:find("[\r\n]", start)
-        if first == nil then
-            break
-        end
-        list[#list + 1] = text:sub(start, first - 1)
-        -- \r\n ends one line, not two
-        if text:sub(first, first + 1) == "\r\n" then
-            start = first + 2
-        else
-            start = first + 1
-        end
-    end
-    list[#list + 1] = text:sub(start)
-    return list
-end
+local replace = require("utils/replace")
+local lines = require("utils/lines")
 
 local Texts = {}
 

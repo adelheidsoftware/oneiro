@@ -3,6 +3,7 @@ package org.adelheid.oneiro.kotlin
 import com.intellij.openapi.util.Disposer
 import com.intellij.psi.util.PsiTreeUtil
 import java.nio.file.Path
+import java.util.EnumSet
 import org.adelheid.oneiro.kotlin.core.Annotations
 import org.adelheid.oneiro.kotlin.core.FileLowering
 import org.adelheid.oneiro.kotlin.core.SourceText
@@ -12,6 +13,8 @@ import org.adelheid.oneiro.lowering.Diagnostic
 import org.adelheid.oneiro.lowering.LocalNames
 import org.adelheid.oneiro.lowering.LuaModule
 import org.adelheid.oneiro.lowering.PluginFacts
+import org.adelheid.oneiro.lowering.SourceLanguage
+import org.adelheid.oneiro.lowering.translation.Helper
 import org.jetbrains.kotlin.analysis.api.KaSession
 import org.jetbrains.kotlin.analysis.api.analyze
 import org.jetbrains.kotlin.analysis.api.components.KaDiagnosticCheckerFilter
@@ -85,6 +88,7 @@ public object KotlinFrontend {
 				extendedClasses(files + parsed.main), objectEnums, files.toSet())
 			val modules = mutableListOf<LuaModule>()
 			val diagnostics = mutableListOf<Diagnostic>()
+			val helpers = EnumSet.noneOf(Helper::class.java)
 			// The file each Lua file comes from
 			val sources = mutableMapOf<String, KtFile>()
 			for (file in files) {
@@ -98,8 +102,11 @@ public object KotlinFrontend {
 					}
 					module?.let(modules::add)
 					diagnostics += lowering.diagnostics()
+					helpers += lowering.helpers()
 				}
 			}
+			// Each helper a module uses is a file of its own, which every module that uses it requires
+			modules += Helper.modules(helpers, SourceLanguage.KOTLIN)
 			val result = CompileResult(modules, diagnostics)
 			return if (result.hasErrors()) CompileResult(listOf(), diagnostics) else result
 		} finally {

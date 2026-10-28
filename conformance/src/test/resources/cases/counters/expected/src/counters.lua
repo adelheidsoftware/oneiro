@@ -1,14 +1,7 @@
 -- src/counters.lua
 -- Integer division on values that can never be negative, and on values that can.
 
--- Integer division that rounds toward zero, as Java's / does; Lua's // rounds down.
-local function quotient(a, b)
-    local q = a // b
-    if q < 0 and q * b ~= a then
-        q = q + 1
-    end
-    return q
-end
+local quotient = require("utils/quotient")
 
 local Counters = {}
 Counters.__index = Counters

@@ -21,6 +21,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.adelheid.oneiro.bindings.BindingsGenerator;
@@ -68,6 +70,10 @@ import org.junit.jupiter.api.TestFactory;
  * <p>A case for what only Kotlin has keeps its sources in {@code kotlin/} alone, without {@code input/}, and its
  * {@code expected/} and {@code check.lua} are the Kotlin's.
  *
+ * <p>The helpers the expected modules require, {@code require("utils/ordered_table")}, are files Oneiro writes under
+ * {@code utils/}, the same in every case, so each is written by hand once, in {@code helpers/utils/}, and for the
+ * Kotlin front end in {@code helpers/kotlin/utils/} where its comment names Kotlin's behaviour instead.
+ *
  * <p>Lua is the bundled Lua 5.4.8 unless {@code oneiro.luaExecutable} names an installed one. Every expected file must
  * also be laid out as StyLua lays it out.
  */
@@ -75,6 +81,8 @@ class ConformanceTest {
 
 	private static final String ROOT_PACKAGE = "plugin";
 	private static final Path OUTPUT = Path.of("build", "conformance");
+	// A module's require of one of Oneiro's helpers: require("utils/ordered_table")
+	private static final Pattern HELPER_REQUIRE = Pattern.compile("require\\(\"(utils/\\w+)\"\\)");
 
 	@TestFactory
 	Stream<DynamicTest> cases() throws IOException {
@@ -110,9 +118,10 @@ class ConformanceTest {
 		}
 		List<String> command = new ArrayList<>(List.of(stylua, "--check", "--config-path",
 				System.getProperty("oneiro.styluaConfig")));
-		for (String folder : List.of("cases", "blueprint-helper")) {
+		for (String folder : List.of("cases", "blueprint-helper", "helpers")) {
 			try (Stream<Path> files = Files.walk(resource(folder))) {
-				files.filter(file -> file.toString().endsWith(".lua") && file.toString().contains("expected"))
+				files.filter(file -> file.toString().endsWith(".lua")
+								&& (folder.equals("helpers") || file.toString().contains("expected")))
 						.sorted()
 						.forEach(file -> command.add(file.toString()));
 			}
@@ -142,7 +151,7 @@ class ConformanceTest {
 		PluginFacts facts = facts(folder);
 		CompileResult result = JavaFrontend.compile(sources(input, ".java"),
 				new JavaFrontend.Options(ROOT_PACKAGE, classpath(folder), facts, main));
-		Map<String, String> modules = compare(folder, input, result, folder.resolve("diagnostics.txt"), null);
+		Map<String, String> modules = compare(folder, input, result, folder.resolve("diagnostics.txt"), null, false);
 		if (!main.isEmpty()) {
 			modules.putAll(mainModules(JavaFrontend.compile(main,
 					new JavaFrontend.Options(ROOT_PACKAGE, classpath(folder), mainSet(facts)))));
@@ -165,7 +174,7 @@ class ConformanceTest {
 		CompileResult result = KotlinFrontend.compile(sources,
 				new KotlinFrontend.Options(ROOT_PACKAGE, kotlinClasspath(folder), facts, main));
 		Map<String, String> modules = compare(folder, input, result, input.resolve("diagnostics.txt"),
-				input.resolve("expected"));
+				input.resolve("expected"), true);
 		if (!main.isEmpty()) {
 			modules.putAll(mainModules(KotlinFrontend.compile(main,
 					new KotlinFrontend.Options(ROOT_PACKAGE, kotlinClasspath(folder), mainSet(facts)))));
@@ -204,13 +213,14 @@ class ConformanceTest {
 
 	/**
 	 * Compares what compiling a case produced with what it must: the diagnostics, and when the case has
-	 * {@code expected/}, the modules.
+	 * {@code expected/}, the modules, and the helpers they require.
 	 *
 	 * @param overrides a folder of modules that replace those of {@code expected/} at the same paths, or null
+	 * @param kotlin whether the Kotlin front end compiled the case, whose helpers' comments name Kotlin's behaviour
 	 * @return the printed modules by path
 	 */
 	private static Map<String, String> compare(Path folder, Path input, CompileResult result,
-			Path expectedDiagnostics, @Nullable Path overrides) throws IOException {
+			Path expectedDiagnostics, @Nullable Path overrides, boolean kotlin) throws IOException {
 		String diagnostics = result.diagnostics().stream()
 				.map(diagnostic -> relativeTo(input, diagnostic).format())
 				.collect(Collectors.joining("\n\n"));
@@ -231,11 +241,29 @@ class ConformanceTest {
 		if (overrides != null && Files.exists(overrides)) {
 			wanted.putAll(expectedModules(overrides));
 		}
+		wanted.putAll(expectedHelpers(wanted.values(), kotlin));
 		assertEquals(wanted.keySet(), actual.keySet(), "generated modules");
 		for (String path : wanted.keySet()) {
 			assertEquals(wanted.get(path), actual.get(path), path);
 		}
 		return actual;
+	}
+
+	/**
+	 * The hand-written files of the helpers that modules require, by their paths in the plugin: those of
+	 * {@code helpers/}, or for the Kotlin front end its own in {@code helpers/kotlin/} where it has one.
+	 */
+	private static Map<String, String> expectedHelpers(Iterable<String> modules, boolean kotlin) {
+		Map<String, String> helpers = new TreeMap<>();
+		for (String module : modules) {
+			Matcher required = HELPER_REQUIRE.matcher(module);
+			while (required.find()) {
+				String path = required.group(1) + ".lua";
+				Path own = resource("helpers").resolve("kotlin").resolve(path);
+				helpers.put(path, read(kotlin && Files.exists(own) ? own : resource("helpers").resolve(path)));
+			}
+		}
+		return helpers;
 	}
 
 	/** The hand-written modules under a folder, by their paths in the plugin. */

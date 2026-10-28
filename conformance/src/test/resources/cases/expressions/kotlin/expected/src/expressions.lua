@@ -1,22 +1,8 @@
 -- src/expressions.lua
 -- Expressions: literals, operators, conditionals, conversions and arrays.
 
--- Kotlin's toInt() of a Double: drops the fraction, rounding toward zero.
-local function toInteger(d)
-    if d >= 0 then
-        return math.floor(d)
-    end
-    return math.ceil(d)
-end
-
--- A new array of n copies of value, as Kotlin fills a new IntArray with zeros or a BooleanArray with false.
-local function filled(n, value)
-    local array = {}
-    for i = 1, n do
-        array[i] = value
-    end
-    return array
-end
+local toInteger = require("utils/to_integer")
+local filled = require("utils/filled")
 
 local Expressions = {}
 

@@ -1,34 +1,9 @@
 -- src/tables.lua
 -- Lists, maps and sets as plain Lua tables.
 
--- Whether the list holds the value, as Java's List.contains.
-local function listContains(list, value)
-    for _, item in ipairs(list) do
-        if item == value then
-            return true
-        end
-    end
-    return false
-end
-
--- The 0-based position of the value in the list, or -1, as Java's List.indexOf.
-local function listIndexOf(list, value)
-    for i, item in ipairs(list) do
-        if item == value then
-            return i - 1
-        end
-    end
-    return -1
-end
-
--- The number of entries in a map or set, as Java's size(); a Lua table keeps no count.
-local function tableLength(t)
-    local n = 0
-    for _ in pairs(t) do
-        n = n + 1
-    end
-    return n
-end
+local listContains = require("utils/list_contains")
+local listIndexOf = require("utils/list_index_of")
+local tableLength = require("utils/table_length")
 
 local Tables = {}
 

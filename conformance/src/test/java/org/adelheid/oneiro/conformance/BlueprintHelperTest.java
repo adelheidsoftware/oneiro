@@ -54,7 +54,9 @@ class BlueprintHelperTest {
 			Files.copy(plugin.resolve(file), root.resolve(file), StandardCopyOption.REPLACE_EXISTING);
 		}
 		for (Map.Entry<String, String> module : modules.entrySet()) {
-			Files.writeString(root.resolve(module.getKey()), module.getValue(), StandardCharsets.UTF_8);
+			Path file = root.resolve(module.getKey());
+			Files.createDirectories(file.getParent());
+			Files.writeString(file, module.getValue(), StandardCharsets.UTF_8);
 		}
 
 		List<String> arguments = new ArrayList<>(List.of(root.toString().replace('\\', '/')));

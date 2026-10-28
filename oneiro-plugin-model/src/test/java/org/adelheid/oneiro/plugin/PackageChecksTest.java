@@ -43,10 +43,12 @@ class PackageChecksTest {
 				local Tally = require("src/tally")
 				local Levels = require('src/core/levels')
 				local zyklib = require("zyklib")
+				local trim = require("utils/trim")
 				Chat.AddMessage("hello")
 				""");
 		write("plugin.json", "{}\n");
 		write("src/tally.lua", "-- src/tally.lua\nreturn {}\n");
+		write("utils/trim.lua", "-- utils/trim.lua\n-- A helper Oneiro writes.\n\nreturn string.match\n");
 		write("src/core/levels.lua", "-- src/core/levels.lua\r\n-- With Windows line ends.\r\n");
 		writePng("resources/icons/herb.png", 32, 32);
 		Files.write(folder.resolve("resources/ding.ogg"), new byte[] {'O', 'g', 'g', 'S', 0});
@@ -66,6 +68,8 @@ class PackageChecksTest {
 		write("README.md", "notes\n");
 		write("resources/notes.txt", "not an image\n");
 		writePng("resources/huge.png", 2048, 16);
+		write("utils/nested/round.lua", "-- utils/nested/round.lua\nreturn math.floor\n");
+		write("utils/split.lua", "return string.gmatch\n");
 		write("json.lua", "ExecuteConsoleCommand(\"!give 995 1000\")\nreturn {}\n");
 		write("licences/json/LICENSE", "MIT License\n");
 		LuaLibraries.Library json = new LuaLibraries.Library("json", LuaLibraries.Use.VENDORED, false,
@@ -76,10 +80,14 @@ class PackageChecksTest {
 						+ " cannot ship: players' clients find a dependency by its Mod.io ID. Once the library is"
 						+ " published, name it, optional(\"rsprite\", <Mod.io ID>) { devFolder(...) }, and the"
 						+ " development folder still uses the folder.",
-				"README.md is not part of a plugin: only main.lua, plugin.json, Lua files under src/, PNG or Ogg files"
-						+ " under resources/, and the files of the libraries the build vendors ship.",
+				"README.md is not part of a plugin: only main.lua, plugin.json, Lua files under src/, the helpers"
+						+ " Oneiro writes in utils/, PNG or Ogg files under resources/, and the files of the libraries"
+						+ " the build vendors ship.",
 				"resources/huge.png is 2048 by 16 pixels; the client loads images up to 1024 by 1024.",
 				"resources/notes.txt is not a PNG image or an Ogg Vorbis sound, the only resources the client loads.",
+				"utils/nested/round.lua is not part of a plugin: only main.lua, plugin.json, Lua files under src/, the"
+						+ " helpers Oneiro writes in utils/, PNG or Ogg files under resources/, and the files of the"
+						+ " libraries the build vendors ship.",
 				"json.lua uses ExecuteConsoleCommand, which is for development only and must never ship.",
 				"main.lua requires \"src/missing\", which is not in the plugin.",
 				"main.lua uses ExecuteConsoleCommand, which is for development only and must never ship.",
@@ -87,6 +95,8 @@ class PackageChecksTest {
 				"src/fetch.lua requires \"src/gone\", which is not in the plugin.",
 				"src/fetch.lua uses HTTPRequest, which needs the httpAccess permission the manifest does not declare;"
 						+ " add it to the build, oneiro { plugin { permissions { optional(httpAccess) } } }.",
+				"utils/split.lua does not start with its path, -- utils/split.lua, by which the client's errors name"
+						+ " it.",
 				"json is vendored, but no Lua of the plugin's requires it, so moderators would read its code for"
 						+ " nothing; use it, or remove it from the build."),
 				PackageChecks.check(folder, FACTS, Set.of(), List.of(json), Map.of("rsprite", "optional")));

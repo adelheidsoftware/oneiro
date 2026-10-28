@@ -3,11 +3,7 @@
 
 local Herb = require("src/herb")
 local Stage = require("src/stage")
-
--- The string without leading and trailing whitespace, as Kotlin's String.trim.
-local function trim(s)
-    return s:match("^%s*(.-)%s*$")
-end
+local trim = require("utils/trim")
 
 local Patches = {}
 

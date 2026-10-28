@@ -250,6 +250,7 @@ public abstract class StageLibraries extends DefaultTask {
 				"src/", "in the plugin's src/ folder, which holds its own Lua and the Lua Oneiro writes",
 				"dev/", "in the plugin's dev/ folder, the dev source set's",
 				"resources/", "in the plugin's resources/ folder",
+				"utils/", "in the plugin's utils/ folder, which holds the helpers Oneiro writes",
 				"licences/", "in the plugin's licences/ folder, which holds the libraries' licences").entrySet()) {
 			if (path.startsWith(folder.getKey())) {
 				return folder.getValue();

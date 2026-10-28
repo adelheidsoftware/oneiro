@@ -1,60 +1,10 @@
 -- src/tally.lua
 -- Counting, grouping and queueing with the collections' own methods.
 
--- The parts of the text between the separators, as Java's String.split with a plain separator: with no limit, trailing
--- empty parts are dropped; a negative limit keeps them; a positive one makes at most that many parts.
-local function split(text, separator, limit)
-    if limit == nil then
-        limit = 0
-    end
-    local parts = {}
-    local start = 1
-    while limit <= 0 or #parts < limit - 1 do
-        local first, last = text:find(separator, start, true)
-        if first == nil then
-            break
-        end
-        parts[#parts + 1] = text:sub(start, first - 1)
-        start = last + 1
-    end
-    if #parts == 0 then
-        return { text }
-    end
-    parts[#parts + 1] = text:sub(start)
-    if limit == 0 then
-        while parts[#parts] == "" do
-            parts[#parts] = nil
-        end
-    end
-    return parts
-end
-
--- The value under the key, computed and stored first when there is none, as Java's Map.computeIfAbsent.
-local function computeIfAbsent(map, key, compute)
-    local value = map[key]
-    if value == nil then
-        value = compute(key)
-        map[key] = value
-    end
-    return value
-end
-
--- Makes a StringBuilder, which is a list of pieces, hold only the text.
-local function builderSet(builder, text)
-    for i = #builder, 1, -1 do
-        builder[i] = nil
-    end
-    builder[1] = text
-end
-
--- The map as Java writes it, {a=1, b=2}, in Lua's order, which is no more fixed than a HashMap's.
-local function mapText(map)
-    local parts = {}
-    for key, value in pairs(map) do
-        parts[#parts + 1] = tostring(key) .. "=" .. tostring(value)
-    end
-    return "{" .. table.concat(parts, ", ") .. "}"
-end
+local split = require("utils/split")
+local computeIfAbsent = require("utils/compute_if_absent")
+local builderSet = require("utils/builder_set")
+local mapText = require("utils/map_text")
 
 local Tally = {}
 

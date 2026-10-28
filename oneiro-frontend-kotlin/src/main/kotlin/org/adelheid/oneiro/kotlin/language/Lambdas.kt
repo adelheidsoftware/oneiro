@@ -254,7 +254,7 @@ internal class Lambdas(private val body: BodyLowering) {
 		val receiverName = (receiver as? KtNameReferenceExpression)?.getReferencedName()?.let(unit.names::luaName)
 		val parameters = function.valueParameters.map {
 			val own = unit.localName(reference, it.name.asString())
-			if (own == receiverName) body.invent(own + "Value", reference) else own
+			if (own == receiverName) body.inventInner(own + "Value", reference) else own
 		}
 		val arguments = parameters.map(Expression::name)
 		if (owner.classKind == KaClassKind.OBJECT || owner.classKind == KaClassKind.COMPANION_OBJECT) {

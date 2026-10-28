@@ -44,6 +44,8 @@ public final class ConsoleErrors {
 	private static final Pattern PLACE = Pattern.compile("\\[string \"(.*?)\"]:(\\d+)");
 	// A first line that names its file, as Oneiro writes it: -- src/core/row.lua
 	private static final Pattern PATH = Pattern.compile("-- [\\w./-]+");
+	// The file of a helper Oneiro writes, which it names after the helper in snake case: utils/ordered_table.lua
+	private static final Pattern HELPER = Pattern.compile("utils/([a-z0-9_]+)\\.lua");
 	private static final String TRACEBACK = "stack traceback:";
 
 	private final String pluginName;
@@ -168,7 +170,8 @@ public final class ConsoleErrors {
 
 	/**
 	 * A place in the Lua as the source line it came from, with that line's code when asked for: the Java or Kotlin line
-	 * of a line Oneiro wrote, or the line of the plugin's own Lua file; as the Lua file and line when neither is known.
+	 * of a line Oneiro wrote, or the line of the plugin's own Lua file; as the Lua file and line when neither is known,
+	 * named as the helper where it is a line of one of the helpers Oneiro writes.
 	 */
 	private String shown(Matcher place, boolean withCode) {
 		int luaLine = Integer.parseInt(place.group(2));
@@ -178,7 +181,8 @@ public final class ConsoleErrors {
 			Path own = luaFile == null ? null : ownLua.get(luaFile);
 			SourceFile file = own == null ? null : sources.computeIfAbsent(luaFile, path -> read(own));
 			if (file == null) {
-				return (luaFile != null ? luaFile : consoleName(place.group(1))) + ":" + luaLine;
+				String path = luaFile != null ? luaFile : consoleName(place.group(1));
+				return path + ":" + luaLine + helperNote(path);
 			}
 			return shown(file, luaLine, withCode);
 		}
@@ -215,6 +219,22 @@ public final class ConsoleErrors {
 		}
 		List<String> candidates = files.stream().filter(file -> file.startsWith(path)).toList();
 		return candidates.size() == 1 ? candidates.get(0) : null;
+	}
+
+	/**
+	 * What a place in one of the helpers Oneiro writes, under {@code utils/}, is: {@code (orderedTable, a helper
+	 * Oneiro writes)} for {@code utils/ordered_table.lua}; empty for any other file.
+	 */
+	private static String helperNote(String path) {
+		Matcher helper = HELPER.matcher(path);
+		if (!helper.matches()) {
+			return "";
+		}
+		StringBuilder name = new StringBuilder();
+		for (String word : helper.group(1).split("_")) {
+			name.append(name.isEmpty() ? word : Character.toUpperCase(word.charAt(0)) + word.substring(1));
+		}
+		return " (" + name + ", a helper Oneiro writes)";
 	}
 
 	/** A file the line maps do not know: its path when its first line is one, or else what the console names it. */

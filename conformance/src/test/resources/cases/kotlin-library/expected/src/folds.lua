@@ -1,14 +1,7 @@
 -- src/folds.lua
 -- Kotlin's collection functions that fold, flatten and build lists, and run blocks that give a value.
 
--- A new list of the list's elements in the reverse order, as Kotlin's reversed().
-local function reversed(list)
-    local copy = {}
-    for i = #list, 1, -1 do
-        copy[#copy + 1] = list[i]
-    end
-    return copy
-end
+local reversed = require("utils/reversed")
 
 local Folds = {}
 

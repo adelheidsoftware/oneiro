@@ -54,6 +54,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	private val types = body.types
 	val strings = StringMembers(body)
 	private val copies = CollectionCopies(body)
+	private val unseenOrder = UnseenOrder(unit)
 
 	/** How Lua holds a collection, which decides what its members become. */
 	enum class Kind { SEQUENCE, MAP, SET }
@@ -313,8 +314,8 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		if (parameter?.destructuringDeclaration != null || literal.valueParameters.size > 1) {
 			return null
 		}
-		val key = body.invent("key", lambda)
-		val value = body.invent("value", lambda)
+		val key = body.inventInner("key", lambda)
+		val value = body.inventInner("value", lambda)
 		unit.aliasEntry(parameter ?: literal, key, value)
 		return listOf(key, value)
 	}
@@ -325,8 +326,8 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	 */
 	private fun calledFor(kind: Kind, receiver: Receiver, function: KtExpression): Statement {
 		val values = when (kind) {
-			Kind.MAP -> listOf(body.invent("key", function), body.invent("value", function))
-			else -> listOf(body.invent("item", function))
+			Kind.MAP -> listOf(body.inventInner("key", function), body.inventInner("value", function))
+			else -> listOf(body.inventInner("item", function))
 		}
 		val names = if (kind == Kind.SEQUENCE) listOf("_") + values else values
 		val walk = if (kind == Kind.SEQUENCE) "ipairs" else "pairs"
@@ -351,7 +352,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		val table = body.reused(receiver, READ_TWICE)
 		return when (kind) {
 			Kind.SEQUENCE -> {
-				val index = body.invent("i", where)
+				val index = body.inventInner("i", where)
 				val element = Statement.Local(listOf(item), listOf(Expression.Index(table, Expression.name(index))))
 				val removal = Statement.CallStatement(tableCall("remove", table, Expression.name(index)))
 				Statement.NumericFor(index, length(table), Expression.integer(1), Expression.integer(-1),
@@ -420,7 +421,7 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	/**
 	 * A constructor of the library: an empty list, map or set, or an array of zeros or `false`. A `HashMap` or
 	 * `HashSet` is a plain table, whose order Kotlin leaves open too; a `LinkedHashMap` or `LinkedHashSet` keeps
-	 * the order its keys were added, through a helper.
+	 * the order its keys were added, through a helper, unless nothing can see that order; see [UnseenOrder].
 	 */
 	fun construct(where: KtExpression, type: ClassId, arguments: LibraryArguments): Expression {
 		val name = type.asFqNameString()
@@ -453,7 +454,8 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		}
 		val empty = when (name) {
 			"java.util.ArrayList", "java.util.HashMap", "java.util.HashSet" -> Expression.Table(listOf())
-			"java.util.LinkedHashMap", "java.util.LinkedHashSet" -> helper(Helper.ORDERED_TABLE)
+			"java.util.LinkedHashMap", "java.util.LinkedHashSet" ->
+				if (unseenOrder.isUnseen(where)) Expression.Table(listOf()) else helper(Helper.ORDERED_TABLE)
 			// A sorted map or set orders its keys when pairs walks them, by its comparator or by <
 			"java.util.TreeMap", "java.util.TreeSet" ->
 				if (comparator) helper(Helper.SORTED_TABLE, body.comparators.lessThan(source))
@@ -500,7 +502,8 @@ internal class LibraryCalls(private val body: BodyLowering) {
 	/**
 	 * The library's functions that make a collection: `listOf(a, b)` is `{ a, b }`. A map or set keeps the order its
 	 * keys were added, as Kotlin promises, through a helper, which a map's entries and a set's elements are added to
-	 * in order; `hashMapOf()` and `hashSetOf()` are plain tables, `{ a = 1 }` and `{ a = true }`.
+	 * in order, unless nothing can see that order (see [UnseenOrder]); `hashMapOf()` and `hashSetOf()` are plain
+	 * tables, `{ a = 1 }` and `{ a = true }`.
 	 */
 	private fun creation(where: KtExpression, name: String, arguments: List<KtExpression>): Expression? = when (name) {
 		"listOf", "mutableListOf", "arrayListOf", "arrayOf", "intArrayOf", "longArrayOf", "doubleArrayOf",
@@ -508,15 +511,15 @@ internal class LibraryCalls(private val body: BodyLowering) {
 			Expression.TableField.Positional(if (isSpread(it)) body.argument(it) else element(it))
 		})
 		"emptyMap", "emptySet" -> Expression.Table(listOf())
-		"hashMapOf" -> Expression.Table(arguments.map { argument ->
-			val (key, value) = entryOf(argument)
-			entry(key, element(value))
-		})
-		"hashSetOf" -> Expression.Table(arguments.map { entry(it, Expression.BooleanLiteral(true)) })
+		"hashMapOf", "hashSetOf" -> plain(name, arguments)
 		// A read-only map or set with nothing in it has no order to keep
-		"mapOf", "setOf" -> if (arguments.isEmpty()) Expression.Table(listOf()) else ordered(name, arguments)
-		"mutableMapOf", "linkedMapOf", "mutableSetOf", "linkedSetOf" ->
-			if (arguments.isEmpty()) helper(Helper.ORDERED_TABLE) else ordered(name, arguments)
+		"mapOf", "setOf" ->
+			if (arguments.isEmpty() || unseenOrder.isUnseen(where)) plain(name, arguments) else ordered(name, arguments)
+		"mutableMapOf", "linkedMapOf", "mutableSetOf", "linkedSetOf" -> when {
+			unseenOrder.isUnseen(where) -> plain(name, arguments)
+			arguments.isEmpty() -> helper(Helper.ORDERED_TABLE)
+			else -> ordered(name, arguments)
+		}
 		"sortedMapOf", "sortedSetOf" -> empty(where, name, arguments, helper(Helper.SORTED_TABLE))
 		"arrayOfNulls" -> throw Rejection(where, "A new array from arrayOfNulls is full of null, and Lua arrays cannot"
 			+ " hold nil; use a list and add elements.")
@@ -545,6 +548,16 @@ internal class LibraryCalls(private val body: BodyLowering) {
 		}
 		return helper(Helper.PUT_ENTRIES, helper(Helper.ORDERED_TABLE), Expression.Table(list))
 	}
+
+	/** A map or set that keeps no order, a plain table of its entries or its elements: `{ a = 1 }`, `{ a = true }`. */
+	private fun plain(name: String, arguments: List<KtExpression>): Expression = Expression.Table(arguments.map {
+		if (name.lowercase().contains("set")) {
+			entry(it, Expression.BooleanLiteral(true))
+		} else {
+			val (key, value) = entryOf(it)
+			entry(key, element(value))
+		}
+	})
 
 	/** The key and value of an entry, `key to value`. */
 	private fun entryOf(argument: KtExpression): Pair<KtExpression, KtExpression> {

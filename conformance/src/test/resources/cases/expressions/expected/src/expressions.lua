@@ -1,22 +1,8 @@
 -- src/expressions.lua
 -- Expressions: literals, operators, conditionals, casts and arrays.
 
--- Java's (int) cast of a double: drops the fraction, rounding toward zero.
-local function toInteger(d)
-    if d >= 0 then
-        return math.floor(d)
-    end
-    return math.ceil(d)
-end
-
--- A new array of n copies of value, as Java fills a new array with zeros or false.
-local function filled(n, value)
-    local array = {}
-    for i = 1, n do
-        array[i] = value
-    end
-    return array
-end
+local toInteger = require("utils/to_integer")
+local filled = require("utils/filled")
 
 local Expressions = {}
 

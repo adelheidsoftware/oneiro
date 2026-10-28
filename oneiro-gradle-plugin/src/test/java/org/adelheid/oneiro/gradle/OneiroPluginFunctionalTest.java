@@ -254,6 +254,56 @@ class OneiroPluginFunctionalTest {
 	}
 
 	@Test
+	void helpersShipInFilesOfTheirOwn() throws IOException {
+		plugin();
+		write("src/main/java/com/example/herbs/Names.java", """
+				package com.example.herbs;
+
+				/** Names as the player types them. */
+				public final class Names {
+
+					private Names() {
+					}
+
+					/** The name without the spaces around it. */
+					public static String tidy(String name) {
+						return name.trim();
+					}
+				}
+				""");
+		write("src/dev/java/com/example/herbs/Cheats.java", """
+				package com.example.herbs;
+
+				import static org.adelheid.oneiro.rs3.Globals.log;
+
+				import org.adelheid.oneiro.api.DevPlugin;
+
+				/** Development helpers: logs a tidy name, and whether it is a leaf's. */
+				public final class Cheats extends DevPlugin {
+
+					@Override
+					protected void startUp() {
+						String name = " guam leaf ".trim();
+						String kind = "leaf";
+						log(Names.tidy(name), name.endsWith(kind));
+					}
+				}
+				""");
+		BuildResult result = gradle("build").build();
+		assertEquals(TaskOutcome.SUCCESS, outcome(result, ":checkPlugin"));
+		// The helper the main set uses ships in a file of its own, which the module that uses it requires
+		assertEquals(List.of("main.lua", "plugin.json", "resources/", "resources/icons/", "resources/icons/herb.png",
+				"src/", "src/herb_config.lua", "src/names.lua", "src/tally.lua", "utils/", "utils/trim.lua"),
+				entries(project.resolve("build/distributions/herb-tracker-1.2.0.zip")));
+		String names = Files.readString(project.resolve("build/oneiro/plugin/src/names.lua"));
+		assertTrue(names.contains("local trim = require(\"utils/trim\")"), names);
+		// The dev set's helpers join the main set's in the development folder, the one only it uses among them
+		Path utils = project.resolve("build/oneiro/dev-plugin/utils");
+		assertTrue(Files.isRegularFile(utils.resolve("trim.lua")));
+		assertTrue(Files.isRegularFile(utils.resolve("ends_with.lua")));
+	}
+
+	@Test
 	void theDevSetReadsTheMainSetsSources() throws IOException {
 		plugin();
 		write("src/main/java/com/example/herbs/Mode.java", """
@@ -638,6 +688,16 @@ class OneiroPluginFunctionalTest {
 		assertTrue(Files.isRegularFile(dev.resolve("licences/inspect/LICENCE.md")));
 		String cheats = Files.readString(dev.resolve("dev/main.lua"));
 		assertTrue(cheats.contains("local Inspect = require(\"inspect\")"), cheats);
+	}
+
+	@Test
+	void aLibraryWithLuaWhereOneirosHelpersGoFails() throws IOException {
+		plugin();
+		libraries();
+		write("libs/tallies/src/utils/round.lua", "return math.floor\n");
+		String output = gradle("oneiroLibraries").buildAndFail().getOutput();
+		assertTrue(output.contains("tallies's utils/round.lua would ship in the plugin's utils/ folder, which holds the"
+				+ " helpers Oneiro writes;"), output);
 	}
 
 	@Test
