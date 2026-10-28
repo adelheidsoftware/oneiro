@@ -5,6 +5,8 @@
 module org.adelheid.oneiro.plugin {
 	// JSpecify's nullness annotations, which the API carries for the code that compiles against it
 	requires static transitive org.jspecify;
+	// The manifest, the package checks, the libraries list and the client facts, which Oneiro builds on
+	requires transitive org.adelheid.rspc.plugin;
 
 	exports org.adelheid.oneiro.plugin;
 }

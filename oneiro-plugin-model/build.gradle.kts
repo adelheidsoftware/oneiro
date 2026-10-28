@@ -6,8 +6,13 @@ plugins {
 	`java-library`
 }
 
-description = "An RS3 plugin apart from its code, for Oneiro: its manifest, the checks of the folder that ships, and " +
-	"its typed resources."
+dependencies {
+	// The manifest, the package checks, the libraries list and the client facts are the RSPC SDK's
+	api(libs.rspc.plugin.model)
+}
+
+description = "An RS3 plugin apart from its code, for Oneiro: the typed resources, the compiler's settings, and what " +
+	"explainError reads."
 
 tasks.withType<JavaCompile>().configureEach {
 	options.release = 17

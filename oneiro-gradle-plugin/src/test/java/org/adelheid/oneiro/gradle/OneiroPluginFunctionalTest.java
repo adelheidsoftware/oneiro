@@ -42,16 +42,22 @@ class OneiroPluginFunctionalTest {
 	private void plugin() throws IOException {
 		String repository = Path.of(System.getProperty("oneiro.repository")).toUri().toString();
 		String stubs = System.getProperty("oneiro.stubsFixture").replace('\\', '/');
+		// The RSPC SDK's modules come from its checkout when the build names one, as Oneiro's own build takes them:
+		// included at the top level, which substitutes them on the plugin's classpath, and under pluginManagement
+		String sdk = System.getProperty("oneiro.rspcSdk");
+		String included = sdk == null ? "" : "includeBuild(\"" + sdk.replace('\\', '/') + "\")\n";
 		write("settings.gradle.kts", """
 				pluginManagement {
-				    repositories {
+				    %s    repositories {
 				        maven { url = uri("%s") }
+				        mavenCentral()
 				        gradlePluginPortal()
 				    }
 				}
 
+				%s
 				rootProject.name = "herb-tracker"
-				""".formatted(repository));
+				""".formatted(included, repository, included));
 		write("build.gradle.kts", """
 				plugins {
 				    id("org.adelheid.oneiro") version "%s"
@@ -696,8 +702,8 @@ class OneiroPluginFunctionalTest {
 		libraries();
 		write("libs/tallies/src/utils/round.lua", "return math.floor\n");
 		String output = gradle("oneiroLibraries").buildAndFail().getOutput();
-		assertTrue(output.contains("tallies's utils/round.lua would ship in the plugin's utils/ folder, which holds the"
-				+ " helpers Oneiro writes;"), output);
+		assertTrue(output.contains("tallies's utils/round.lua would ship in the plugin's utils/ folder, which holds its"
+				+ " helpers;"), output);
 	}
 
 	@Test
@@ -784,8 +790,8 @@ class OneiroPluginFunctionalTest {
 		assertTrue(dev.contains("\"optionalDependencies\": { \"gauges\": 4242 },"), dev);
 
 		String output = gradle("checkPlugin").buildAndFail().getOutput();
-		assertTrue(output.contains("The required dependency beacons names only a folder on this machine, with"
-				+ " devFolder, so the plugin cannot ship"), output);
+		assertTrue(output.contains("The required dependency beacons names a folder on this machine rather than a Mod.io"
+				+ " ID, so the plugin cannot ship"), output);
 	}
 
 	/** The same plugin written in Kotlin, built with the Kotlin JVM plugin applied before Oneiro's. */

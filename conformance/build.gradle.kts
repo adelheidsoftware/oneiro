@@ -10,7 +10,7 @@ dependencies {
 	kotlinCasesClasspath(project(":oneiro-api"))
 	kotlinCasesClasspath(libs.jspecify)
 	kotlinCasesClasspath(libs.kotlin.stdlib)
-	testImplementation(project(":oneiro-lua-runner"))
+	testImplementation(libs.rspc.lua.runner)
 	testImplementation(project(":oneiro-api"))
 	testImplementation(project(":oneiro-bindings-gen"))
 	testImplementation(project(":oneiro-plugin-model"))

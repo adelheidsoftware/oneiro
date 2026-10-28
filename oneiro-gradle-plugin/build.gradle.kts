@@ -2,7 +2,9 @@ import net.ltgt.gradle.errorprone.errorprone
 
 // The Gradle plugin org.adelheid.oneiro: the oneiro { } block and the tasks that turn a plugin's Java into the folder
 // and zip that ship. Compiled for Java 17, the oldest JVM Gradle 9 runs on. What needs Oneiro's JDK 25 runs elsewhere:
-// the compiler inside the plugin's own javac, and the bindings generator and the Lua tests in worker processes.
+// the compiler inside the plugin's own javac, and the bindings generator in a worker process. The tasks every RS3
+// plugin build shares (the checks, the zip, the Lua tests and the link into the client) are the RSPC SDK's Gradle
+// plugin's, which this one builds on.
 
 plugins {
 	`java-gradle-plugin`
@@ -14,6 +16,8 @@ description = "The Gradle plugin that builds RS3 plugins written in Java with On
 dependencies {
 	// The plugin model holds the Permission values the oneiro { } block hands out
 	api(project(":oneiro-plugin-model"))
+	// The RSPC SDK's Gradle plugin: the shared tasks, the stubs and libraries blocks, and the fetching of repositories
+	api(libs.rspc.gradle.plugin)
 	testImplementation(gradleTestKit())
 }
 
@@ -54,11 +58,21 @@ tasks.processResources {
 tasks.test {
 	// The functional test builds a plugin as its author would, resolving Oneiro from the repository the published
 	// modules go to, against the bindings generator's stubs fixture
-	val publishedModules = listOf("api", "lua-tree", "lua-runner", "bindings-gen", "plugin-model", "lowering",
-		"frontend-java", "frontend-kotlin", "gradle-plugin").map { ":oneiro-$it" }
+	val publishedModules = listOf("api", "lua-tree", "bindings-gen", "plugin-model", "lowering", "frontend-java",
+		"frontend-kotlin", "gradle-plugin").map { ":oneiro-$it" }
 	dependsOn(publishedModules.map { "$it:publishAllPublicationsToFunctionalTestRepository" })
 	// The published modules are what the test builds with, so a change to any of them must rerun it
 	inputs.files(publishedModules.map { project(it).tasks.named("jar") }).withPropertyName("publishedJars")
+	// The RSPC SDK's checkout beside this one, which the plugin under test builds the SDK's modules from when there
+	// is one, as this build does; otherwise, or with -Poneiro.rspcCheckout=false, they come from Maven Central at the
+	// catalog's version
+	val rspcSdk = rootProject.file("../rspc-sdk")
+	if (rspcSdk.resolve("settings.gradle.kts").isFile && providers.gradleProperty("oneiro.rspcCheckout").orNull != "false") {
+		systemProperty("oneiro.rspcSdk", rspcSdk.absolutePath)
+		val rspcSources = listOf("rspc-plugin-model", "rspc-lua-runner", "rspc-gradle-plugin")
+			.map { rspcSdk.resolve("$it/src/main") }
+		inputs.files(rspcSources).withPropertyName("rspcSdkSources").withPathSensitivity(PathSensitivity.RELATIVE)
+	}
 	systemProperty("oneiro.repository",
 		rootProject.layout.buildDirectory.dir("functional-test-repository").get().asFile.absolutePath)
 	systemProperty("oneiro.version", project.version.toString())

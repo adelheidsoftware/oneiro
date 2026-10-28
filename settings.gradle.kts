@@ -30,6 +30,13 @@ dependencyResolutionManagement {
 	}
 }
 
+// The RSPC SDK, whose Gradle plugin Oneiro builds on: its checkout beside this one when there is one, so that a change
+// to the SDK can be tried here at once; otherwise, or with -Poneiro.rspcCheckout=false, its published modules, at the
+// version in the catalog, as a build without the checkout resolves them
+if (file("../rspc-sdk/settings.gradle.kts").isFile && providers.gradleProperty("oneiro.rspcCheckout").orNull != "false") {
+	includeBuild("../rspc-sdk")
+}
+
 rootProject.name = "oneiro"
 
 // Each published module's folder is named after its artifact, org.adelheid:<folder>, so that a build that includes
@@ -37,7 +44,6 @@ rootProject.name = "oneiro"
 include(
 	"oneiro-api",
 	"oneiro-lua-tree",
-	"oneiro-lua-runner",
 	"oneiro-bindings-gen",
 	"oneiro-plugin-model",
 	"oneiro-lowering",

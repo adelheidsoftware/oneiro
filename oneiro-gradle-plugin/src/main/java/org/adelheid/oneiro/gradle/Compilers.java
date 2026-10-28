@@ -3,7 +3,7 @@ package org.adelheid.oneiro.gradle;
 import java.util.List;
 import org.adelheid.oneiro.gradle.tasks.CompileKotlinLua;
 import org.adelheid.oneiro.gradle.tasks.WriteCompilerSettings;
-import org.adelheid.oneiro.plugin.Manifest;
+import org.adelheid.rspc.plugin.Manifest;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.artifacts.Configuration;

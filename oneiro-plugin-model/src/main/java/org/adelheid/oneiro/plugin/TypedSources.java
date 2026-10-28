@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Stream;
+import org.adelheid.rspc.plugin.Manifest;
 import org.jspecify.annotations.Nullable;
 
 /**

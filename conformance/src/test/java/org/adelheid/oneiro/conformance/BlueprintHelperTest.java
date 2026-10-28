@@ -13,8 +13,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
-import org.adelheid.oneiro.runner.LuaRunner;
-import org.adelheid.oneiro.runner.LuaTests;
+import org.adelheid.rspc.runner.LuaRunner;
+import org.adelheid.rspc.runner.LuaTests;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 

@@ -8,7 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
-import org.adelheid.oneiro.plugin.LuaLibraries;
+import org.adelheid.rspc.plugin.LuaLibraries;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 

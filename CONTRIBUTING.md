@@ -27,6 +27,7 @@ otherwise:
 | [rs3-api-types](https://github.com/adelheidsoftware/rs3-api-types) | A checkout next to Oneiro's, at `../rs3-api-types` | Generates the bindings from the real stubs, which must produce no warning. Otherwise the generator's tests use the small fixture in `oneiro-bindings-gen/src/test/stubs/`. |
 | Blueprint-Helper | A checkout next to Oneiro's, at `../Blueprint-Helper` | Runs that plugin's own tests against the Lua Oneiro writes for five of its core modules, from the Java in `conformance/src/test/resources/blueprint-helper/`, and reads its modules' annotations, which must produce no warning. |
 | [Zyklib](https://codeberg.org/ZyklopMarco/runescape-api-zyklib) | A checkout next to Oneiro's, at `../runescape-api-zyklib` | Reads the library's annotated code and, with the real stubs and Blueprint-Helper also there, generates its bindings and those of Blueprint-Helper's modules, which must produce no warning and compile. The fixtures in `oneiro-bindings-gen/src/test/libraries/` run either way. |
+| [The RSPC SDK](https://github.com/adelheidsoftware/rspc-sdk) | A checkout next to Oneiro's, at `../rspc-sdk` | Takes the SDK's modules, which Oneiro's Gradle plugin depends on, from that checkout, included as a build, rather than from Maven Central at the catalog's version, so that a change to the SDK can be tried here at once; the functional test builds the plugin under test the same way. Without it, or with `-Poneiro.rspcCheckout=false`, the published version is used, which is what a release must build with. |
 
 StyLua's layout can change between versions, so use 2.6.0 for the expected files.
 
@@ -75,7 +76,7 @@ Oneiro's output: the case exists to check that output against what it should be.
 The build enforces the layout through Checkstyle and `.editorconfig`; the rest is for review.
 
 - Java 25, except `oneiro-plugin-model` and `oneiro-gradle-plugin`, which are compiled for Java 17 because they run in
-  the Gradle daemon.
+  the Gradle daemon, as the RSPC SDK's modules they build on are.
 - Tabs for indentation, and at most 120 columns, a tab counting as four.
 - A Javadoc comment on every class saying what it does, and comments where the intent of the code is not obvious.
   Comments describe the code as it is; history belongs in the commit message.

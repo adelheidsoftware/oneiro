@@ -26,7 +26,9 @@ Maven Central rejects unsigned artifacts.
    plugin build without a `stubs { }` block is told to use. What the client does differently from the docs belongs in
    rs3-api-types' corrections; how Java and Kotlin bind it belongs in Oneiro's `overrides.txt`.
 3. In `gradle.properties`, set `version` to the release version, such as `0.1.0`, and set the plugin's version in the
-   README's getting-started `build.gradle.kts` to it too.
+   README's getting-started `build.gradle.kts` to it too. The version `rspc` in the catalog, the RSPC SDK's modules
+   that Oneiro's Gradle plugin depends on, must be a release that is on Maven Central: a checkout of the SDK beside
+   this one stands in for it only while developing.
 4. In [CHANGELOG.md](CHANGELOG.md), rename `Unreleased` to the version and the date, and update the links at the end.
 5. Commit, then tag the commit `v0.1.0`.
 6. Publish to Maven Central:
@@ -48,3 +50,6 @@ Maven Central rejects unsigned artifacts.
    notes.
 9. Set `version` to the next snapshot, such as `0.2.0-SNAPSHOT`, add an empty `Unreleased` section to the changelog,
    and commit.
+
+The RSPC SDK's modules are released from the SDK's own repository, by its RELEASING.md; nothing of them is published
+from here.

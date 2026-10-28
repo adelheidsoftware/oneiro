@@ -5,8 +5,8 @@ errorprone = "2.50.0"
 errorprone-plugin = "5.1.1"
 nullaway = "0.14.2"
 checkstyle = "14.3.0"
-# Lua 5.4.8, the version the RS3 client embeds, as native libraries for Windows, Linux and macOS
-luajava = "4.1.0"
+# The RSPC SDK modules, which the Gradle plugin of Oneiro builds on; a checkout of the SDK beside this one takes their place
+rspc = "0.1.0"
 maven-publish = "0.37.0"
 plugin-publish = "2.2.1"
 # The Kotlin front end runs on the Kotlin Analysis API, which is released with Kotlin, and on the IntelliJ platform
@@ -27,8 +27,9 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone" }
 nullaway = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
-luajava-lua54 = { module = "party.iroiro.luajava:lua54", version.ref = "luajava" }
-luajava-lua54-platform = { module = "party.iroiro.luajava:lua54-platform", version.ref = "luajava" }
+rspc-plugin-model = { module = "org.adelheid:rspc-plugin-model", version.ref = "rspc" }
+rspc-lua-runner = { module = "org.adelheid:rspc-lua-runner", version.ref = "rspc" }
+rspc-gradle-plugin = { module = "org.adelheid:rspc-gradle-plugin", version.ref = "rspc" }
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 # The Analysis API's "-for-ide" artifacts declare no dependencies, so each is listed, and used without transitives
 kotlin-analysis-api = { module = "org.jetbrains.kotlin:analysis-api-for-ide", version.ref = "kotlin" }

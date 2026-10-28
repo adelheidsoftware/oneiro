@@ -8,6 +8,15 @@ All notable changes to Oneiro are listed here. The format follows
 
 ### Changed
 
+- **The tasks every RS3 plugin build shares are the RSPC SDK's.** `checkPlugin`, `packagePlugin`, `testLua` and
+  `linkDevPlugin`, the `stubs`, `libraries` and `lua` blocks, the fetching of repositories and the Lua runner moved to
+  the SDK's modules, `org.adelheid:rspc-plugin-model`, `rspc-lua-runner` and `rspc-gradle-plugin`, published from the
+  SDK's own repository, which Oneiro's Gradle plugin now depends on; `oneiro-lua-runner` is gone, and
+  `oneiro-plugin-model` keeps the typed sources, the compiler's settings and what `explainError` reads. The
+  `oneiro { }` block and the tasks' names are unchanged.
+  `checkPlugin` now reads the shipped `plugin.json` back and checks it as a hand-written manifest is checked, and the
+  Lua tests run in a worker on Gradle's own JVM. Fetched repositories are kept under `caches/rspc/repositories` in
+  Gradle's user home, so the first build after this fetches the stubs again.
 - **The RS3 API's types are rs3-api-types at `9f151d0`**, which a build without a `stubs { }` block is told to use.
   It notes that a `ui.InputField` keeps its `content` only once it has a style sheet: without one, the client reads
   `""` back, though the field is not restricted.
