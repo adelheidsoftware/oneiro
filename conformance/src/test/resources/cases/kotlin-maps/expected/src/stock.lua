@@ -1,7 +1,7 @@
 -- src/stock.lua
 -- Chains over a map's entries, and loops that read an entry's key and value.
 
-local orderedTable = require("utils/ordered_table")
+local orderedTable = require("utils/ordered_table").orderedTable
 
 local Stock = {}
 

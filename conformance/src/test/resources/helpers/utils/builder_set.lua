@@ -8,4 +8,4 @@ local function builderSet(builder, text)
     builder[1] = text
 end
 
-return builderSet
+return { builderSet = builderSet }

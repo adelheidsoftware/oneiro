@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +39,8 @@ public final class ModuleLayout {
 	 * @param table the module table's value, {@code {}}, or null for a chunk of locals such as {@code main.lua}
 	 * @param instanceClass whether the table is a class whose objects look their methods up in it
 	 * @param requires the local name of each required module and its require path, in order of first use
-	 * @param helpers the helper functions the module uses, which it requires from their files under {@code utils/}
+	 * @param helpers the helper functions the module uses, which it reads from the tables their files under
+	 *     {@code utils/} return, {@code local orderedTable = require("utils/ordered_table").orderedTable}
 	 * @param members the module's members, in source order
 	 */
 	public static <K> List<Block.Entry> assemble(String moduleName, @Nullable Expression table, boolean instanceClass,
@@ -63,11 +63,14 @@ public final class ModuleLayout {
 		}
 
 		List<Block.Entry> entries = new ArrayList<>();
-		Map<String, String> loaded = new LinkedHashMap<>(requires);
-		helpers.forEach(helper -> loaded.put(helper.luaName(), helper.requirePath()));
-		for (Map.Entry<String, String> require : loaded.entrySet()) {
+		for (Map.Entry<String, String> require : requires.entrySet()) {
 			Expression module = call(name("require"), Expression.string(require.getValue()));
 			entries.add(Block.Entry.of(new Statement.Local(List.of(require.getKey()), List.of(module))));
+		}
+		for (Helper helper : helpers) {
+			Expression file = call(name("require"), Expression.string(helper.requirePath()));
+			entries.add(Block.Entry.of(
+					new Statement.Local(List.of(helper.luaName()), List.of(field(file, helper.luaName())))));
 		}
 		if (table != null) {
 			entries.add(new Block.Entry(new Statement.Local(List.of(moduleName), List.of(table)),

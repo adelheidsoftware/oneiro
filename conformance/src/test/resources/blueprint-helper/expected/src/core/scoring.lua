@@ -12,7 +12,7 @@
 
 local Permutations = require("src/core/permutations")
 local Levels = require("src/core/levels")
-local filled = require("utils/filled")
+local filled = require("utils/filled").filled
 
 local Scoring = {}
 

@@ -6,7 +6,7 @@ local Section = require("src/section")
 local Tally = require("src/tally")
 local Shape = require("src/shape")
 local Bank = require("src/bank")
-local isInstance = require("utils/is_instance")
+local isInstance = require("utils/is_instance").isInstance
 
 local Checks = {}
 

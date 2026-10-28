@@ -9,4 +9,4 @@ local function firstKey(t)
     return nil
 end
 
-return firstKey
+return { firstKey = firstKey }

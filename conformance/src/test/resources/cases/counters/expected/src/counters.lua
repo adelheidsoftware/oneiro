@@ -1,7 +1,7 @@
 -- src/counters.lua
 -- Integer division on values that can never be negative, and on values that can.
 
-local quotient = require("utils/quotient")
+local quotient = require("utils/quotient").quotient
 
 local Counters = {}
 Counters.__index = Counters

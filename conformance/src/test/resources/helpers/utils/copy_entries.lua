@@ -8,4 +8,4 @@ local function copyEntries(map, source)
     return map
 end
 
-return copyEntries
+return { copyEntries = copyEntries }

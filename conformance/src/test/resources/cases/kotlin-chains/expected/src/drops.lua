@@ -1,7 +1,7 @@
 -- src/drops.lua
 -- Drops summed up with the collection functions Kotlin has beyond Java's streams.
 
-local orderedTable = require("utils/ordered_table")
+local orderedTable = require("utils/ordered_table").orderedTable
 
 local Drops = {}
 

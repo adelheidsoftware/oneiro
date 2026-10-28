@@ -9,4 +9,4 @@ local function substringAfter(text, delimiter)
     return text:sub(last + 1)
 end
 
-return substringAfter
+return { substringAfter = substringAfter }

@@ -1,7 +1,7 @@
 -- src/order.lua
 -- Module-level code runs top to bottom in Lua, so the functions it calls come first.
 
-local filled = require("utils/filled")
+local filled = require("utils/filled").filled
 
 local Order = {}
 

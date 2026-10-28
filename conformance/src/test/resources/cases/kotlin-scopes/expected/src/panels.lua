@@ -1,7 +1,7 @@
 -- src/panels.lua
 -- Kotlin's scope functions, opened where they are called: let, also, apply, run and with.
 
-local trim = require("utils/trim")
+local trim = require("utils/trim").trim
 
 local Panels = {}
 

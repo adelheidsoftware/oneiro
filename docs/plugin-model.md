@@ -541,8 +541,10 @@ a base URL.
 folder on `package.path`, so a test loads a module, Oneiro's or the plugin's own, with `require("src/tally")` and a
 helper next to it with `require("helper")`. A test passes when it runs to its end; an error, such as a failed
 `assert`, fails it and the build. The tests run outside the client, so the client's tables are absent; a test stands
-in for what it needs. `formatStr` is the one exception: a stand-in that reproduces the client's behaviour is defined
-before each test. Tests never ship.
+in for what it needs. `formatStr` and `require` are the exceptions: stand-ins that reproduce the client's behaviour are
+defined before each test. The client's `require` passes on only a table, and gives nil for a file that returns
+anything else, such as a function, or nothing; the stand-in gives nil for a file that returns nothing, and makes any
+other value an error, so that a test that requires such a file fails where the plugin would. Tests never ship.
 
 ## Explaining a client error
 

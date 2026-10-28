@@ -1,7 +1,7 @@
 -- src/grids.lua
 -- Arrays of more than one dimension, and methods that take any number of values.
 
-local grid = require("utils/grid")
+local grid = require("utils/grid").grid
 
 local Grids = {}
 

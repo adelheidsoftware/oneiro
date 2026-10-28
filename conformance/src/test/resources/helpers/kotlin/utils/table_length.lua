@@ -9,4 +9,4 @@ local function tableLength(t)
     return n
 end
 
-return tableLength
+return { tableLength = tableLength }

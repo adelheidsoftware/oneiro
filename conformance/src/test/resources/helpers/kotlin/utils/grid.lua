@@ -14,4 +14,4 @@ local function grid(value, size, ...)
     return array
 end
 
-return grid
+return { grid = grid }

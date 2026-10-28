@@ -21,4 +21,4 @@ local function replace(text, old, new)
     return table.concat(parts)
 end
 
-return replace
+return { replace = replace }

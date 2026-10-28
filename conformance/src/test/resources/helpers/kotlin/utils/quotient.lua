@@ -9,4 +9,4 @@ local function quotient(a, b)
     return q
 end
 
-return quotient
+return { quotient = quotient }

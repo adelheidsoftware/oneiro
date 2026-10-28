@@ -294,10 +294,10 @@ class ConformanceTest {
 				}
 			}
 		}
-		List<String> arguments = new ArrayList<>(List.of(
-				root.toString().replace('\\', '/'),
-				LuaTests.formatStrStandIn(OUTPUT.toAbsolutePath()).toString(),
-				Files.exists(check) ? check.toString() : ""));
+		List<String> arguments = new ArrayList<>();
+		arguments.add(root.toString().replace('\\', '/'));
+		arguments.add(Files.exists(check) ? check.toString() : "");
+		LuaTests.clientStandIns(OUTPUT.toAbsolutePath()).forEach(standIn -> arguments.add(standIn.toString()));
 		for (Map.Entry<String, String> module : modules.entrySet()) {
 			Path file = root.resolve(module.getKey());
 			Files.createDirectories(file.getParent());

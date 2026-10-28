@@ -1,8 +1,8 @@
 -- src/arithmetic.lua
 -- Integer arithmetic keeps Kotlin's rounding toward zero.
 
-local quotient = require("utils/quotient")
-local toInteger = require("utils/to_integer")
+local quotient = require("utils/quotient").quotient
+local toInteger = require("utils/to_integer").toInteger
 
 local Arithmetic = {}
 

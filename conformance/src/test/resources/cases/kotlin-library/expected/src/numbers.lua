@@ -1,7 +1,7 @@
 -- src/numbers.lua
 -- Kotlin's functions on numbers, and repeat, takeIf and takeUnless.
 
-local compare = require("utils/compare")
+local compare = require("utils/compare").compare
 
 local Numbers = {}
 

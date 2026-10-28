@@ -296,7 +296,7 @@ class OneiroPluginFunctionalTest {
 				"src/", "src/herb_config.lua", "src/names.lua", "src/tally.lua", "utils/", "utils/trim.lua"),
 				entries(project.resolve("build/distributions/herb-tracker-1.2.0.zip")));
 		String names = Files.readString(project.resolve("build/oneiro/plugin/src/names.lua"));
-		assertTrue(names.contains("local trim = require(\"utils/trim\")"), names);
+		assertTrue(names.contains("local trim = require(\"utils/trim\").trim"), names);
 		// The dev set's helpers join the main set's in the development folder, the one only it uses among them
 		Path utils = project.resolve("build/oneiro/dev-plugin/utils");
 		assertTrue(Files.isRegularFile(utils.resolve("trim.lua")));

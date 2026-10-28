@@ -10,4 +10,4 @@ local function listIndexOf(list, value)
     return -1
 end
 
-return listIndexOf
+return { listIndexOf = listIndexOf }

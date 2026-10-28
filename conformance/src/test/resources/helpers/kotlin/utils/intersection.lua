@@ -10,4 +10,4 @@ local function intersection(set, a, b)
     return set
 end
 
-return intersection
+return { intersection = intersection }

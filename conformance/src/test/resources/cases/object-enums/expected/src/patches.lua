@@ -3,7 +3,7 @@
 
 local Herb = require("src/herb")
 local Stage = require("src/stage")
-local trim = require("utils/trim")
+local trim = require("utils/trim").trim
 
 local Patches = {}
 

@@ -1,8 +1,8 @@
 -- src/expressions.lua
 -- Expressions: literals, operators, conditionals, casts and arrays.
 
-local toInteger = require("utils/to_integer")
-local filled = require("utils/filled")
+local toInteger = require("utils/to_integer").toInteger
+local filled = require("utils/filled").filled
 
 local Expressions = {}
 

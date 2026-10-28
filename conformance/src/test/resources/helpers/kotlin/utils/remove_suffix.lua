@@ -8,4 +8,4 @@ local function removeSuffix(text, suffix)
     return text
 end
 
-return removeSuffix
+return { removeSuffix = removeSuffix }

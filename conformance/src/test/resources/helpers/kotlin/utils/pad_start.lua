@@ -5,4 +5,4 @@ local function padStart(text, length, padChar)
     return padChar:rep(length - #text) .. text
 end
 
-return padStart
+return { padStart = padStart }

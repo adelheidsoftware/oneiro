@@ -9,4 +9,4 @@ local function stringIndexOf(s, text)
     return start - 1
 end
 
-return stringIndexOf
+return { stringIndexOf = stringIndexOf }

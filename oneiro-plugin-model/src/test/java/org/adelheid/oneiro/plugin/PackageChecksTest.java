@@ -43,12 +43,12 @@ class PackageChecksTest {
 				local Tally = require("src/tally")
 				local Levels = require('src/core/levels')
 				local zyklib = require("zyklib")
-				local trim = require("utils/trim")
+				local trim = require("utils/trim").trim
 				Chat.AddMessage("hello")
 				""");
 		write("plugin.json", "{}\n");
 		write("src/tally.lua", "-- src/tally.lua\nreturn {}\n");
-		write("utils/trim.lua", "-- utils/trim.lua\n-- A helper Oneiro writes.\n\nreturn string.match\n");
+		write("utils/trim.lua", "-- utils/trim.lua\n-- A helper Oneiro writes.\n\nreturn { trim = string.match }\n");
 		write("src/core/levels.lua", "-- src/core/levels.lua\r\n-- With Windows line ends.\r\n");
 		writePng("resources/icons/herb.png", 32, 32);
 		Files.write(folder.resolve("resources/ding.ogg"), new byte[] {'O', 'g', 'g', 'S', 0});

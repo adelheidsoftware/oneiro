@@ -28,4 +28,4 @@ local function split(text, separator, limit)
     return parts
 end
 
-return split
+return { split = split }

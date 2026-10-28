@@ -1,7 +1,7 @@
 -- src/anonymous.lua
 -- Object expressions: functions where Kotlin means one, objects otherwise.
 
-local withMembers = require("utils/with_members")
+local withMembers = require("utils/with_members").withMembers
 
 local Anonymous = {}
 

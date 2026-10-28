@@ -25,7 +25,7 @@ The build's settings are in [plugin-model.md](plugin-model.md), and what each ca
 
 - **A library plugin** is published on Mod.io on its own. The client loads it before the plugins that depend on it, and gives each of them a copy of the table its `main.lua` returns, as the global the manifest's alias names. The plugin is written against it without containing it. An optional one may be missing, or turned off while the plugin runs, so Oneiro compiles a use of it only where a check reaches it. [Library plugins](plugin-model.md#library-plugins) has the details.
 - **A vendored library** is plain Lua that plugins copy into themselves, as its own docs say to. Oneiro fetches it at a full commit, copies its files to the plugin's root as the library lays them out, and ships its licence with it. [Vendored libraries](plugin-model.md#vendored-libraries) has the details.
-- **The plugin's own Lua** is Lua kept as Lua, such as a module of a Lua plugin being ported. It ships as written, under `src/`. [The plugin's own Lua](plugin-model.md#the-plugins-own-lua) has the details.
+- **The plugin's own Lua** is Lua kept as Lua, such as a module of a Lua plugin being ported. It ships as written, under `src/`. A file another requires returns a table, as Zyklib's do: the client's `require` passes on only a table, and gives nil for a file that returns a function or any other value. [The plugin's own Lua](plugin-model.md#the-plugins-own-lua) has the details.
 
 ## Where types come from
 

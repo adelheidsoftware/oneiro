@@ -1,8 +1,8 @@
 -- src/watch.lua
 -- Calls into the RS3 API: global tables, singletons, objects, constants, enums and events.
 
-local orderedTable = require("utils/ordered_table")
-local putEntries = require("utils/put_entries")
+local orderedTable = require("utils/ordered_table").orderedTable
+local putEntries = require("utils/put_entries").putEntries
 
 local Watch = {}
 

@@ -1,10 +1,10 @@
 -- src/tally.lua
 -- Counting, grouping and queueing with the collections' own methods.
 
-local split = require("utils/split")
-local computeIfAbsent = require("utils/compute_if_absent")
-local builderSet = require("utils/builder_set")
-local mapText = require("utils/map_text")
+local split = require("utils/split").split
+local computeIfAbsent = require("utils/compute_if_absent").computeIfAbsent
+local builderSet = require("utils/builder_set").builderSet
+local mapText = require("utils/map_text").mapText
 
 local Tally = {}
 

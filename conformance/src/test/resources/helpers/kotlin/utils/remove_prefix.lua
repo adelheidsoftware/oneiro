@@ -8,4 +8,4 @@ local function removePrefix(text, prefix)
     return text
 end
 
-return removePrefix
+return { removePrefix = removePrefix }

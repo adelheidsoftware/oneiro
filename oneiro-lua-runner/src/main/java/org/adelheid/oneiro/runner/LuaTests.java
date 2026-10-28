@@ -19,26 +19,37 @@ import org.jspecify.annotations.Nullable;
 public final class LuaTests {
 
 	private static final String HARNESS = """
-			-- Runs one of a plugin's Lua test files. Arguments: the plugin folder, the tests folder, the formatStr
-			-- stand-in, and the test file's path relative to the tests folder.
-			local plugin, tests, standIn, test = arg[1], arg[2], arg[3], arg[4]
+			-- Runs one of a plugin's Lua test files. Arguments: the plugin folder, the tests folder, the test file's
+			-- path relative to the tests folder, then the stand-ins for the client's formatStr and require.
+			local plugin, tests, test = arg[1], arg[2], arg[3]
 			package.path = plugin .. "/?.lua;" .. tests .. "/?.lua;" .. package.path
-			dofile(standIn)
+			for index = 4, #arg do
+			    dofile(arg[index])
+			end
 			dofile(tests .. "/" .. test)
 			""";
+	// The test-only stand-ins for what the client gives a plugin's Lua, in the order a script loads them
+	private static final List<String> STAND_INS = List.of("formatstr.lua", "require.lua");
 
 	private LuaTests() {
 	}
 
-	/** Writes the test-only {@code formatStr} stand-in into the folder, for a script to load; returns its path. */
-	public static Path formatStrStandIn(Path folder) throws IOException {
+	/**
+	 * Writes the test-only stand-ins for the client's {@code formatStr} and {@code require} into the folder, for a
+	 * script to load in the order given; returns their paths. The client's {@code require} passes on only a table, so
+	 * a module that returns anything else fails the test that requires it.
+	 */
+	public static List<Path> clientStandIns(Path folder) throws IOException {
 		Files.createDirectories(folder);
-		Path file = folder.resolve("formatstr.lua");
-		try (InputStream in = Objects.requireNonNull(LuaTests.class.getResourceAsStream("formatstr.lua"),
-				"formatstr.lua")) {
-			Files.write(file, in.readAllBytes());
+		List<Path> files = new ArrayList<>();
+		for (String name : STAND_INS) {
+			Path file = folder.resolve(name);
+			try (InputStream in = Objects.requireNonNull(LuaTests.class.getResourceAsStream(name), name)) {
+				Files.write(file, in.readAllBytes());
+			}
+			files.add(file);
 		}
-		return file;
+		return files;
 	}
 
 	/**
@@ -48,14 +59,14 @@ public final class LuaTests {
 	 * @param installed an installed Lua 5.4 interpreter, or null for the bundled Lua 5.4.8
 	 * @param plugin the plugin folder, the root of its modules on {@code package.path}
 	 * @param tests the folder of the test files, also on {@code package.path}
-	 * @param work a folder for the harness and the {@code formatStr} stand-in
+	 * @param work a folder for the harness and the client stand-ins
 	 * @return the outcomes, and whether every test passed
 	 */
 	public static Outcome run(@Nullable Path installed, Path plugin, Path tests, Path work) throws IOException {
 		Files.createDirectories(work);
 		Path harness = work.resolve("run-test.lua");
 		Files.writeString(harness, HARNESS, StandardCharsets.UTF_8);
-		Path standIn = formatStrStandIn(work);
+		List<String> standIns = clientStandIns(work).stream().map(LuaTests::slashes).toList();
 		List<String> names;
 		try (Stream<Path> files = Files.walk(tests)) {
 			names = files.filter(file -> file.getFileName().toString().endsWith("_test.lua"))
@@ -67,8 +78,9 @@ public final class LuaTests {
 		List<String> report = new ArrayList<>();
 		int failed = 0;
 		for (String name : names) {
-			LuaRunner.Result result = lua.run(harness,
-					List.of(slashes(plugin), slashes(tests), slashes(standIn), name));
+			List<String> arguments = new ArrayList<>(List.of(slashes(plugin), slashes(tests), name));
+			arguments.addAll(standIns);
+			LuaRunner.Result result = lua.run(harness, arguments);
 			if (result.succeeded()) {
 				report.add("PASS " + name);
 			} else {

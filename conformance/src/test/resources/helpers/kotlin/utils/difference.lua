@@ -10,4 +10,4 @@ local function difference(set, a, b)
     return set
 end
 
-return difference
+return { difference = difference }

@@ -42,9 +42,9 @@ All notable changes to Oneiro are listed here. The format follows
 - **More Kotlin compiles.** Each of these was an error before:
   - A value the Lua has to read twice, where a second read could give a different result, such as a call's value:
     `nearest(entries)?.length`, `detailed(entries).size in 1..9`, `setting(name) as? String`,
-    `text[middle(text) + 1]`, `labeller(tag)::label`, and `addAll(ledger.detailed())` inside a `buildList`. The call
-    now runs once, into a local before the statement, named after the call: `local nearest = Hoisting.nearest(entries)`,
-    then `nearest and #nearest or 0`.
+    `text[middle(text) + 1]`, `labeller(tag)::label`, `addAll(ledger.detailed())` inside a `buildList`, and
+    `ready and isLong(name)`. The call now runs once, into a local before the statement, named after the call:
+    `local nearest = Hoisting.nearest(entries)`, then `nearest and #nearest or 0`.
   - More values that need statements now work inside a larger expression, as chains and an `if` with blocks already
     did: a `buildString { ... }`, whose pieces are joined where the text is used, `log(table.concat(text))`; a scope
     function whose lambda is more than one value, or whose receiver is a literal, such as
@@ -65,7 +65,8 @@ All notable changes to Oneiro are listed here. The format follows
 
 - **Helpers are files of their own.** The small helper functions Oneiro's Lua uses, such as `orderedTable`, now live
   in a `utils/` folder at the plugin's root, one file per helper, and each module that needs one requires it:
-  `local orderedTable = require("utils/ordered_table")`. Before, each module defined its own copy. The plugin ships
+  `local orderedTable = require("utils/ordered_table").orderedTable`. Each file returns a table that holds its helper,
+  as the client's `require` passes on only a table. Before, each module defined its own copy. The plugin ships
   each helper once, and only the ones its code uses; a helper only the dev source set uses goes only into the
   development folder. `checkPlugin` accepts these files, a vendored library may not put files in `utils/`, and
   `explainError` names a line in a helper by the helper's name.
@@ -87,6 +88,10 @@ All notable changes to Oneiro are listed here. The format follows
 - **A Java stream that sorts a whole list**, such as `harvests.stream().sorted(...).toList()`, now copies the list with
   `table.move(harvests, 1, #harvests, 1, {})` and sorts the copy, as Kotlin's `sortedBy` already did, instead of
   copying it in a loop.
+- **`testLua` loads modules as the client does.** The client's `require` passes on only a table, and gives nil for a
+  file that returns anything else, such as a function. A test that requires such a file now fails and says so,
+  `require("src/round") returns a function, but the client's require passes on only a table`, where before it passed
+  and the plugin then failed in the client. A file that returns nothing gives nil, as in the client.
 - **Clearer errors.** When Oneiro cannot work a value out before its statement without changing what the code does,
   the error now says why, such as "but it comes after mood.toString(), which would then run later" or "but it runs
   only when the if takes its branch". A Java stream that is kept or passed on as a stream, such as

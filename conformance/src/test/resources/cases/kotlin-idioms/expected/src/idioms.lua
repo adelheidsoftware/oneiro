@@ -1,10 +1,10 @@
 -- src/idioms.lua
 -- Kotlin's own idioms: preconditions, fun interfaces, references to the library, literal maps and sets, labels.
 
-local trim = require("utils/trim")
-local orderedTable = require("utils/ordered_table")
-local addElements = require("utils/add_elements")
-local putEntries = require("utils/put_entries")
+local trim = require("utils/trim").trim
+local orderedTable = require("utils/ordered_table").orderedTable
+local addElements = require("utils/add_elements").addElements
+local putEntries = require("utils/put_entries").putEntries
 
 local Idioms = {}
 

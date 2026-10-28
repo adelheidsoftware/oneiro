@@ -9,4 +9,4 @@ local function keysOf(t)
     return list
 end
 
-return keysOf
+return { keysOf = keysOf }

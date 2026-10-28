@@ -1,8 +1,8 @@
 -- src/letters.lua
 -- Letters and digits, one char at a time.
 
-local filled = require("utils/filled")
-local stringIndexOf = require("utils/string_index_of")
+local filled = require("utils/filled").filled
+local stringIndexOf = require("utils/string_index_of").stringIndexOf
 
 local Letters = {}
 

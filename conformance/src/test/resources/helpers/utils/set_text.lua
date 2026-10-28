@@ -9,4 +9,4 @@ local function setText(set)
     return "[" .. table.concat(parts, ", ") .. "]"
 end
 
-return setText
+return { setText = setText }

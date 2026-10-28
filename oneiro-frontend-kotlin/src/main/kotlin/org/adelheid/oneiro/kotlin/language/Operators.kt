@@ -234,14 +234,16 @@ internal class Operators(private val body: BodyLowering) {
 			return body.library.pair(listOf(left, right))
 		}
 		val first = body.expression(left)
-		val second = body.expression(right)
+		var second = body.expression(right)
 		if (types.isBoolean(type)) {
 			if (name == "xor") {
 				return Expression.binary(first, BinaryOperator.NOT_EQUAL, second)
 			}
+			// Kotlin's and and or run their right side even when the left decides, and Lua's do not, so a right side
+			// that calls anything runs first, into a local
 			if (PsiTreeUtil.findChildOfType(right, KtCallExpression::class.java, false) != null) {
-				throw Rejection(binary, "Kotlin evaluates both sides of $name, but Lua's skips the right side when the"
-					+ " left decides; evaluate the right side into a local first.")
+				val why = "Kotlin runs the right side of $name either way"
+				second = body.reused(second, right, why, body.valueName(right))
 			}
 		}
 		val operator = when (name) {

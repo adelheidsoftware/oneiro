@@ -17,4 +17,4 @@ local function isInstance(value, class)
     return false
 end
 
-return isInstance
+return { isInstance = isInstance }

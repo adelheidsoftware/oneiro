@@ -1,12 +1,12 @@
 -- src/tables.lua
 -- Lists, maps and sets as plain Lua tables.
 
-local listContains = require("utils/list_contains")
-local listIndexOf = require("utils/list_index_of")
-local tableLength = require("utils/table_length")
-local orderedTable = require("utils/ordered_table")
-local addElements = require("utils/add_elements")
-local putEntries = require("utils/put_entries")
+local listContains = require("utils/list_contains").listContains
+local listIndexOf = require("utils/list_index_of").listIndexOf
+local tableLength = require("utils/table_length").tableLength
+local orderedTable = require("utils/ordered_table").orderedTable
+local addElements = require("utils/add_elements").addElements
+local putEntries = require("utils/put_entries").putEntries
 
 local Tables = {}
 

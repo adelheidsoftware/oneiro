@@ -4,7 +4,7 @@
 local Boss = require("src/boss")
 local Monster = require("src/monster")
 local Pet = require("src/pet")
-local isInstance = require("utils/is_instance")
+local isInstance = require("utils/is_instance").isInstance
 
 local Encounters = {}
 

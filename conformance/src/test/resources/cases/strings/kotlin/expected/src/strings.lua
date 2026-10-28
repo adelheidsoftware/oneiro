@@ -1,9 +1,9 @@
 -- src/strings.lua
 -- Strings in the house style: formatStr for building, table.concat for joining.
 
-local stringIndexOf = require("utils/string_index_of")
-local endsWith = require("utils/ends_with")
-local trim = require("utils/trim")
+local stringIndexOf = require("utils/string_index_of").stringIndexOf
+local endsWith = require("utils/ends_with").endsWith
+local trim = require("utils/trim").trim
 
 local Strings = {}
 

@@ -45,7 +45,7 @@ object Gaps {
 	}
 
 	fun both(ready: Boolean, values: List<Int>): Boolean {
-		return ready and values.isEmpty()
+		return values.contains(0) and values.contains(1)
 	}
 
 	fun replaced(values: MutableList<Int>): Int {

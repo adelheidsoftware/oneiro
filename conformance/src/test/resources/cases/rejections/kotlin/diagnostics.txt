@@ -22,9 +22,9 @@ plugin/Gaps.kt:44: error: Lua has no regular expressions, so split takes only a 
 		return text.split(Regex("""\s+""")).size
 		                  ^
 
-plugin/Gaps.kt:48: error: Kotlin evaluates both sides of and, but Lua's skips the right side when the left decides; evaluate the right side into a local first.
-		return ready and values.isEmpty()
-		       ^
+plugin/Gaps.kt:48: error: Kotlin runs the right side of and either way, so it goes into a local first, which can run before the code around it only where nothing would see the difference, but it comes after values.contains(0), which would then run later; store it in a local first.
+		return values.contains(0) and values.contains(1)
+		                              ^
 
 plugin/Gaps.kt:52: error: In Lua set is a statement, not a value; call it on its own line.
 		val old = values.set(0, 1)

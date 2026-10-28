@@ -9,4 +9,4 @@ local function valuesOf(t)
     return list
 end
 
-return valuesOf
+return { valuesOf = valuesOf }

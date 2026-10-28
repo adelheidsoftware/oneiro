@@ -1,7 +1,7 @@
 -- src/folds.lua
 -- Kotlin's collection functions that fold, flatten and build lists, and run blocks that give a value.
 
-local reversed = require("utils/reversed")
+local reversed = require("utils/reversed").reversed
 
 local Folds = {}
 

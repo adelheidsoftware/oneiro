@@ -11,7 +11,7 @@
 -- - DIST is the smallest number of swaps that turns one arrangement into another: 1 2 3 4 5 to 2 1 3 4 5 is one swap,
 --   to 2 3 1 4 5 two, and nothing is more than four away.
 
-local filled = require("utils/filled")
+local filled = require("utils/filled").filled
 
 local Permutations = {}
 

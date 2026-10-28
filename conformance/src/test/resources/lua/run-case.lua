@@ -1,12 +1,14 @@
 -- Runs one conformance case's generated modules under Lua 5.4: loads every module to check that it parses, then runs
--- the case's check.lua, if it has one, with the plugin folder on package.path and the formatStr stand-in defined.
--- Arguments: the plugin folder, the formatStr stand-in, the check script or "", then the generated files.
+-- the case's check.lua, if it has one, with the plugin folder on package.path and the client's formatStr and require
+-- stood in for. Arguments: the plugin folder, the check script or "", the formatStr and require stand-ins, then the
+-- generated files.
 
-local root, standIn, check = arg[1], arg[2], arg[3]
+local root, check = arg[1], arg[2]
 package.path = root .. "/?.lua;" .. package.path
-dofile(standIn)
+dofile(arg[3])
+dofile(arg[4])
 
-for index = 4, #arg do
+for index = 5, #arg do
     assert(loadfile(arg[index]))
 end
 if check ~= "" then

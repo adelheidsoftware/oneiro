@@ -1,8 +1,8 @@
 -- src/texts.lua
 -- Kotlin's functions on text: replace, lines, its nullable forms, and tests of its chars.
 
-local replace = require("utils/replace")
-local lines = require("utils/lines")
+local replace = require("utils/replace").replace
+local lines = require("utils/lines").lines
 
 local Texts = {}
 

@@ -39,4 +39,4 @@ local function orderedTable()
     })
 end
 
-return orderedTable
+return { orderedTable = orderedTable }

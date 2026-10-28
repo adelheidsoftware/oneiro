@@ -9,4 +9,4 @@ local function substringBefore(text, delimiter)
     return text:sub(1, first - 1)
 end
 
-return substringBefore
+return { substringBefore = substringBefore }

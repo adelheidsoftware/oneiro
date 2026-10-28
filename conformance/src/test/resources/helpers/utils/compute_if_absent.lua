@@ -10,4 +10,4 @@ local function computeIfAbsent(map, key, compute)
     return value
 end
 
-return computeIfAbsent
+return { computeIfAbsent = computeIfAbsent }

@@ -1,7 +1,7 @@
 -- src/loops.lua
 -- Loop forms and their Lua equivalents.
 
-local quotient = require("utils/quotient")
+local quotient = require("utils/quotient").quotient
 
 local Loops = {}
 

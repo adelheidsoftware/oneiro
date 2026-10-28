@@ -18,7 +18,7 @@ Two rules decide every row:
 
 Some translations need a few lines of Lua that no single expression can say, such as Java's integer division. Those
 become **helpers**: small functions, each in a file of its own under `utils/` with a comment, which the modules that use
-it require, `local quotient = require("utils/quotient")`. The plugin ships only the helpers its code uses. Each one is
+it require, `local quotient = require("utils/quotient").quotient`. The plugin ships only the helpers its code uses. Each one is
 listed in [Helpers](#helpers).
 
 ## Files and modules
@@ -488,8 +488,10 @@ through a record of its own so annotated.
 
 Each helper is a file of its own under `utils/`, named after it in snake case, `utils/table_length.lua`: it starts
 with its path, as every file Oneiro writes does, and a comment naming the rule of Java's that it follows, defines the
-function, and returns it. A module that uses a helper requires it after the modules it requires,
-`local tableLength = require("utils/table_length")`, and calls it by that name. The plugin ships only the helpers its
+function, and returns a table that holds it, `return { tableLength = tableLength }`, since the client's `require`
+passes on only a table and gives nil for a file that returns a function. A module that uses a helper reads it from that
+table after the modules it requires, `local tableLength = require("utils/table_length").tableLength`, and calls it by
+that name. The plugin ships only the helpers its
 modules use; those that only the dev source set uses go into the development folder alone.
 
 | Helper | Used for |

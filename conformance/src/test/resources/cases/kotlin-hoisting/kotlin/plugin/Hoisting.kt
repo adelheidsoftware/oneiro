@@ -11,6 +11,8 @@ object Hoisting {
 		fun label(text: String): String = "$tag $text"
 	}
 
+	private var checks = 0
+
 	/** Each entry as a line of the ledger. */
 	fun detailed(entries: List<String>): List<String> = entries.map { "- $it" }
 
@@ -105,4 +107,16 @@ object Hoisting {
 			"$loud!"
 		})
 	}
+
+	/** Whether a name is long, counting the checks. */
+	private fun isLong(name: String): Boolean {
+		checks++
+		return name.length > 3
+	}
+
+	/** Whether the plugin is ready and the name long, checking the name either way, as Kotlin's and does. */
+	fun readyAndLong(ready: Boolean, name: String): Boolean = ready and isLong(name)
+
+	/** How many checks the names have had. */
+	fun checkCount(): Int = checks
 }

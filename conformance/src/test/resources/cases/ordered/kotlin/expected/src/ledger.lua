@@ -1,16 +1,16 @@
 -- src/ledger.lua
 -- Drops in the order they came, and in sorted order.
 
-local setText = require("utils/set_text")
-local mapText = require("utils/map_text")
-local orderedTable = require("utils/ordered_table")
-local keysOf = require("utils/keys_of")
-local addElements = require("utils/add_elements")
-local addKeys = require("utils/add_keys")
-local copyEntries = require("utils/copy_entries")
-local firstKey = require("utils/first_key")
-local lastKey = require("utils/last_key")
-local sortedTable = require("utils/sorted_table")
+local setText = require("utils/set_text").setText
+local mapText = require("utils/map_text").mapText
+local orderedTable = require("utils/ordered_table").orderedTable
+local keysOf = require("utils/keys_of").keysOf
+local addElements = require("utils/add_elements").addElements
+local addKeys = require("utils/add_keys").addKeys
+local copyEntries = require("utils/copy_entries").copyEntries
+local firstKey = require("utils/first_key").firstKey
+local lastKey = require("utils/last_key").lastKey
+local sortedTable = require("utils/sorted_table").sortedTable
 
 local Ledger = {}
 

@@ -8,4 +8,4 @@ local function addKeys(set, t)
     return set
 end
 
-return addKeys
+return { addKeys = addKeys }

@@ -25,4 +25,4 @@ local function sortedTable(comesBefore)
     })
 end
 
-return sortedTable
+return { sortedTable = sortedTable }

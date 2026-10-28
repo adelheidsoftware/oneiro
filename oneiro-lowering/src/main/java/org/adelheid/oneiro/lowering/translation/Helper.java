@@ -406,17 +406,21 @@ public enum Helper {
 		return ModulePaths.helperPath(luaName);
 	}
 
-	/** The files of the helpers, each defining its helper and returning it; see {@link #module}. */
+	/** The files of the helpers, each defining its helper and returning a table that holds it; see {@link #module}. */
 	public static List<LuaModule> modules(Collection<Helper> helpers, SourceLanguage language) {
 		return helpers.stream().map(helper -> helper.module(language)).toList();
 	}
 
 	/**
 	 * The helper's own file, which starts with its path and the comment naming the rule it follows, defines the helper,
-	 * and returns it: {@code local function orderedTable() ... end} and {@code return orderedTable}.
+	 * and returns a table that holds it: {@code local function orderedTable() ... end} and
+	 * {@code return { orderedTable = orderedTable }}. The client's {@code require} passes on only a table, and gives
+	 * nil for a file that returns a function.
 	 */
 	public LuaModule module(SourceLanguage language) {
-		Block.Entry returned = new Block.Entry(new Statement.Return(List.of(Expression.name(luaName))),
+		Expression holder = new Expression.Table(
+				List.of(new Expression.TableField.Named(luaName, Expression.name(luaName))));
+		Block.Entry returned = new Block.Entry(new Statement.Return(List.of(holder)),
 				new Trivia(true, List.of(), null), null);
 		return LuaModule.of(requirePath() + ".lua", comment(language),
 				new Block(List.of(Block.Entry.of(definition()), returned), List.of()));

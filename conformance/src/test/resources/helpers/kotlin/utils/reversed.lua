@@ -9,4 +9,4 @@ local function reversed(list)
     return copy
 end
 
-return reversed
+return { reversed = reversed }

@@ -2,8 +2,8 @@
 -- Names: an acronym in the file name, Lua keywords, globals and helpers as local names, and static imports.
 
 local Limits = require("src/core/limits")
-local trim = require("utils/trim")
-local tableLength = require("utils/table_length")
+local trim = require("utils/trim").trim
+local tableLength = require("utils/table_length").tableLength
 
 local NPCTracker = {}
 

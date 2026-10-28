@@ -7,4 +7,4 @@ local function clear(t)
     end
 end
 
-return clear
+return { clear = clear }

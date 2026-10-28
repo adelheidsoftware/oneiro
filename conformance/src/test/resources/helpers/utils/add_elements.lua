@@ -8,4 +8,4 @@ local function addElements(set, list)
     return set
 end
 
-return addElements
+return { addElements = addElements }

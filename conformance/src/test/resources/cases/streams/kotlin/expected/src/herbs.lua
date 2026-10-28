@@ -1,7 +1,7 @@
 -- src/herbs.lua
 -- Herb runs, summed up with Kotlin's collection functions.
 
-local orderedTable = require("utils/ordered_table")
+local orderedTable = require("utils/ordered_table").orderedTable
 
 local Herbs = {}
 

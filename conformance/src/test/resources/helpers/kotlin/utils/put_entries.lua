@@ -8,4 +8,4 @@ local function putEntries(map, list)
     return map
 end
 
-return putEntries
+return { putEntries = putEntries }

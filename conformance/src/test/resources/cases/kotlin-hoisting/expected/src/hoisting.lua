@@ -18,6 +18,8 @@ function Labeller:label(text)
     return formatStr("{} {}", self.tag, text)
 end
 
+local checks = 0
+
 -- Each entry as a line of the ledger.
 ---@param entries string[]
 ---@return string[]
@@ -255,6 +257,29 @@ function Hoisting.shouted(name)
         text = formatStr("{}!", loud)
     end
     log(text)
+end
+
+-- Whether a name is long, counting the checks.
+---@param name string
+---@return boolean
+local function isLong(name)
+    checks = checks + 1
+    return #name > 3
+end
+
+-- Whether the plugin is ready and the name long, checking the name either way, as Kotlin's and does.
+---@param ready boolean
+---@param name string
+---@return boolean
+function Hoisting.readyAndLong(ready, name)
+    local long = isLong(name)
+    return ready and long
+end
+
+-- How many checks the names have had.
+---@return integer
+function Hoisting.checkCount()
+    return checks
 end
 
 return Hoisting

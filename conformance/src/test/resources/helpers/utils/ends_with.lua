@@ -5,4 +5,4 @@ local function endsWith(s, suffix)
     return suffix == "" or s:sub(-#suffix) == suffix
 end
 
-return endsWith
+return { endsWith = endsWith }

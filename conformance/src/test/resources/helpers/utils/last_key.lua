@@ -9,4 +9,4 @@ local function lastKey(t)
     return last
 end
 
-return lastKey
+return { lastKey = lastKey }

@@ -21,4 +21,4 @@ local function lines(text)
     return list
 end
 
-return lines
+return { lines = lines }

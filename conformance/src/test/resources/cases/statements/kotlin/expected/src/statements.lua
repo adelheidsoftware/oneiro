@@ -1,7 +1,7 @@
 -- src/statements.lua
 -- Statements: locals, assignments, branches, loops, throws and printing.
 
-local filled = require("utils/filled")
+local filled = require("utils/filled").filled
 
 local Statements = {}
 

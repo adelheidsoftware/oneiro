@@ -9,4 +9,4 @@ local function withMembers(object, members)
     return object
 end
 
-return withMembers
+return { withMembers = withMembers }

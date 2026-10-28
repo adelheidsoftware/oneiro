@@ -1,12 +1,12 @@
 -- src/labels.lua
 -- Kotlin's own string functions: padding, prefixes and suffixes, the text around a delimiter, and blank text.
 
-local padStart = require("utils/pad_start")
-local padEnd = require("utils/pad_end")
-local removePrefix = require("utils/remove_prefix")
-local removeSuffix = require("utils/remove_suffix")
-local substringBefore = require("utils/substring_before")
-local substringAfter = require("utils/substring_after")
+local padStart = require("utils/pad_start").padStart
+local padEnd = require("utils/pad_end").padEnd
+local removePrefix = require("utils/remove_prefix").removePrefix
+local removeSuffix = require("utils/remove_suffix").removeSuffix
+local substringBefore = require("utils/substring_before").substringBefore
+local substringAfter = require("utils/substring_after").substringAfter
 
 local Labels = {}
 

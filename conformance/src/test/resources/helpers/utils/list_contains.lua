@@ -10,4 +10,4 @@ local function listContains(list, value)
     return false
 end
 
-return listContains
+return { listContains = listContains }

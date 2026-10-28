@@ -1,7 +1,7 @@
 -- src/walker.lua
 -- Locals named like the file's private members, which share one namespace with them in Lua.
 
-local tableLength = require("utils/table_length")
+local tableLength = require("utils/table_length").tableLength
 
 local Walker = {}
 

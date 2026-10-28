@@ -8,4 +8,4 @@ local function toInteger(d)
     return math.ceil(d)
 end
 
-return toInteger
+return { toInteger = toInteger }

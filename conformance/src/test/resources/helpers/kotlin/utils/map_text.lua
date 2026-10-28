@@ -9,4 +9,4 @@ local function mapText(map)
     return "{" .. table.concat(parts, ", ") .. "}"
 end
 
-return mapText
+return { mapText = mapText }

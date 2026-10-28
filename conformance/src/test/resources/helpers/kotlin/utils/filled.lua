@@ -9,4 +9,4 @@ local function filled(n, value)
     return array
 end
 
-return filled
+return { filled = filled }

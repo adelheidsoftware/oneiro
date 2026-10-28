@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.adelheid.oneiro.runner.LuaRunner;
+import org.adelheid.oneiro.runner.LuaTests;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -60,6 +61,7 @@ class BlueprintHelperTest {
 		}
 
 		List<String> arguments = new ArrayList<>(List.of(root.toString().replace('\\', '/')));
+		LuaTests.clientStandIns(root.resolve("stand-ins")).forEach(standIn -> arguments.add(standIn.toString()));
 		try (Stream<Path> tests = Files.list(root.resolve("tests"))) {
 			tests.map(test -> test.getFileName().toString())
 					.filter(name -> name.endsWith("_test.lua"))

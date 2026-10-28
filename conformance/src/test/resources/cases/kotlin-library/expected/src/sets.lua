@@ -1,13 +1,13 @@
 -- src/sets.lua
 -- Kotlin's functions on maps and sets: their keys and values, clear, union, intersect and subtract.
 
-local tableLength = require("utils/table_length")
-local orderedTable = require("utils/ordered_table")
-local valuesOf = require("utils/values_of")
-local addKeys = require("utils/add_keys")
-local clear = require("utils/clear")
-local intersection = require("utils/intersection")
-local difference = require("utils/difference")
+local tableLength = require("utils/table_length").tableLength
+local orderedTable = require("utils/ordered_table").orderedTable
+local valuesOf = require("utils/values_of").valuesOf
+local addKeys = require("utils/add_keys").addKeys
+local clear = require("utils/clear").clear
+local intersection = require("utils/intersection").intersection
+local difference = require("utils/difference").difference
 
 local Sets = {}
 

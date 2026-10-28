@@ -10,4 +10,4 @@ local function compare(a, b)
     return 0
 end
 
-return compare
+return { compare = compare }

@@ -1,7 +1,7 @@
 -- src/pairs.lua
 -- Kotlin's pairs and destructuring: of pairs, data classes and lists, partition, and the positions of a list.
 
-local orderedTable = require("utils/ordered_table")
+local orderedTable = require("utils/ordered_table").orderedTable
 
 local Pairs = {}
 

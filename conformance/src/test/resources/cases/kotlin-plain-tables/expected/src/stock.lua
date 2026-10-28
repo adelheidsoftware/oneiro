@@ -1,8 +1,8 @@
 -- src/stock.lua
 -- Maps and sets whose order nothing reads, which plain tables hold, beside one whose order the code reads.
 
-local tableLength = require("utils/table_length")
-local orderedTable = require("utils/ordered_table")
+local tableLength = require("utils/table_length").tableLength
+local orderedTable = require("utils/ordered_table").orderedTable
 
 local Stock = {}
 

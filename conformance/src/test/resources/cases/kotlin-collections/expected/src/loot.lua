@@ -1,7 +1,7 @@
 -- src/loot.lua
 -- The collection functions that cut a chain short, flatten it, and group or pair up what it gives.
 
-local orderedTable = require("utils/ordered_table")
+local orderedTable = require("utils/ordered_table").orderedTable
 
 local Loot = {}
 
